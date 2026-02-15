@@ -63,11 +63,15 @@ cargo tauri build --manifest-path src-tauri/Cargo.toml
 - `.github/workflows/build-release.yml`
 
 功能：
-- 在 `Linux`、`Windows`、`macOS Intel`、`macOS Apple Silicon` 构建
+- 在 `Linux`、`Windows`、`macOS Apple Silicon` 构建
 - 构建前自动安装并注入 `aria2c` 到 `aria2/bin/...`
 - 构建 Tauri 安装包
 - 上传各平台构建产物
 - 推送 `v*` 标签（如 `v0.1.0`）时自动创建 GitHub Release
+
+说明：
+- 当前默认使用 `macos-14`（Apple Silicon）Runner。
+- 如果你的 GitHub 计划/区域支持 Intel macOS Runner，可再补回 `macos-13`。
 
 使用步骤：
 1. 推送到 `main`，触发常规构建与产物上传。

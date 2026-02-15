@@ -21,8 +21,6 @@ jobs:
             artifact_suffix: linux-x64
           - os: windows-latest
             artifact_suffix: windows-x64
-          - os: macos-13
-            artifact_suffix: macos-x64
           - os: macos-14
             artifact_suffix: macos-arm64
     runs-on: ${{ matrix.os }}

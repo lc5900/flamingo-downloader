@@ -63,11 +63,15 @@ This repository includes CI workflow:
 - `.github/workflows/build-release.yml`
 
 What it does:
-- builds on `Linux`, `Windows`, `macOS Intel`, `macOS Apple Silicon`
+- builds on `Linux`, `Windows`, `macOS Apple Silicon`
 - installs/stages `aria2c` into `aria2/bin/...` before building
 - builds Tauri bundles
 - uploads build artifacts for each platform
 - creates a GitHub Release automatically when you push a tag like `v0.1.0`
+
+Note:
+- The default workflow currently targets `macos-14` (Apple Silicon).
+- If your GitHub plan/region supports Intel macOS runners, you can add `macos-13` back.
 
 How to use:
 1. Push code to `main` to run build checks and produce artifacts.
