@@ -1,0 +1,21 @@
+[package]
+name = "tarui_aria2_downloader"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1"
+async-trait = "0.1"
+base64 = "0.22"
+bzip2 = "0.5"
+flate2 = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tar = "0.4"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "time", "sync", "fs"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+xz2 = "0.1"
+zip = { version = "2", default-features = false, features = ["deflate"] }

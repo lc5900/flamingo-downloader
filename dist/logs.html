@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Operation Logs</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", "Noto Sans", sans-serif;
+        background: #f2f7f4;
+        color: #12231b;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        height: 100vh;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 10px 12px;
+        border-bottom: 1px solid #c8d8ce;
+        background: #ffffff;
+      }
+      .actions { display: flex; gap: 8px; }
+      button {
+        border: 1px solid #a8bcaf;
+        background: #fff;
+        color: #12231b;
+        padding: 6px 10px;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      pre {
+        margin: 0;
+        padding: 12px;
+        overflow: auto;
+        font-size: 12px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>Operation Logs</strong>
+      <div class="actions">
+        <button id="btn-refresh">Refresh</button>
+        <button id="btn-clear">Clear</button>
+        <button id="btn-close">Close</button>
+      </div>
+    </header>
+    <pre id="logs"></pre>
+    <script type="module" src="./logs.js"></script>
+  </body>
+</html>

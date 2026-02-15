@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title data-i18n="app.title">Tarui Aria2 Downloader</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <h1 data-i18n="app.title">Tarui Aria2 Downloader</h1>
+        <div class="topbar-actions">
+          <label class="inline-select">
+            <span data-i18n="fields.language">Language</span>
+            <select id="language-select">
+              <option value="en-US" data-i18n="languages.enUS">English</option>
+              <option value="zh-CN" data-i18n="languages.zhCN">简体中文</option>
+            </select>
+          </label>
+          <button id="btn-open-add-tools" class="ghost icon-btn">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            <span data-i18n="actions.openNewDownload">New Download</span>
+          </button>
+          <button id="btn-open-settings-tools" class="ghost icon-btn">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5A3.5 3.5 0 1 0 12 15.5A3.5 3.5 0 1 0 12 8.5zM19.4 15a1 1 0 0 0 .2 1.1l.1.1a1 1 0 0 1 0 1.4l-1.4 1.4a1 1 0 0 1-1.4 0l-.1-.1a1 1 0 0 0-1.1-.2a1 1 0 0 0-.6.9V20a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-.2a1 1 0 0 0-.6-.9a1 1 0 0 0-1.1.2l-.1.1a1 1 0 0 1-1.4 0l-1.4-1.4a1 1 0 0 1 0-1.4l.1-.1a1 1 0 0 0 .2-1.1a1 1 0 0 0-.9-.6H4a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1h.2a1 1 0 0 0 .9-.6a1 1 0 0 0-.2-1.1l-.1-.1a1 1 0 0 1 0-1.4L6.2 3.4a1 1 0 0 1 1.4 0l.1.1a1 1 0 0 0 1.1.2a1 1 0 0 0 .6-.9V2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v.2a1 1 0 0 0 .6.9a1 1 0 0 0 1.1-.2l.1-.1a1 1 0 0 1 1.4 0l1.4 1.4a1 1 0 0 1 0 1.4l-.1.1a1 1 0 0 0-.2 1.1a1 1 0 0 0 .9.6H20a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-.2a1 1 0 0 0-.9.6z"/></svg>
+            <span data-i18n="actions.openSettingsMenu">Settings</span>
+          </button>
+          <button id="btn-refresh" class="ghost icon-btn">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 4v6h-6"/></svg>
+            <span data-i18n="actions.refresh">Refresh</span>
+          </button>
+          <button id="btn-open-logs-window" class="ghost icon-btn">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM8 9h8M8 13h8M8 17h5"/></svg>
+            <span data-i18n="actions.openLogsWindow">Logs</span>
+          </button>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <aside class="sidebar panel">
+          <h2 data-i18n="sections.navigation">Navigation</h2>
+          <nav class="sidebar-nav">
+            <button id="nav-downloading" class="side-btn active icon-btn">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5l5-5M5 20h14"/></svg>
+              <span data-i18n="nav.downloading">Downloading</span>
+            </button>
+            <button id="nav-downloaded" class="side-btn icon-btn">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l4 4l10-10M4 20h16"/></svg>
+              <span data-i18n="nav.downloaded">Downloaded</span>
+            </button>
+          </nav>
+        </aside>
+
+        <section class="main-content">
+          <section id="add-tools-panel" class="panel tool-panel hidden">
+            <div class="panel-title">
+              <h2 data-i18n="sections.addTasks">Add Tasks</h2>
+              <button id="btn-close-add-tools" class="ghost" data-i18n="actions.close">Close</button>
+            </div>
+            <nav class="settings-tabbar add-tabbar">
+              <button class="settings-tab active" data-add-tab="url" data-i18n="actions.addUrl">Add URL</button>
+              <button class="settings-tab" data-add-tab="magnet" data-i18n="actions.addMagnet">Add Magnet</button>
+              <button class="settings-tab" data-add-tab="torrent" data-i18n="actions.addTorrent">Add Torrent</button>
+            </nav>
+
+            <form id="add-url-form" class="add-form" data-add-section="url" novalidate>
+              <label>
+                <span data-i18n="fields.url">URL</span>
+                <input id="url-input" type="text" placeholder="https://example.com/file.zip" data-i18n-placeholder="placeholders.url" required />
+              </label>
+              <button id="btn-add-url" type="button" data-i18n="actions.addUrl">Add URL</button>
+            </form>
+
+            <form id="add-magnet-form" class="add-form add-gap hidden" data-add-section="magnet">
+              <label>
+                <span data-i18n="fields.magnet">Magnet</span>
+                <input id="magnet-input" type="text" placeholder="magnet:?xt=urn:btih:..." data-i18n-placeholder="placeholders.magnet" required />
+              </label>
+              <button id="btn-add-magnet" type="button" data-i18n="actions.addMagnet">Add Magnet</button>
+            </form>
+
+            <form id="add-torrent-form" class="add-form add-gap hidden" data-add-section="torrent">
+              <label>
+                <span data-i18n="fields.torrentFile">Torrent File</span>
+                <input id="torrent-input" type="file" accept=".torrent,application/x-bittorrent" required />
+              </label>
+              <button id="btn-add-torrent" type="button" data-i18n="actions.addTorrent">Add Torrent</button>
+            </form>
+          </section>
+
+          <section id="settings-tools-panel" class="panel tool-panel hidden">
+            <div class="panel-title">
+              <h2 data-i18n="sections.settings">Settings</h2>
+              <button id="btn-close-settings-tools" class="ghost" data-i18n="actions.close">Close</button>
+            </div>
+
+            <nav class="settings-tabbar">
+              <button class="settings-tab active" data-settings-tab="basic" data-i18n="settingsTabs.basic">Basic</button>
+              <button class="settings-tab" data-settings-tab="diagnostics" data-i18n="settingsTabs.diagnostics">Diagnostics</button>
+              <button class="settings-tab" data-settings-tab="updates" data-i18n="settingsTabs.updates">Updates</button>
+            </nav>
+
+            <section class="settings-section" data-settings-section="basic">
+              <form id="settings-form" class="settings-grid">
+                <label class="span-2">
+                  <span data-i18n="fields.aria2BinPath">aria2 Binary Path</span>
+                  <input id="setting-aria2-bin-path" type="text" placeholder="/path/to/aria2c" data-i18n-placeholder="placeholders.aria2BinPath" />
+                </label>
+                <div class="settings-actions span-2">
+                  <button id="btn-detect-aria2-path" type="button" class="ghost" data-i18n="actions.detectAria2Path">Detect aria2 Path</button>
+                </div>
+                <label>
+                  <span data-i18n="fields.downloadDirectory">Download Directory</span>
+                  <input id="setting-download-dir" type="text" placeholder="./downloads" data-i18n-placeholder="placeholders.downloadDirectory" />
+                </label>
+                <label>
+                  <span data-i18n="fields.maxConcurrentDownloads">Max Concurrent Downloads</span>
+                  <input id="setting-max-concurrent" type="number" min="1" step="1" />
+                </label>
+                <label>
+                  <span data-i18n="fields.maxConnPerServer">Max Connection Per Server</span>
+                  <input id="setting-max-conn" type="number" min="1" step="1" />
+                </label>
+                <label>
+                  <span data-i18n="fields.maxOverallDownloadLimit">Max Overall Download Limit</span>
+                  <input id="setting-max-limit" type="text" placeholder="0 / 10M / 2M" data-i18n-placeholder="placeholders.maxOverallDownloadLimit" />
+                </label>
+                <label class="span-2">
+                  <span data-i18n="fields.btTrackerList">BT Tracker List (comma separated)</span>
+                  <input id="setting-bt-tracker" type="text" placeholder="udp://tracker.opentrackr.org:1337/announce" data-i18n-placeholder="placeholders.btTrackerList" />
+                </label>
+                <label class="span-2">
+                  <span data-i18n="fields.githubCdn">GitHub CDN Prefix</span>
+                  <input id="setting-github-cdn" type="text" placeholder="https://ghproxy.com/ or https://cdn.example/{url}" data-i18n-placeholder="placeholders.githubCdn" />
+                </label>
+                <label class="span-2">
+                  <span data-i18n="fields.githubToken">GitHub Token (optional)</span>
+                  <input id="setting-github-token" type="password" placeholder="ghp_xxx..." data-i18n-placeholder="placeholders.githubToken" autocomplete="off" />
+                </label>
+                <label class="span-2">
+                  <span data-i18n="fields.githubCdnPreset">Preset CDN</span>
+                  <select id="setting-github-cdn-preset">
+                    <option value="" data-i18n="cdnPreset.custom">Custom / Direct</option>
+                    <option value="https://ghproxy.com/" data-i18n="cdnPreset.ghproxy">ghproxy.com</option>
+                    <option value="https://ghfast.top/" data-i18n="cdnPreset.ghfast">ghfast.top</option>
+                    <option value="https://ghproxy.net/" data-i18n="cdnPreset.ghproxyNet">ghproxy.net</option>
+                  </select>
+                </label>
+                <label>
+                  <span data-i18n="fields.enableUpnp">Enable UPnP</span>
+                  <select id="setting-enable-upnp">
+                    <option value="" data-i18n="common.default">Default</option>
+                    <option value="true" data-i18n="common.true">true</option>
+                    <option value="false" data-i18n="common.false">false</option>
+                  </select>
+                </label>
+                <div class="settings-actions span-2">
+                  <button type="submit" data-i18n="actions.saveSettings">Save Settings</button>
+                  <button id="btn-reload-settings" type="button" class="ghost" data-i18n="actions.reload">Reload</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="settings-section hidden" data-settings-section="diagnostics">
+              <div class="topbar-actions">
+                <button id="btn-rpc-ping" class="ghost" type="button" data-i18n="actions.rpcPing">RPC Ping</button>
+                <button id="btn-restart-aria2" class="ghost" type="button" data-i18n="actions.restartAria2">Restart aria2</button>
+                <button id="btn-save-session" class="ghost" type="button" data-i18n="actions.saveSession">Save Session</button>
+              </div>
+              <pre id="diagnostics"></pre>
+            </section>
+
+            <section class="settings-section hidden" data-settings-section="updates">
+              <div class="topbar-actions">
+                <button id="btn-check-aria2-update" class="ghost" type="button" data-i18n="actions.checkAria2Update">Check aria2 Update</button>
+                <button id="btn-update-aria2-now" class="ghost" type="button" data-i18n="actions.updateAria2Now">Update aria2 Now</button>
+              </div>
+              <pre id="aria2-update"></pre>
+            </section>
+
+            <div class="topbar-actions">
+              <button id="btn-open-logs-window-in-settings" class="ghost" type="button" data-i18n="actions.openLogsWindow">Logs</button>
+              <button id="btn-clear-logs" class="ghost" type="button" data-i18n="actions.clearLogs">Clear Logs</button>
+            </div>
+          </section>
+
+          <section class="panel list-panel">
+            <div class="panel-title">
+              <h2 id="main-list-title" data-i18n="sections.downloadingTasks">Current Downloads</h2>
+              <div class="topbar-actions">
+                <span id="task-count">0</span>
+                <span id="completed-count" class="hidden">0</span>
+                <button id="btn-pause-all" class="ghost" data-i18n="actions.pauseAll">Pause All</button>
+                <button id="btn-resume-all" class="ghost" data-i18n="actions.resumeAll">Resume All</button>
+              </div>
+            </div>
+            <div id="task-list" class="task-list"></div>
+            <div id="completed-list" class="task-list hidden"></div>
+          </section>
+        </section>
+      </section>
+    </main>
+    <div id="add-modal-backdrop" class="modal-backdrop hidden"></div>
+
+    <aside id="detail-drawer" class="drawer hidden" aria-hidden="true">
+      <div class="drawer-head">
+        <h3 id="drawer-title" data-i18n="sections.taskDetail">Task Detail</h3>
+        <button id="btn-close-drawer" class="ghost" data-i18n="actions.close">Close</button>
+      </div>
+      <div id="drawer-meta" class="drawer-meta"></div>
+
+      <section class="drawer-files">
+        <div class="drawer-files-head">
+          <strong data-i18n="sections.files">Files</strong>
+          <button id="btn-apply-selection" data-i18n="actions.applySelection">Apply Selection</button>
+        </div>
+        <div id="drawer-files-list" class="drawer-files-list"></div>
+      </section>
+    </aside>
+
+    <template id="task-item-template">
+      <article class="task-item">
+        <div class="task-head">
+          <div class="task-name"></div>
+          <span class="task-status"></span>
+        </div>
+        <div class="task-meta"></div>
+        <div class="progress-wrap"><div class="progress-bar"></div></div>
+        <div class="task-actions">
+          <button data-act="detail" class="ghost" data-i18n="actions.detail">Detail</button>
+          <button data-act="pause" class="ghost" data-i18n="actions.pause">Pause</button>
+          <button data-act="resume" class="ghost" data-i18n="actions.resume">Resume</button>
+          <button data-act="remove" class="danger" data-i18n="actions.remove">Remove</button>
+        </div>
+      </article>
+    </template>
+
+    <template id="completed-item-template">
+      <article class="task-item">
+        <div class="task-head">
+          <div class="task-name"></div>
+          <span class="task-status"></span>
+        </div>
+        <div class="task-meta"></div>
+        <div class="task-actions">
+          <button type="button" data-act="detail" class="ghost" data-i18n="actions.detail">Detail</button>
+          <button type="button" data-act="open-file" class="ghost" data-i18n="actions.openFile">Open File</button>
+          <button type="button" data-act="open-dir" class="ghost" data-i18n="actions.openDir">Open Folder</button>
+          <button type="button" data-act="remove" class="danger" data-i18n="actions.remove">Remove</button>
+        </div>
+      </article>
+    </template>
+    <div id="delete-modal-backdrop" class="modal-backdrop hidden"></div>
+    <section id="delete-confirm-modal" class="panel confirm-modal hidden" aria-hidden="true">
+      <h3 data-i18n="dialog.removeTitle">Remove Task</h3>
+      <p data-i18n="dialog.removePrompt">Remove this completed task?</p>
+      <label class="confirm-check">
+        <input id="delete-with-files-checkbox" type="checkbox" />
+        <span data-i18n="dialog.removeWithFiles">Also delete downloaded files</span>
+      </label>
+      <div class="topbar-actions">
+        <button id="btn-delete-confirm-cancel" type="button" class="ghost" data-i18n="actions.cancel">Cancel</button>
+        <button id="btn-delete-confirm-ok" type="button" class="danger" data-i18n="actions.remove">Remove</button>
+      </div>
+    </section>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
