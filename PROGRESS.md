@@ -579,3 +579,8 @@
   - GitHub publish recommendations
 - Chosen project name: `🦩 Flamingo Downloader`.
 - Added root `LICENSE` using MIT License.
+
+## Step 74 - Bilingual README Split (Done)
+- Rewrote root `README.md` as English-first documentation.
+- Added `README_zh.md` for Chinese documentation.
+- Added cross-links between `README.md` and `README_zh.md`.
