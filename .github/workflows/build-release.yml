@@ -77,7 +77,8 @@ jobs:
         run: cargo install tauri-cli --version "^2.0" --locked
 
       - name: Build app bundle
-        run: cargo tauri build --manifest-path src-tauri/Cargo.toml
+        working-directory: src-tauri
+        run: cargo tauri build
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
