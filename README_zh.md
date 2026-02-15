@@ -57,6 +57,25 @@ cargo run --manifest-path src-tauri/Cargo.toml
 cargo tauri build --manifest-path src-tauri/Cargo.toml
 ```
 
+## GitHub Actions（全平台构建）
+
+仓库内已包含流水线：
+- `.github/workflows/build-release.yml`
+
+功能：
+- 在 `Linux`、`Windows`、`macOS Intel`、`macOS Apple Silicon` 构建
+- 构建前自动安装并注入 `aria2c` 到 `aria2/bin/...`
+- 构建 Tauri 安装包
+- 上传各平台构建产物
+- 推送 `v*` 标签（如 `v0.1.0`）时自动创建 GitHub Release
+
+使用步骤：
+1. 推送到 `main`，触发常规构建与产物上传。
+2. 需要发版时打标签：
+   - `git tag -a v0.1.0 -m "v0.1.0"`
+   - `git push origin v0.1.0`
+3. 到 GitHub 的 Actions / Releases 页面下载各平台产物。
+
 ## GitHub 建议信息
 
 - 仓库名：`flamingo-downloader`

@@ -57,6 +57,25 @@ In Settings:
 cargo tauri build --manifest-path src-tauri/Cargo.toml
 ```
 
+## GitHub Actions (Build All Platforms)
+
+This repository includes CI workflow:
+- `.github/workflows/build-release.yml`
+
+What it does:
+- builds on `Linux`, `Windows`, `macOS Intel`, `macOS Apple Silicon`
+- installs/stages `aria2c` into `aria2/bin/...` before building
+- builds Tauri bundles
+- uploads build artifacts for each platform
+- creates a GitHub Release automatically when you push a tag like `v0.1.0`
+
+How to use:
+1. Push code to `main` to run build checks and produce artifacts.
+2. Create a version tag to publish a release:
+   - `git tag -a v0.1.0 -m "v0.1.0"`
+   - `git push origin v0.1.0`
+3. Open Actions/Release page and download platform bundles.
+
 ## Suggested GitHub Metadata
 
 - Repository name: `flamingo-downloader`

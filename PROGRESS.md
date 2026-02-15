@@ -584,3 +584,17 @@
 - Rewrote root `README.md` as English-first documentation.
 - Added `README_zh.md` for Chinese documentation.
 - Added cross-links between `README.md` and `README_zh.md`.
+
+## Step 75 - GitHub Actions Cross-Platform Build/Release Pipeline (Done)
+- Added CI scripts:
+  - `scripts/ci/prepare_aria2_unix.sh`
+  - `scripts/ci/prepare_aria2_windows.ps1`
+- Added workflow:
+  - `.github/workflows/build-release.yml`
+- Pipeline capabilities:
+  - matrix builds for Linux/Windows/macOS (x64 + arm64 macOS runners)
+  - stages aria2 binary before Tauri packaging
+  - uploads per-platform bundle artifacts
+  - auto-publishes GitHub Release assets on `v*` tags
+- Enabled Tauri bundling in `src-tauri/tauri.conf.json` (`bundle.active=true`) for CI packaging.
+- Updated `README.md` and `README_zh.md` with CI usage instructions.
