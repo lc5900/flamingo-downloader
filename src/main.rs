@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use tarui_aria2_downloader::{events::StdoutEventEmitter, init_backend};
+use flamingo_downloader::{events::StdoutEventEmitter, init_backend};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -9,7 +9,7 @@ async fn main() -> Result<()> {
     let runtime_dir = cwd.join("runtime");
     std::fs::create_dir_all(&runtime_dir)?;
 
-    let emitter = Arc::new(StdoutEventEmitter) as tarui_aria2_downloader::events::SharedEmitter;
+    let emitter = Arc::new(StdoutEventEmitter) as flamingo_downloader::events::SharedEmitter;
     let handles = init_backend(&cwd, &runtime_dir.join("app.db"), emitter).await?;
 
     if handles.config.aria2_bin.exists() {

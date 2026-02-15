@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Tarui Aria2 Downloader",
+  "productName": "Flamingo Downloader",
   "version": "0.1.0",
-  "identifier": "com.tarui.aria2.downloader",
+  "identifier": "com.lc5900.flamingo.downloader",
   "build": {
     "beforeDevCommand": "",
     "beforeBuildCommand": "",
@@ -12,7 +12,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "Tarui Aria2 Downloader",
+        "title": "Flamingo Downloader",
         "width": 1200,
         "height": 780,
         "resizable": true

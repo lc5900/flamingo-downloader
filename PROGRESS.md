@@ -606,3 +606,18 @@
 - Applied in `Aria2RuntimeConfig::with_defaults`.
 - Added dependency `dirs = "5"` in root `Cargo.toml`.
 - Verified by `cargo check --manifest-path src-tauri/Cargo.toml`.
+
+## Step 77 - Full Product Rename to Flamingo Downloader + New Icon (Done)
+- Renamed app-facing identity to `Flamingo Downloader`:
+  - `src-tauri/tauri.conf.json` (`productName`, window `title`, bundle `identifier`)
+  - `dist/index.html` title and heading
+  - i18n app title in `dist/app.js` (EN/ZH)
+- Renamed Rust crate packages:
+  - root crate: `tarui_aria2_downloader` -> `flamingo_downloader`
+  - tauri crate: `tarui_aria2_downloader_tauri` -> `flamingo_downloader_tauri`
+  - updated all code imports/usages accordingly.
+- Updated runtime User-Agent string to `flamingo-downloader`.
+- Replaced app icon with a new 1024x1024 flamingo-themed PNG at `src-tauri/icons/icon.png`.
+- Verified no old naming remains via repository grep and by running:
+  - `cargo check`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`

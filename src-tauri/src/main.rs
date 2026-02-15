@@ -1,7 +1,7 @@
 use std::sync::{Arc, RwLock};
 
 use serde::Serialize;
-use tarui_aria2_downloader::{
+use flamingo_downloader::{
     events::EventEmitter,
     init_backend,
     models::{
@@ -43,7 +43,7 @@ impl EventEmitter for TauriEventEmitter {
 
 #[derive(Clone)]
 struct AppState {
-    service: Arc<tarui_aria2_downloader::download_service::DownloadService>,
+    service: Arc<flamingo_downloader::download_service::DownloadService>,
 }
 
 #[derive(Serialize)]
@@ -211,7 +211,7 @@ async fn detect_aria2_bin_paths(state: State<'_, AppState>) -> Result<Vec<String
 }
 
 #[tauri::command]
-async fn get_diagnostics(state: State<'_, AppState>) -> Result<tarui_aria2_downloader::models::Diagnostics, String> {
+async fn get_diagnostics(state: State<'_, AppState>) -> Result<flamingo_downloader::models::Diagnostics, String> {
     state
         .service
         .get_diagnostics()

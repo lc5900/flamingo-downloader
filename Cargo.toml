@@ -1,5 +1,5 @@
 [package]
-name = "tarui_aria2_downloader"
+name = "flamingo_downloader"
 version = "0.1.0"
 edition = "2024"
 

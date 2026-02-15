@@ -1183,7 +1183,7 @@ async fn fetch_release_from_repo(
 }
 
 async fn fetch_json(client: &reqwest::Client, url: &str, github_token: Option<&str>) -> Result<Value> {
-    let mut req = client.get(url).header("User-Agent", "tarui-aria2-downloader");
+    let mut req = client.get(url).header("User-Agent", "flamingo-downloader");
     if let Some(token) = github_token {
         req = req.header("Authorization", format!("Bearer {token}"));
     }
@@ -1245,7 +1245,7 @@ async fn download_asset_bytes_once(
     url: &str,
     github_token: Option<&str>,
 ) -> Result<Vec<u8>> {
-    let mut req = client.get(url).header("User-Agent", "tarui-aria2-downloader");
+    let mut req = client.get(url).header("User-Agent", "flamingo-downloader");
     if let Some(token) = github_token {
         req = req.header("Authorization", format!("Bearer {token}"));
     }

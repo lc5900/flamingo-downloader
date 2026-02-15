@@ -26,7 +26,7 @@ const GITHUB_CDN_PRESETS = [
 
 const I18N = {
   "en-US": {
-    "app.title": "Tarui Aria2 Downloader",
+    "app.title": "Flamingo Downloader",
     "sections.navigation": "Navigation",
     "nav.downloading": "Downloading",
     "nav.downloaded": "Downloaded",
@@ -133,7 +133,7 @@ const I18N = {
     "msg.updateDone": "aria2 update completed",
   },
   "zh-CN": {
-    "app.title": "Tarui Aria2 下载器",
+    "app.title": "火烈鸟下载器",
     "sections.navigation": "导航",
     "nav.downloading": "下载中",
     "nav.downloaded": "已下载",
