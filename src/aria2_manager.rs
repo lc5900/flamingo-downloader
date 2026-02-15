@@ -64,7 +64,7 @@ pub struct Aria2RuntimeConfig {
 impl Aria2RuntimeConfig {
     pub fn with_defaults(base_dir: &Path) -> Self {
         let work_dir = base_dir.join("runtime");
-        let download_dir = base_dir.join("downloads");
+        let download_dir = resolve_default_download_dir(base_dir);
         let aria2_bin = resolve_aria2_bin(base_dir);
         Self {
             aria2_bin,
@@ -78,6 +78,10 @@ impl Aria2RuntimeConfig {
             enable_upnp: true,
         }
     }
+}
+
+fn resolve_default_download_dir(base_dir: &Path) -> PathBuf {
+    dirs::download_dir().unwrap_or_else(|| base_dir.join("downloads"))
 }
 
 fn resolve_aria2_bin(base_dir: &Path) -> PathBuf {

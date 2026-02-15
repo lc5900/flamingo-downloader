@@ -598,3 +598,11 @@
   - auto-publishes GitHub Release assets on `v*` tags
 - Enabled Tauri bundling in `src-tauri/tauri.conf.json` (`bundle.active=true`) for CI packaging.
 - Updated `README.md` and `README_zh.md` with CI usage instructions.
+
+## Step 76 - Default Download Directory Uses System Downloads Folder (Done)
+- Updated backend default download directory strategy:
+  - first try system download folder via `dirs::download_dir()`
+  - fallback to project-local `downloads` if system folder is unavailable
+- Applied in `Aria2RuntimeConfig::with_defaults`.
+- Added dependency `dirs = "5"` in root `Cargo.toml`.
+- Verified by `cargo check --manifest-path src-tauri/Cargo.toml`.
