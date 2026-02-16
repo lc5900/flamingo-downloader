@@ -98,7 +98,22 @@ jobs:
           path: release-assets
           merge-multiple: false
 
+      - name: Verify release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Collected release assets:"
+          find release-assets -type f -print
+          count="$(find release-assets -type f | wc -l | tr -d ' ')"
+          if [ "${count}" -eq 0 ]; then
+            echo "No release assets found under release-assets/"
+            exit 1
+          fi
+          echo "Asset file count: ${count}"
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           files: release-assets/**/*
+          fail_on_unmatched_files: false
+          overwrite_files: true

@@ -6,7 +6,7 @@ use flamingo_downloader::{
     init_backend,
     models::{
         AddTaskOptions, Aria2UpdateApplyResult, Aria2UpdateInfo, GlobalSettings, OperationLog,
-        Task, TaskFile, TaskStatus,
+        Task, TaskFile, TaskStatus, TaskType,
     },
 };
 use tauri::{Emitter, Manager, State};
@@ -203,6 +203,18 @@ async fn get_global_settings(state: State<'_, AppState>) -> Result<GlobalSetting
 }
 
 #[tauri::command]
+async fn suggest_save_dir(
+    state: State<'_, AppState>,
+    task_type: TaskType,
+    source: Option<String>,
+) -> Result<String, String> {
+    state
+        .service
+        .suggest_save_dir(task_type, source.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn detect_aria2_bin_paths(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     state
         .service
@@ -229,6 +241,15 @@ async fn restart_aria2(state: State<'_, AppState>) -> Result<String, String> {
     state
         .service
         .restart_aria2()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn startup_check_aria2(state: State<'_, AppState>) -> Result<String, String> {
+    state
+        .service
+        .startup_check_aria2()
         .await
         .map_err(|e| e.to_string())
 }
@@ -349,10 +370,12 @@ fn main() {
             set_task_file_selection,
             set_global_settings,
             get_global_settings,
+            suggest_save_dir,
             detect_aria2_bin_paths,
             get_diagnostics,
             rpc_ping,
             restart_aria2,
+            startup_check_aria2,
             save_session,
             list_operation_logs,
             clear_operation_logs,

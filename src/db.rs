@@ -6,7 +6,9 @@ use std::{
 use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use crate::models::{Aria2TaskSnapshot, GlobalSettings, Task, TaskFile, TaskStatus, TaskType};
+use crate::models::{
+    Aria2TaskSnapshot, DownloadDirRule, GlobalSettings, Task, TaskFile, TaskStatus, TaskType,
+};
 
 pub struct Database {
     conn: Arc<Mutex<Connection>>,
@@ -360,10 +362,29 @@ impl Database {
         if let Some(v) = &settings.github_token {
             self.set_setting("github_token", v)?;
         }
+        if let Some(v) = settings.browser_bridge_enabled {
+            self.set_setting("browser_bridge_enabled", if v { "true" } else { "false" })?;
+        }
+        if let Some(v) = settings.browser_bridge_port {
+            self.set_setting("browser_bridge_port", &v.to_string())?;
+        }
+        if let Some(v) = &settings.browser_bridge_token {
+            self.set_setting("browser_bridge_token", v)?;
+        }
+        if let Some(v) = &settings.ui_theme {
+            self.set_setting("ui_theme", v)?;
+        }
+        let rules_json = serde_json::to_string(&settings.download_dir_rules)
+            .context("serialize download_dir_rules")?;
+        self.set_setting("download_dir_rules", &rules_json)?;
         Ok(())
     }
 
     pub fn load_global_settings(&self) -> Result<GlobalSettings> {
+        let rules = self
+            .get_setting("download_dir_rules")?
+            .and_then(|v| serde_json::from_str::<Vec<DownloadDirRule>>(&v).ok())
+            .unwrap_or_default();
         Ok(GlobalSettings {
             aria2_bin_path: self.get_setting("manual_aria2_bin_path")?,
             download_dir: self.get_setting("download_dir")?,
@@ -384,6 +405,19 @@ impl Database {
                 }),
             github_cdn: self.get_setting("github_cdn")?,
             github_token: self.get_setting("github_token")?,
+            download_dir_rules: rules,
+            browser_bridge_enabled: self
+                .get_setting("browser_bridge_enabled")?
+                .and_then(|v| match v.as_str() {
+                    "true" => Some(true),
+                    "false" => Some(false),
+                    _ => None,
+                }),
+            browser_bridge_port: self
+                .get_setting("browser_bridge_port")?
+                .and_then(|v| v.parse::<u16>().ok()),
+            browser_bridge_token: self.get_setting("browser_bridge_token")?,
+            ui_theme: self.get_setting("ui_theme")?,
         })
     }
 
@@ -533,6 +567,16 @@ mod tests {
             enable_upnp: Some(false),
             github_cdn: Some("https://ghfast.top/".to_string()),
             github_token: Some("ghp_test_token".to_string()),
+            download_dir_rules: vec![DownloadDirRule {
+                enabled: true,
+                matcher: "ext".to_string(),
+                pattern: "mp4,mkv".to_string(),
+                save_dir: "/tmp/video".to_string(),
+            }],
+            browser_bridge_enabled: Some(true),
+            browser_bridge_port: Some(16789),
+            browser_bridge_token: Some("bridge-token-1".to_string()),
+            ui_theme: Some("dark".to_string()),
         };
 
         db.save_global_settings(&settings).expect("save settings");
@@ -550,6 +594,15 @@ mod tests {
         assert_eq!(loaded.enable_upnp, Some(false));
         assert_eq!(loaded.github_cdn.as_deref(), Some("https://ghfast.top/"));
         assert_eq!(loaded.github_token.as_deref(), Some("ghp_test_token"));
+        assert_eq!(loaded.download_dir_rules.len(), 1);
+        assert_eq!(loaded.download_dir_rules[0].matcher, "ext");
+        assert_eq!(loaded.browser_bridge_enabled, Some(true));
+        assert_eq!(loaded.browser_bridge_port, Some(16789));
+        assert_eq!(
+            loaded.browser_bridge_token.as_deref(),
+            Some("bridge-token-1")
+        );
+        assert_eq!(loaded.ui_theme.as_deref(), Some("dark"));
 
         let _ = std::fs::remove_file(db_path);
     }

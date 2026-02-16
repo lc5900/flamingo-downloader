@@ -632,3 +632,260 @@
 - Verified by:
   - `node --check dist/app.js`
   - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 79 - Unified In-App Toast + Confirm UX (Done)
+- Added non-blocking toast notifications and replaced native browser alerts.
+- Added a reusable in-app confirmation modal and replaced native confirm dialogs for key destructive operations.
+- Updated flows:
+  - add URL success/validation
+  - detect aria2 path
+  - remove task confirmation
+  - clear logs confirmation
+  - update aria2 confirmation
+  - rpc ping / restart / save session feedback
+  - centralized error surface (`alertError`) now uses toast
+- Added UI components and styling:
+  - `#toast-stack` with typed toast variants (success/warn/error/info)
+  - `#confirm-modal` + backdrop wiring
+- Verified by:
+  - `node --check dist/app.js`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 80 - aria2 Startup Diagnostics and Recovery Improvements (Done)
+- Added startup retry behavior in service readiness path:
+  - `ensure_aria2_ready` now retries startup once before failing.
+  - failure message now includes stderr tail when available.
+- Added stderr tail plumbing from aria2 manager to service diagnostics:
+  - extended `Aria2Api` with `stderr_tail()`.
+  - `Diagnostics` now exposes `stderr_tail`.
+- Added one-click startup diagnostic action:
+  - new backend command `startup_check_aria2` (stop/start with retry + version check + detailed message).
+  - wired to Tauri command and frontend diagnostics tab button.
+- Updated UI i18n and bindings for `Startup Check` action.
+- Verified by:
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+  - `node --check dist/app.js`
+
+## Step 81 - Safe Delete Hardening (Done)
+- Strengthened `delete_task_files_safely` with strict scope validation:
+  - validates task save directory resolves inside configured download root
+  - rejects candidate paths lexically outside root even when files do not exist
+  - keeps canonical-path guard for existing files to prevent symlink escape
+- Changed removal behavior:
+  - `remove_task(delete_files=true)` now propagates delete failures instead of silently swallowing them
+  - task record is preserved when file deletion is rejected/failed
+- Improved delete logs:
+  - include skipped/missing-root context and removed count on success
+- Added regression test:
+  - `remove_with_delete_files_rejects_outside_download_root`
+- Verified by:
+  - `cargo test remove_with_delete_files_rejects_outside_download_root -- --nocapture`
+  - `cargo test subpath_check_works -- --nocapture`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 82 - Main List Sorting Controls (Done)
+- Added a new sort selector in the list toolbar (UI):
+  - Updated (newest)
+  - Created (newest)
+  - Speed (highest)
+  - Progress (highest)
+  - Name (A-Z)
+- Added i18n entries and labels for sort controls in EN + ZH.
+- Implemented generic task sorting in frontend render flow and applied it to both Downloading and Downloaded tables.
+- Added deterministic tie-break behavior (falls back to `updated_at` for speed/progress sorting).
+- Verified by:
+  - `node --check dist/app.js`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 83 - CI Release Asset Upload Not Found Fix (Done)
+- Added release-stage asset verification in workflow:
+  - prints collected files under `release-assets/`
+  - fails early with clear message if no files are present
+- Hardened GitHub release upload behavior in `softprops/action-gh-release@v2`:
+  - `fail_on_unmatched_files: false`
+  - `overwrite_files: true`
+- Kept release job tag guard intact (`if: startsWith(github.ref, 'refs/tags/v')`).
+- Updated TODO to mark this CI issue as completed.
+
+## Step 84 - Multi-Select and Batch Actions (Done)
+- Added multi-select UI for both Downloading and Downloaded tables:
+  - row checkbox
+  - header checkbox for select-all in current visible list
+- Added batch action toolbar in list area:
+  - selected count
+  - batch pause
+  - batch resume
+  - batch remove
+  - clear selection
+- Implemented batch action behavior:
+  - applies to selected tasks in current section and current filters
+  - batch pause/resume skips completed tasks
+  - batch remove uses confirm flow and shared remove command path
+- Updated i18n (EN + ZH) and styling for batch controls/selection column.
+- Verified by:
+  - `node --check dist/app.js`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 85 - Rich Row Information (Done)
+- Enhanced Downloading rows with ETA information:
+  - added `formatEta` helper based on remaining bytes and current download speed
+  - shown under progress cell as secondary metadata
+- Enhanced Downloaded rows with completion timestamp:
+  - displays `updated_at` as completed time under size cell
+- Added expandable per-row error details:
+  - renders `<details>` block when `error_message` is present
+  - supports both Downloading and Downloaded tables
+- Added i18n entries (EN + ZH) for new metadata labels:
+  - `meta.eta`
+  - `meta.completedAt`
+  - `meta.error`
+- Added focused table styles for secondary metadata and compact error detail block.
+- Verified by:
+  - `node --check dist/app.js`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 86 - Row Context Menu (Done)
+- Added a right-click context menu for task rows in both Downloading and Downloaded tables.
+- Added context actions:
+  - detail
+  - open file (completed only)
+  - open folder (completed only)
+  - copy source
+  - copy task id
+  - retry task (URL/magnet source)
+- Implemented context menu behavior:
+  - viewport-safe menu positioning
+  - click outside / `Esc` / blur / resize to close
+  - disabled action states based on task status/source
+- Added i18n strings in EN + ZH:
+  - `actions.copySource`
+  - `actions.copyTaskId`
+  - `actions.retryTask`
+- Added menu styles (`.context-menu`) to match current modernized UI.
+- Verified by:
+  - `node --check dist/app.js`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 87 - Multi Download Directories by Rule (Done)
+- Added rule model for routing downloads to different directories:
+  - `enabled`
+  - `matcher` (`ext | domain | type`)
+  - `pattern` (comma-separated values)
+  - `save_dir`
+- Extended global settings persistence:
+  - `GlobalSettings.download_dir_rules`
+  - stored in `settings.download_dir_rules` as JSON
+  - initialized default with `[]` during backend startup
+- Integrated rule resolution into task creation:
+  - applied in `add_url`, `add_magnet`, `add_torrent_base64`
+  - per-task `options.save_dir` still has highest priority
+  - matched rule save_dir is passed to aria2 and stored in task record
+- Added settings UI editor for download rules:
+  - add/remove rule rows
+  - matcher select + pattern + save_dir + enabled checkbox
+  - persisted via existing `set_global_settings` flow
+  - EN/ZH i18n labels and hints included
+- Added tests:
+  - `download_rule_matches_extension`
+  - `download_rule_matches_domain_and_type`
+  - updated `global_settings_roundtrip`
+- Verified by:
+  - `node --check dist/app.js`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+  - `cargo test download_rule_matches_extension -- --nocapture`
+  - `cargo test download_rule_matches_domain_and_type -- --nocapture`
+  - `cargo test global_settings_roundtrip -- --nocapture`
+
+## Step 88 - Per-Task Save Directory in Add Dialog (Done)
+- Added per-download save directory input to all add forms:
+  - URL
+  - Magnet
+  - Torrent
+- Added backend suggestion command:
+  - `suggest_save_dir(task_type, source?)`
+  - uses existing download-dir rule engine
+  - falls back to global default download directory when no rule matches
+- Add-dialog behavior:
+  - default save dir auto-filled from matched rule/global default
+  - users can manually edit for current task
+  - edited value is passed as `options.save_dir` to `add_url/add_magnet/add_torrent`
+  - after successful add, field resets to suggested default again
+- Implemented live suggestion refresh:
+  - URL input changes update suggestion (unless user manually edited)
+  - Magnet input changes update suggestion (unless user manually edited)
+  - Torrent file selection updates suggestion (unless user manually edited)
+- Verified by:
+  - `node --check dist/app.js`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 89 - Browser Takeover MVP (Done)
+- Added local browser bridge service in backend:
+  - listens on `127.0.0.1:<port>`
+  - token auth via `X-Token`
+  - endpoints:
+    - `GET /health`
+    - `POST /add` (`{ url, save_dir? }`)
+  - supports URL and magnet forwarding to existing service APIs
+  - improved request parsing with `Content-Length` body read
+- Added new global settings fields:
+  - `browser_bridge_enabled`
+  - `browser_bridge_port`
+  - `browser_bridge_token`
+- Added bridge runtime defaults/init:
+  - enabled by default
+  - default port `16789`
+  - auto-generate token when missing/empty
+- Added settings UI for bridge configuration:
+  - enable switch
+  - port
+  - token
+- Added browser extension template under `browser-extension/`:
+  - `manifest.json`
+  - `background.js` (auto takeover + context menu)
+  - `options.html` + `options.js`
+  - `README.md` setup instructions
+- Verified by:
+  - `node --check dist/app.js`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+  - `cargo test global_settings_roundtrip -- --nocapture`
+
+## Step 90 - Theme System + Dark Mode (Done)
+- Added persistent UI theme setting:
+  - `ui_theme` in global settings (`system | light | dark`)
+  - database save/load and default initialization (`system`)
+- Added theme selector in Settings (Basic tab):
+  - Follow System
+  - Light
+  - Dark
+- Added runtime theme behavior:
+  - apply theme on startup
+  - live preview when changing selector
+  - auto-follow system color scheme changes when mode is `system`
+- Refactored UI color tokens into a more design-system style variable set:
+  - introduced semantic tokens for sidebar/table/toolbar/status/log areas
+  - replaced many hardcoded colors with CSS variables
+  - added complete dark token overrides using `html[data-theme=\"dark\"]`
+- Verified by:
+  - `node --check dist/app.js`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+  - `cargo test global_settings_roundtrip -- --nocapture`
+
+## Step 91 - Theme UX Fixes + Settings IA Cleanup (Done)
+- Fixed top-left branding in main window:
+  - removed text title from header
+  - now shows icon-only brand mark (`🦩`)
+- Added quick theme toggle in top toolbar:
+  - one-click switch between light/dark
+  - keeps full `system` mode available in settings page
+- Improved dark-mode readability issues:
+  - removed remaining hardcoded light backgrounds in key buttons/panels
+  - aligned context menu and settings tabs with theme variables
+- Reorganized Basic settings into grouped sections:
+  - Appearance
+  - Download
+  - aria2
+  - Integration
+- Kept Theme selector visible in Appearance group for explicit control.
+- Verified by:
+  - `node --check dist/app.js`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`

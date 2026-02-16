@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flamingo Bridge Options</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 20px; }
+      .wrap { max-width: 640px; display: grid; gap: 12px; }
+      label { display: grid; gap: 6px; font-size: 13px; color: #374151; }
+      input[type="text"] { padding: 8px; border: 1px solid #d1d5db; border-radius: 8px; }
+      .row { display: flex; align-items: center; gap: 8px; }
+      button { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; background: white; cursor: pointer; }
+      #status { color: #6b7280; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h2>Flamingo Downloader Bridge</h2>
+      <label class="row">
+        <input id="enabled" type="checkbox" />
+        <span>Enable auto takeover for browser downloads</span>
+      </label>
+      <label>
+        <span>Bridge endpoint</span>
+        <input id="endpoint" type="text" placeholder="http://127.0.0.1:16789/add" />
+      </label>
+      <label>
+        <span>Bridge token</span>
+        <input id="token" type="text" placeholder="paste token from Flamingo settings" />
+      </label>
+      <div class="row">
+        <button id="save" type="button">Save</button>
+      </div>
+      <div id="status"></div>
+    </div>
+    <script src="options.js"></script>
+  </body>
+</html>

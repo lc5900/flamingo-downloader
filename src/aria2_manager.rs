@@ -46,6 +46,7 @@ pub trait Aria2Api: Send + Sync {
     async fn get_global_stat(&self) -> Result<Value>;
     async fn get_version(&self) -> Result<Value>;
     async fn save_session(&self) -> Result<String>;
+    fn stderr_tail(&self) -> Option<String>;
 }
 
 #[derive(Debug, Clone)]
@@ -341,6 +342,10 @@ impl Aria2Manager {
             return Ok(ep);
         }
         self.start().await
+    }
+
+    pub fn stderr_tail(&self) -> Option<String> {
+        read_aria2_stderr_tail(&self.cfg.work_dir)
     }
 
     pub async fn start_health_guard(self: Arc<Self>) {
@@ -657,6 +662,10 @@ impl Aria2Api for Aria2Manager {
 
     async fn save_session(&self) -> Result<String> {
         Aria2Manager::save_session(self).await
+    }
+
+    fn stderr_tail(&self) -> Option<String> {
+        Aria2Manager::stderr_tail(self)
     }
 }
 

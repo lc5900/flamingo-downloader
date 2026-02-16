@@ -1,4 +1,5 @@
 pub mod aria2_manager;
+pub mod browser_bridge;
 pub mod commands;
 pub mod db;
 pub mod download_service;
@@ -10,6 +11,7 @@ use std::{path::Path, sync::Arc};
 
 use anyhow::Result;
 use aria2_manager::{Aria2Manager, Aria2RuntimeConfig};
+use browser_bridge::{BrowserBridgeConfig, start_browser_bridge};
 use db::Database;
 use download_service::DownloadService;
 use events::SharedEmitter;
@@ -58,9 +60,21 @@ pub async fn init_backend(
     }
     db.set_setting_if_absent("github_cdn", "")?;
     db.set_setting_if_absent("github_token", "")?;
+    db.set_setting_if_absent("download_dir_rules", "[]")?;
+    db.set_setting_if_absent("browser_bridge_enabled", "true")?;
+    db.set_setting_if_absent("browser_bridge_port", "16789")?;
+    db.set_setting_if_absent("ui_theme", "system")?;
+    let bridge_token = match db.get_setting("browser_bridge_token")? {
+        Some(v) if !v.trim().is_empty() => v,
+        _ => {
+            let generated = uuid::Uuid::new_v4().to_string();
+            db.set_setting("browser_bridge_token", &generated)?;
+            generated
+        }
+    };
     db.validate_runtime_settings()?;
     let aria2 = Arc::new(Aria2Manager::new(aria2_cfg.clone()));
-    let service = Arc::new(DownloadService::new(db, aria2.clone(), emitter));
+    let service = Arc::new(DownloadService::new(db.clone(), aria2.clone(), emitter));
 
     if aria2_cfg.aria2_bin.exists() {
         if let Ok(_ep) = aria2.start().await {
@@ -70,6 +84,23 @@ pub async fn init_backend(
             service.clone().start_log_flush_loop();
         }
     }
+
+    let bridge_enabled = db
+        .get_setting("browser_bridge_enabled")?
+        .map(|v| v == "true")
+        .unwrap_or(true);
+    let bridge_port = db
+        .get_setting("browser_bridge_port")?
+        .and_then(|v| v.parse::<u16>().ok())
+        .unwrap_or(16789);
+    start_browser_bridge(
+        service.clone(),
+        BrowserBridgeConfig {
+            enabled: bridge_enabled,
+            port: bridge_port,
+            token: bridge_token,
+        },
+    );
 
     Ok(BackendHandles {
         service,

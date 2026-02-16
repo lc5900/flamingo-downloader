@@ -9,8 +9,12 @@
   <body>
     <main class="app-shell">
       <header class="topbar">
-        <h1 data-i18n="app.title">Flamingo Downloader</h1>
+        <h1 class="brand-mark" aria-label="Flamingo">🦩</h1>
         <div class="topbar-actions">
+          <button id="btn-theme-quick" class="ghost icon-btn" title="Toggle theme">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3A7 7 0 0 0 21 12.8z"/></svg>
+            <span data-i18n="actions.quickTheme">Theme</span>
+          </button>
           <label class="inline-select">
             <span data-i18n="fields.language">Language</span>
             <select id="language-select">
@@ -69,6 +73,10 @@
                 <span data-i18n="fields.url">URL</span>
                 <input id="url-input" type="text" placeholder="https://example.com/file.zip" data-i18n-placeholder="placeholders.url" required />
               </label>
+              <label>
+                <span data-i18n="fields.downloadDirectory">Download Directory</span>
+                <input id="url-save-dir-input" type="text" placeholder="./downloads" data-i18n-placeholder="placeholders.downloadDirectory" />
+              </label>
               <button id="btn-add-url" type="button" data-i18n="actions.addUrl">Add URL</button>
             </form>
 
@@ -77,6 +85,10 @@
                 <span data-i18n="fields.magnet">Magnet</span>
                 <input id="magnet-input" type="text" placeholder="magnet:?xt=urn:btih:..." data-i18n-placeholder="placeholders.magnet" required />
               </label>
+              <label>
+                <span data-i18n="fields.downloadDirectory">Download Directory</span>
+                <input id="magnet-save-dir-input" type="text" placeholder="./downloads" data-i18n-placeholder="placeholders.downloadDirectory" />
+              </label>
               <button id="btn-add-magnet" type="button" data-i18n="actions.addMagnet">Add Magnet</button>
             </form>
 
@@ -84,6 +96,10 @@
               <label>
                 <span data-i18n="fields.torrentFile">Torrent File</span>
                 <input id="torrent-input" type="file" accept=".torrent,application/x-bittorrent" required />
+              </label>
+              <label>
+                <span data-i18n="fields.downloadDirectory">Download Directory</span>
+                <input id="torrent-save-dir-input" type="text" placeholder="./downloads" data-i18n-placeholder="placeholders.downloadDirectory" />
               </label>
               <button id="btn-add-torrent" type="button" data-i18n="actions.addTorrent">Add Torrent</button>
             </form>
@@ -103,58 +119,116 @@
 
             <section class="settings-section" data-settings-section="basic">
               <form id="settings-form" class="settings-grid">
-                <label class="span-2">
-                  <span data-i18n="fields.aria2BinPath">aria2 Binary Path</span>
-                  <input id="setting-aria2-bin-path" type="text" placeholder="/path/to/aria2c" data-i18n-placeholder="placeholders.aria2BinPath" />
-                </label>
-                <div class="settings-actions span-2">
-                  <button id="btn-detect-aria2-path" type="button" class="ghost" data-i18n="actions.detectAria2Path">Detect aria2 Path</button>
-                </div>
-                <label>
-                  <span data-i18n="fields.downloadDirectory">Download Directory</span>
-                  <input id="setting-download-dir" type="text" placeholder="./downloads" data-i18n-placeholder="placeholders.downloadDirectory" />
-                </label>
-                <label>
-                  <span data-i18n="fields.maxConcurrentDownloads">Max Concurrent Downloads</span>
-                  <input id="setting-max-concurrent" type="number" min="1" step="1" />
-                </label>
-                <label>
-                  <span data-i18n="fields.maxConnPerServer">Max Connection Per Server</span>
-                  <input id="setting-max-conn" type="number" min="1" step="1" />
-                </label>
-                <label>
-                  <span data-i18n="fields.maxOverallDownloadLimit">Max Overall Download Limit</span>
-                  <input id="setting-max-limit" type="text" placeholder="0 / 10M / 2M" data-i18n-placeholder="placeholders.maxOverallDownloadLimit" />
-                </label>
-                <label class="span-2">
-                  <span data-i18n="fields.btTrackerList">BT Tracker List (comma separated)</span>
-                  <input id="setting-bt-tracker" type="text" placeholder="udp://tracker.opentrackr.org:1337/announce" data-i18n-placeholder="placeholders.btTrackerList" />
-                </label>
-                <label class="span-2">
-                  <span data-i18n="fields.githubCdn">GitHub CDN Prefix</span>
-                  <input id="setting-github-cdn" type="text" placeholder="https://ghproxy.com/ or https://cdn.example/{url}" data-i18n-placeholder="placeholders.githubCdn" />
-                </label>
-                <label class="span-2">
-                  <span data-i18n="fields.githubToken">GitHub Token (optional)</span>
-                  <input id="setting-github-token" type="password" placeholder="ghp_xxx..." data-i18n-placeholder="placeholders.githubToken" autocomplete="off" />
-                </label>
-                <label class="span-2">
-                  <span data-i18n="fields.githubCdnPreset">Preset CDN</span>
-                  <select id="setting-github-cdn-preset">
-                    <option value="" data-i18n="cdnPreset.custom">Custom / Direct</option>
-                    <option value="https://ghproxy.com/" data-i18n="cdnPreset.ghproxy">ghproxy.com</option>
-                    <option value="https://ghfast.top/" data-i18n="cdnPreset.ghfast">ghfast.top</option>
-                    <option value="https://ghproxy.net/" data-i18n="cdnPreset.ghproxyNet">ghproxy.net</option>
-                  </select>
-                </label>
-                <label>
-                  <span data-i18n="fields.enableUpnp">Enable UPnP</span>
-                  <select id="setting-enable-upnp">
-                    <option value="" data-i18n="common.default">Default</option>
-                    <option value="true" data-i18n="common.true">true</option>
-                    <option value="false" data-i18n="common.false">false</option>
-                  </select>
-                </label>
+                <section class="settings-group span-2">
+                  <h3 data-i18n="groups.appearance">Appearance</h3>
+                  <div class="settings-group-grid">
+                    <label>
+                      <span data-i18n="fields.themeMode">Theme</span>
+                      <select id="setting-theme-mode">
+                        <option value="system" data-i18n="themes.system">Follow System</option>
+                        <option value="light" data-i18n="themes.light">Light</option>
+                        <option value="dark" data-i18n="themes.dark">Dark</option>
+                      </select>
+                    </label>
+                  </div>
+                </section>
+
+                <section class="settings-group span-2">
+                  <h3 data-i18n="groups.download">Download</h3>
+                  <div class="settings-group-grid">
+                    <label>
+                      <span data-i18n="fields.downloadDirectory">Download Directory</span>
+                      <input id="setting-download-dir" type="text" placeholder="./downloads" data-i18n-placeholder="placeholders.downloadDirectory" />
+                    </label>
+                    <label>
+                      <span data-i18n="fields.maxConcurrentDownloads">Max Concurrent Downloads</span>
+                      <input id="setting-max-concurrent" type="number" min="1" step="1" />
+                    </label>
+                    <label>
+                      <span data-i18n="fields.maxConnPerServer">Max Connection Per Server</span>
+                      <input id="setting-max-conn" type="number" min="1" step="1" />
+                    </label>
+                    <label>
+                      <span data-i18n="fields.maxOverallDownloadLimit">Max Overall Download Limit</span>
+                      <input id="setting-max-limit" type="text" placeholder="0 / 10M / 2M" data-i18n-placeholder="placeholders.maxOverallDownloadLimit" />
+                    </label>
+                    <label class="span-2">
+                      <span data-i18n="fields.btTrackerList">BT Tracker List (comma separated)</span>
+                      <input id="setting-bt-tracker" type="text" placeholder="udp://tracker.opentrackr.org:1337/announce" data-i18n-placeholder="placeholders.btTrackerList" />
+                    </label>
+                  </div>
+                </section>
+
+                <section class="settings-group span-2">
+                  <h3 data-i18n="groups.aria2">aria2</h3>
+                  <div class="settings-group-grid">
+                    <label class="span-2">
+                      <span data-i18n="fields.aria2BinPath">aria2 Binary Path</span>
+                      <input id="setting-aria2-bin-path" type="text" placeholder="/path/to/aria2c" data-i18n-placeholder="placeholders.aria2BinPath" />
+                    </label>
+                    <div class="settings-actions span-2">
+                      <button id="btn-detect-aria2-path" type="button" class="ghost" data-i18n="actions.detectAria2Path">Detect aria2 Path</button>
+                    </div>
+                    <label>
+                      <span data-i18n="fields.enableUpnp">Enable UPnP</span>
+                      <select id="setting-enable-upnp">
+                        <option value="" data-i18n="common.default">Default</option>
+                        <option value="true" data-i18n="common.true">true</option>
+                        <option value="false" data-i18n="common.false">false</option>
+                      </select>
+                    </label>
+                  </div>
+                </section>
+
+                <section class="settings-group span-2">
+                  <h3 data-i18n="groups.integration">Integration</h3>
+                  <div class="settings-group-grid">
+                    <label class="span-2">
+                      <span data-i18n="fields.githubCdn">GitHub CDN Prefix</span>
+                      <input id="setting-github-cdn" type="text" placeholder="https://ghproxy.com/ or https://cdn.example/{url}" data-i18n-placeholder="placeholders.githubCdn" />
+                    </label>
+                    <label class="span-2">
+                      <span data-i18n="fields.githubToken">GitHub Token (optional)</span>
+                      <input id="setting-github-token" type="password" placeholder="ghp_xxx..." data-i18n-placeholder="placeholders.githubToken" autocomplete="off" />
+                    </label>
+                    <label class="span-2">
+                      <span data-i18n="fields.githubCdnPreset">Preset CDN</span>
+                      <select id="setting-github-cdn-preset">
+                        <option value="" data-i18n="cdnPreset.custom">Custom / Direct</option>
+                        <option value="https://ghproxy.com/" data-i18n="cdnPreset.ghproxy">ghproxy.com</option>
+                        <option value="https://ghfast.top/" data-i18n="cdnPreset.ghfast">ghfast.top</option>
+                        <option value="https://ghproxy.net/" data-i18n="cdnPreset.ghproxyNet">ghproxy.net</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span data-i18n="fields.browserBridgeEnabled">Browser Bridge Enabled</span>
+                      <select id="setting-browser-bridge-enabled">
+                        <option value="" data-i18n="common.default">Default</option>
+                        <option value="true" data-i18n="common.true">true</option>
+                        <option value="false" data-i18n="common.false">false</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span data-i18n="fields.browserBridgePort">Browser Bridge Port</span>
+                      <input id="setting-browser-bridge-port" type="number" min="1" max="65535" step="1" placeholder="16789" />
+                    </label>
+                    <label class="span-2">
+                      <span data-i18n="fields.browserBridgeToken">Browser Bridge Token</span>
+                      <input id="setting-browser-bridge-token" type="text" placeholder="token" autocomplete="off" />
+                    </label>
+                  </div>
+                </section>
+
+                <section class="span-2 rules-panel">
+                  <div class="panel-title">
+                    <h3 data-i18n="fields.downloadDirRules">Download Directory Rules</h3>
+                    <button id="btn-add-download-rule" type="button" class="ghost" data-i18n="actions.addRule">Add Rule</button>
+                  </div>
+                  <div id="download-rules-list" class="rules-list"></div>
+                  <div class="rules-tip" data-i18n="help.downloadRules">
+                    Matchers: ext (mp4,zip), domain (github.com), type (http,torrent,magnet).
+                  </div>
+                </section>
                 <div class="settings-actions span-2">
                   <button type="submit" data-i18n="actions.saveSettings">Save Settings</button>
                   <button id="btn-reload-settings" type="button" class="ghost" data-i18n="actions.reload">Reload</button>
@@ -166,6 +240,7 @@
               <div class="topbar-actions">
                 <button id="btn-rpc-ping" class="ghost" type="button" data-i18n="actions.rpcPing">RPC Ping</button>
                 <button id="btn-restart-aria2" class="ghost" type="button" data-i18n="actions.restartAria2">Restart aria2</button>
+                <button id="btn-startup-check-aria2" class="ghost" type="button" data-i18n="actions.startupCheckAria2">Startup Check</button>
                 <button id="btn-save-session" class="ghost" type="button" data-i18n="actions.saveSession">Save Session</button>
               </div>
               <pre id="diagnostics"></pre>
@@ -212,6 +287,23 @@
                   <option value="completed" data-i18n="filters.completed">Completed</option>
                 </select>
               </label>
+              <label class="inline-select">
+                <span data-i18n="fields.sortBy">Sort</span>
+                <select id="task-sort-by">
+                  <option value="updated_desc" data-i18n="sort.updatedDesc">Updated (newest)</option>
+                  <option value="created_desc" data-i18n="sort.createdDesc">Created (newest)</option>
+                  <option value="speed_desc" data-i18n="sort.speedDesc">Speed (highest)</option>
+                  <option value="progress_desc" data-i18n="sort.progressDesc">Progress (highest)</option>
+                  <option value="name_asc" data-i18n="sort.nameAsc">Name (A-Z)</option>
+                </select>
+              </label>
+              <div class="batch-toolbar">
+                <span id="batch-selected-count" data-i18n="meta.selectedNone">Selected: 0</span>
+                <button id="btn-batch-pause" type="button" class="ghost" data-i18n="actions.batchPause">Pause Selected</button>
+                <button id="btn-batch-resume" type="button" class="ghost" data-i18n="actions.batchResume">Resume Selected</button>
+                <button id="btn-batch-remove" type="button" class="danger" data-i18n="actions.batchRemove">Remove Selected</button>
+                <button id="btn-batch-clear" type="button" class="ghost" data-i18n="actions.clearSelection">Clear</button>
+              </div>
             </div>
             <div id="task-list" class="task-list"></div>
             <div id="completed-list" class="task-list hidden"></div>
@@ -282,6 +374,24 @@
         <button id="btn-delete-confirm-ok" type="button" class="danger" data-i18n="actions.remove">Remove</button>
       </div>
     </section>
+    <div id="confirm-modal-backdrop" class="modal-backdrop hidden"></div>
+    <section id="confirm-modal" class="panel confirm-modal hidden" aria-hidden="true">
+      <h3 id="confirm-modal-title" data-i18n="dialog.confirmTitle">Confirm</h3>
+      <p id="confirm-modal-message"></p>
+      <div class="topbar-actions">
+        <button id="btn-confirm-cancel" type="button" class="ghost" data-i18n="actions.cancel">Cancel</button>
+        <button id="btn-confirm-ok" type="button" data-i18n="actions.ok">OK</button>
+      </div>
+    </section>
+    <section id="toast-stack" class="toast-stack" aria-live="polite" aria-atomic="false"></section>
+    <menu id="task-context-menu" class="context-menu hidden">
+      <button id="ctx-detail" type="button" class="ghost" data-i18n="actions.detail">Detail</button>
+      <button id="ctx-open-file" type="button" class="ghost" data-i18n="actions.openFile">Open File</button>
+      <button id="ctx-open-dir" type="button" class="ghost" data-i18n="actions.openDir">Open Folder</button>
+      <button id="ctx-copy-source" type="button" class="ghost" data-i18n="actions.copySource">Copy Source</button>
+      <button id="ctx-copy-id" type="button" class="ghost" data-i18n="actions.copyTaskId">Copy Task ID</button>
+      <button id="ctx-retry" type="button" class="ghost" data-i18n="actions.retryTask">Retry</button>
+    </menu>
 
     <script type="module" src="./app.js"></script>
   </body>

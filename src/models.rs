@@ -89,6 +89,14 @@ pub struct AddTaskOptions {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DownloadDirRule {
+    pub enabled: bool,
+    pub matcher: String, // ext | domain | type
+    pub pattern: String,
+    pub save_dir: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GlobalSettings {
     pub aria2_bin_path: Option<String>,
     pub download_dir: Option<String>,
@@ -99,6 +107,12 @@ pub struct GlobalSettings {
     pub enable_upnp: Option<bool>,
     pub github_cdn: Option<String>,
     pub github_token: Option<String>,
+    #[serde(default)]
+    pub download_dir_rules: Vec<DownloadDirRule>,
+    pub browser_bridge_enabled: Option<bool>,
+    pub browser_bridge_port: Option<u16>,
+    pub browser_bridge_token: Option<String>,
+    pub ui_theme: Option<String>, // system | light | dark
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -134,6 +148,7 @@ pub struct Diagnostics {
     pub aria2_bin_path: String,
     pub aria2_bin_exists: bool,
     pub version: Option<String>,
+    pub stderr_tail: Option<String>,
     pub global_stat: serde_json::Value,
 }
 

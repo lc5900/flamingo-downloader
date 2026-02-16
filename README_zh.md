@@ -8,14 +8,20 @@ English README: [`README.md`](README.md)
 ## 当前功能
 
 - 通过 aria2 JSON-RPC 支持 HTTP/HTTPS 链接下载
+- 支持 magnet / torrent
 - 主界面分为“下载中 / 已下载”两个页面
 - 支持任务暂停、继续、删除
 - 已下载任务支持：打开文件、打开目录、删除记录（可选同时删除文件）
+- 新建下载弹窗支持“本次下载目录”设置（默认自动建议）
+- 支持按 `ext/domain/type` 规则分流到不同下载目录
 - 独立日志窗口
 - 独立设置页面
+- 主题模式支持 `system / light / dark`，并提供工具栏快捷切换
 - 国际化支持（`en-US`、`zh-CN`），自动读取系统语言，非支持语言默认英文
 - SQLite 持久化任务和设置
 - 支持手动指定 aria2 路径并检测可用路径
+- 提供本地浏览器桥接（`127.0.0.1` + token）
+- 提供浏览器扩展模板：`browser-extension/`（自动接管 + 右键发送）
 
 ## 架构概览
 
@@ -49,6 +55,12 @@ cargo run --manifest-path src-tauri/Cargo.toml
 2. 点击 `Detect aria2 Path`（可选）
 3. 保存设置
 4. 点击 `Restart aria2`，再点 `RPC Ping` 验证
+
+如需浏览器接管：
+1. 设置中保持 `Browser Bridge Enabled` 开启
+2. 查看桥接端口与 token
+3. 在 Chrome/Edge 以开发者模式加载 `browser-extension/`
+4. 在扩展选项中填入 endpoint 与 token
 
 ## 打包（可选）
 

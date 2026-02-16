@@ -8,14 +8,20 @@ This project focuses on building a reliable **download product**, not a custom p
 ## Current Features
 
 - URL downloads (HTTP/HTTPS) through aria2 JSON-RPC
+- Magnet and torrent support
 - Two main sections: Downloading / Downloaded
 - Pause, resume, remove tasks
 - Downloaded task actions: open file, open folder, remove record (optionally delete files)
+- Per-task save directory in Add dialog (with smart default suggestion)
+- Multi-directory routing rules by `ext/domain/type`
 - Dedicated logs window
 - Dedicated full-page settings UI
+- Theme modes: `system / light / dark` + quick toolbar toggle
 - i18n support (`en-US`, `zh-CN`) with system language detection and English fallback
 - SQLite persistence for tasks and settings
 - Manual aria2 binary path configuration with path detection
+- Local browser bridge (`127.0.0.1` + token) for browser takeover
+- Browser extension template in `browser-extension/` (auto takeover + context menu send)
 
 ## Architecture
 
@@ -49,6 +55,12 @@ In Settings:
 2. Click `Detect aria2 Path` (optional)
 3. Save settings
 4. Click `Restart aria2` and then `RPC Ping` to verify
+
+Optional browser takeover setup:
+1. In Settings, keep `Browser Bridge Enabled` on
+2. Check bridge port/token
+3. Load `browser-extension/` as unpacked extension in Chrome/Edge
+4. Fill endpoint/token in extension options
 
 ## Build (Optional)
 

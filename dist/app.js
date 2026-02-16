@@ -4,17 +4,27 @@ const state = {
   selectedTaskId: null,
   selectedFiles: [],
   locale: "en-US",
+  themeMode: "system",
   currentSection: "downloading",
   currentSettingsTab: "basic",
   currentAddTab: "url",
   listQuery: "",
   statusFilter: "all",
+  sortBy: "updated_desc",
+  selectedTaskIds: new Set(),
+  confirmResolve: null,
   pendingDeleteTaskId: null,
   autoRefreshTimer: null,
   uiLogs: [],
   logsDragging: false,
   logsDragOffsetX: 0,
   logsDragOffsetY: 0,
+  contextMenuTaskId: null,
+  addSaveDirTouched: {
+    url: false,
+    magnet: false,
+    torrent: false,
+  },
 };
 
 const SUPPORTED_LOCALES = ["en-US", "zh-CN"];
@@ -39,6 +49,10 @@ const I18N = {
     "sections.diagnostics": "Diagnostics",
     "sections.aria2Update": "aria2 Update",
     "sections.operationLogs": "Operation Logs",
+    "groups.appearance": "Appearance",
+    "groups.download": "Download",
+    "groups.aria2": "aria2",
+    "groups.integration": "Integration",
     "settingsTabs.basic": "Basic",
     "settingsTabs.diagnostics": "Diagnostics",
     "settingsTabs.updates": "Updates",
@@ -57,11 +71,21 @@ const I18N = {
     "fields.githubToken": "GitHub Token (optional)",
     "fields.githubCdnPreset": "Preset CDN",
     "fields.enableUpnp": "Enable UPnP",
+    "fields.browserBridgeEnabled": "Browser Bridge Enabled",
+    "fields.browserBridgePort": "Browser Bridge Port",
+    "fields.browserBridgeToken": "Browser Bridge Token",
+    "fields.downloadDirRules": "Download Directory Rules",
     "fields.search": "Search",
     "fields.statusFilter": "Status",
+    "fields.sortBy": "Sort",
+    "fields.select": "Select",
     "fields.language": "Language",
+    "fields.themeMode": "Theme",
     "languages.enUS": "English",
     "languages.zhCN": "Simplified Chinese",
+    "themes.system": "Follow System",
+    "themes.light": "Light",
+    "themes.dark": "Dark",
     "placeholders.url": "https://example.com/file.zip",
     "placeholders.magnet": "magnet:?xt=urn:btih:...",
     "placeholders.downloadDirectory": "./downloads",
@@ -78,12 +102,18 @@ const I18N = {
     "filters.error": "Error",
     "filters.metadata": "Metadata",
     "filters.completed": "Completed",
+    "sort.updatedDesc": "Updated (newest)",
+    "sort.createdDesc": "Created (newest)",
+    "sort.speedDesc": "Speed (highest)",
+    "sort.progressDesc": "Progress (highest)",
+    "sort.nameAsc": "Name (A-Z)",
     "cdnPreset.custom": "Custom / Direct",
     "cdnPreset.ghproxy": "ghproxy.com",
     "cdnPreset.ghfast": "ghfast.top",
     "cdnPreset.ghproxyNet": "ghproxy.net",
     "actions.refresh": "Refresh",
     "actions.openLogsWindow": "Logs",
+    "actions.quickTheme": "Theme",
     "actions.openNewDownload": "New Download",
     "actions.openSettingsMenu": "Settings",
     "actions.pauseAll": "Pause All",
@@ -96,6 +126,7 @@ const I18N = {
     "actions.reload": "Reload",
     "actions.rpcPing": "RPC Ping",
     "actions.restartAria2": "Restart aria2",
+    "actions.startupCheckAria2": "Startup Check",
     "actions.saveSession": "Save Session",
     "actions.clearLogs": "Clear Logs",
     "actions.checkAria2Update": "Check aria2 Update",
@@ -107,10 +138,27 @@ const I18N = {
     "actions.openDir": "Open Folder",
     "actions.removeFiles": "Delete Files",
     "actions.removeRecord": "Delete Record",
+    "actions.copySource": "Copy Source",
+    "actions.copyTaskId": "Copy Task ID",
+    "actions.retryTask": "Retry",
     "actions.pause": "Pause",
     "actions.resume": "Resume",
     "actions.remove": "Remove",
+    "actions.batchPause": "Pause Selected",
+    "actions.batchResume": "Resume Selected",
+    "actions.batchRemove": "Remove Selected",
+    "actions.clearSelection": "Clear",
     "actions.cancel": "Cancel",
+    "actions.ok": "OK",
+    "actions.addRule": "Add Rule",
+    "actions.removeRule": "Remove",
+    "options.ruleMatcherExt": "By file extension",
+    "options.ruleMatcherDomain": "By domain",
+    "options.ruleMatcherType": "By task type",
+    "placeholders.rulePattern": "e.g. mp4,mkv or github.com or torrent",
+    "placeholders.ruleSaveDir": "/path/to/save/dir",
+    "help.downloadRules":
+      "Matchers: ext (mp4,zip), domain (github.com), type (http,torrent,magnet).",
     "common.default": "Default",
     "common.true": "true",
     "common.false": "false",
@@ -122,6 +170,10 @@ const I18N = {
     "meta.status": "Status",
     "meta.type": "Type",
     "meta.done": "Done",
+    "meta.error": "Error",
+    "meta.eta": "ETA",
+    "meta.completedAt": "Completed At",
+    "meta.selectedNone": "Selected: 0",
     "meta.metadataNotReady": "Metadata not ready yet.",
     "table.name": "Name",
     "table.size": "Size",
@@ -137,6 +189,7 @@ const I18N = {
     "dialog.removePrompt": "Remove this completed task?",
     "dialog.removeWithFiles": "Also delete downloaded files",
     "dialog.clearLogs": "Clear all operation logs?",
+    "dialog.confirmTitle": "Confirm",
     "dialog.updateAria2Now": "Download and replace aria2 binary now?",
     "msg.saveSessionPrefix": "save_session",
     "msg.addUrlSuccess": "Task added successfully",
@@ -156,6 +209,10 @@ const I18N = {
     "sections.diagnostics": "诊断",
     "sections.aria2Update": "aria2 更新",
     "sections.operationLogs": "操作日志",
+    "groups.appearance": "外观",
+    "groups.download": "下载",
+    "groups.aria2": "aria2",
+    "groups.integration": "集成",
     "settingsTabs.basic": "基础设置",
     "settingsTabs.diagnostics": "诊断",
     "settingsTabs.updates": "更新",
@@ -174,11 +231,21 @@ const I18N = {
     "fields.githubToken": "GitHub Token（可选）",
     "fields.githubCdnPreset": "预置 CDN",
     "fields.enableUpnp": "启用 UPnP",
+    "fields.browserBridgeEnabled": "浏览器桥接启用",
+    "fields.browserBridgePort": "浏览器桥接端口",
+    "fields.browserBridgeToken": "浏览器桥接令牌",
+    "fields.downloadDirRules": "下载目录规则",
     "fields.search": "搜索",
     "fields.statusFilter": "状态",
+    "fields.sortBy": "排序",
+    "fields.select": "选择",
     "fields.language": "语言",
+    "fields.themeMode": "主题",
     "languages.enUS": "英文",
     "languages.zhCN": "简体中文",
+    "themes.system": "跟随系统",
+    "themes.light": "浅色",
+    "themes.dark": "深色",
     "placeholders.url": "https://example.com/file.zip",
     "placeholders.magnet": "magnet:?xt=urn:btih:...",
     "placeholders.downloadDirectory": "./downloads",
@@ -195,12 +262,18 @@ const I18N = {
     "filters.error": "错误",
     "filters.metadata": "元数据",
     "filters.completed": "已完成",
+    "sort.updatedDesc": "更新时间（最新）",
+    "sort.createdDesc": "创建时间（最新）",
+    "sort.speedDesc": "速度（最高）",
+    "sort.progressDesc": "进度（最高）",
+    "sort.nameAsc": "名称（A-Z）",
     "cdnPreset.custom": "自定义 / 直连",
     "cdnPreset.ghproxy": "ghproxy.com",
     "cdnPreset.ghfast": "ghfast.top",
     "cdnPreset.ghproxyNet": "ghproxy.net",
     "actions.refresh": "刷新",
     "actions.openLogsWindow": "日志",
+    "actions.quickTheme": "主题",
     "actions.openNewDownload": "新建下载",
     "actions.openSettingsMenu": "设置",
     "actions.pauseAll": "全部暂停",
@@ -213,6 +286,7 @@ const I18N = {
     "actions.reload": "重新加载",
     "actions.rpcPing": "RPC 探测",
     "actions.restartAria2": "重启 aria2",
+    "actions.startupCheckAria2": "启动检查",
     "actions.saveSession": "保存会话",
     "actions.clearLogs": "清空日志",
     "actions.checkAria2Update": "检查 aria2 更新",
@@ -224,10 +298,26 @@ const I18N = {
     "actions.openDir": "打开目录",
     "actions.removeFiles": "删除文件",
     "actions.removeRecord": "删除记录",
+    "actions.copySource": "复制链接",
+    "actions.copyTaskId": "复制任务ID",
+    "actions.retryTask": "重试任务",
     "actions.pause": "暂停",
     "actions.resume": "继续",
     "actions.remove": "删除",
+    "actions.batchPause": "批量暂停",
+    "actions.batchResume": "批量继续",
+    "actions.batchRemove": "批量删除",
+    "actions.clearSelection": "清空",
     "actions.cancel": "取消",
+    "actions.ok": "确定",
+    "actions.addRule": "添加规则",
+    "actions.removeRule": "删除",
+    "options.ruleMatcherExt": "按文件后缀",
+    "options.ruleMatcherDomain": "按域名",
+    "options.ruleMatcherType": "按任务类型",
+    "placeholders.rulePattern": "例如 mp4,mkv 或 github.com 或 torrent",
+    "placeholders.ruleSaveDir": "/path/to/save/dir",
+    "help.downloadRules": "匹配类型：ext(后缀)、domain(域名)、type(http/torrent/magnet)。",
     "common.default": "默认",
     "common.true": "是",
     "common.false": "否",
@@ -239,6 +329,10 @@ const I18N = {
     "meta.status": "状态",
     "meta.type": "类型",
     "meta.done": "已完成",
+    "meta.error": "错误详情",
+    "meta.eta": "剩余时间",
+    "meta.completedAt": "完成时间",
+    "meta.selectedNone": "已选：0",
     "meta.metadataNotReady": "元数据尚未就绪。",
     "table.name": "名称",
     "table.size": "大小",
@@ -254,6 +348,7 @@ const I18N = {
     "dialog.removePrompt": "要删除这个已完成任务吗？",
     "dialog.removeWithFiles": "同时删除下载文件",
     "dialog.clearLogs": "要清空全部操作日志吗？",
+    "dialog.confirmTitle": "确认",
     "dialog.updateAria2Now": "现在下载并替换 aria2 可执行文件吗？",
     "msg.saveSessionPrefix": "保存会话",
     "msg.addUrlSuccess": "任务添加成功",
@@ -273,6 +368,12 @@ const el = {
   completedCount: document.getElementById("completed-count"),
   taskSearchInput: document.getElementById("task-search-input"),
   taskStatusFilter: document.getElementById("task-status-filter"),
+  taskSortBy: document.getElementById("task-sort-by"),
+  batchSelectedCount: document.getElementById("batch-selected-count"),
+  btnBatchPause: document.getElementById("btn-batch-pause"),
+  btnBatchResume: document.getElementById("btn-batch-resume"),
+  btnBatchRemove: document.getElementById("btn-batch-remove"),
+  btnBatchClear: document.getElementById("btn-batch-clear"),
   btnPauseAll: document.getElementById("btn-pause-all"),
   btnResumeAll: document.getElementById("btn-resume-all"),
 
@@ -295,8 +396,11 @@ const el = {
   btnAddMagnet: document.getElementById("btn-add-magnet"),
   btnAddTorrent: document.getElementById("btn-add-torrent"),
   urlInput: document.getElementById("url-input"),
+  urlSaveDirInput: document.getElementById("url-save-dir-input"),
   magnetInput: document.getElementById("magnet-input"),
+  magnetSaveDirInput: document.getElementById("magnet-save-dir-input"),
   torrentInput: document.getElementById("torrent-input"),
+  torrentSaveDirInput: document.getElementById("torrent-save-dir-input"),
 
   settingsForm: document.getElementById("settings-form"),
   btnDetectAria2Path: document.getElementById("btn-detect-aria2-path"),
@@ -311,12 +415,19 @@ const el = {
   settingGithubToken: document.getElementById("setting-github-token"),
   settingGithubCdnPreset: document.getElementById("setting-github-cdn-preset"),
   settingEnableUpnp: document.getElementById("setting-enable-upnp"),
+  settingBrowserBridgeEnabled: document.getElementById("setting-browser-bridge-enabled"),
+  settingBrowserBridgePort: document.getElementById("setting-browser-bridge-port"),
+  settingBrowserBridgeToken: document.getElementById("setting-browser-bridge-token"),
+  downloadRulesList: document.getElementById("download-rules-list"),
+  btnAddDownloadRule: document.getElementById("btn-add-download-rule"),
 
   btnRefresh: document.getElementById("btn-refresh"),
+  btnThemeQuick: document.getElementById("btn-theme-quick"),
   btnOpenLogsWindow: document.getElementById("btn-open-logs-window"),
   btnOpenLogsWindowInSettings: document.getElementById("btn-open-logs-window-in-settings"),
   btnRpcPing: document.getElementById("btn-rpc-ping"),
   btnRestartAria2: document.getElementById("btn-restart-aria2"),
+  btnStartupCheckAria2: document.getElementById("btn-startup-check-aria2"),
   btnSaveSession: document.getElementById("btn-save-session"),
   btnCheckAria2Update: document.getElementById("btn-check-aria2-update"),
   btnUpdateAria2Now: document.getElementById("btn-update-aria2-now"),
@@ -326,6 +437,7 @@ const el = {
   opLogs: document.getElementById("op-logs"),
 
   languageSelect: document.getElementById("language-select"),
+  settingThemeMode: document.getElementById("setting-theme-mode"),
 
   taskTemplate: document.getElementById("task-item-template"),
   completedTemplate: document.getElementById("completed-item-template"),
@@ -334,6 +446,20 @@ const el = {
   deleteWithFilesCheckbox: document.getElementById("delete-with-files-checkbox"),
   btnDeleteConfirmCancel: document.getElementById("btn-delete-confirm-cancel"),
   btnDeleteConfirmOk: document.getElementById("btn-delete-confirm-ok"),
+  confirmModal: document.getElementById("confirm-modal"),
+  confirmModalBackdrop: document.getElementById("confirm-modal-backdrop"),
+  confirmModalTitle: document.getElementById("confirm-modal-title"),
+  confirmModalMessage: document.getElementById("confirm-modal-message"),
+  btnConfirmCancel: document.getElementById("btn-confirm-cancel"),
+  btnConfirmOk: document.getElementById("btn-confirm-ok"),
+  toastStack: document.getElementById("toast-stack"),
+  taskContextMenu: document.getElementById("task-context-menu"),
+  ctxDetail: document.getElementById("ctx-detail"),
+  ctxOpenFile: document.getElementById("ctx-open-file"),
+  ctxOpenDir: document.getElementById("ctx-open-dir"),
+  ctxCopySource: document.getElementById("ctx-copy-source"),
+  ctxCopyId: document.getElementById("ctx-copy-id"),
+  ctxRetry: document.getElementById("ctx-retry"),
 
   drawer: document.getElementById("detail-drawer"),
   drawerTitle: document.getElementById("drawer-title"),
@@ -387,6 +513,73 @@ function applyI18n() {
   });
   document.querySelectorAll("[data-i18n-placeholder]").forEach((node) => {
     node.placeholder = t(node.dataset.i18nPlaceholder);
+  });
+  updateThemeQuickButton();
+}
+
+function normalizeThemeMode(raw) {
+  const v = String(raw || "").trim().toLowerCase();
+  if (v === "light" || v === "dark" || v === "system") return v;
+  return "system";
+}
+
+function resolveEffectiveTheme(mode) {
+  if (mode === "light" || mode === "dark") return mode;
+  const mql = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)");
+  return mql && mql.matches ? "dark" : "light";
+}
+
+function applyTheme() {
+  const mode = normalizeThemeMode(state.themeMode);
+  const effective = resolveEffectiveTheme(mode);
+  document.documentElement.dataset.theme = effective;
+  if (el.settingThemeMode) el.settingThemeMode.value = mode;
+  updateThemeQuickButton();
+}
+
+function updateThemeQuickButton() {
+  if (!el.btnThemeQuick) return;
+  const effective = resolveEffectiveTheme(normalizeThemeMode(state.themeMode));
+  const icon = effective === "dark" ? "☀️" : "🌙";
+  const label = t("actions.quickTheme");
+  el.btnThemeQuick.setAttribute("aria-label", label);
+  el.btnThemeQuick.title = label;
+  const span = el.btnThemeQuick.querySelector("span");
+  if (span) span.textContent = `${icon} ${label}`;
+}
+
+function toast(message, level = "info", timeoutMs = 2600) {
+  if (!el.toastStack) return;
+  const node = document.createElement("article");
+  node.className = `toast toast-${level}`;
+  node.textContent = String(message || "");
+  el.toastStack.appendChild(node);
+  window.setTimeout(() => {
+    node.remove();
+  }, timeoutMs);
+}
+
+function resolveConfirm(result) {
+  const resolver = state.confirmResolve;
+  state.confirmResolve = null;
+  if (el.confirmModal) {
+    el.confirmModal.classList.add("hidden");
+    el.confirmModal.setAttribute("aria-hidden", "true");
+  }
+  if (el.confirmModalBackdrop) el.confirmModalBackdrop.classList.add("hidden");
+  if (typeof resolver === "function") resolver(!!result);
+}
+
+function askConfirm(message, title = t("dialog.confirmTitle")) {
+  return new Promise((resolve) => {
+    state.confirmResolve = resolve;
+    if (el.confirmModalTitle) el.confirmModalTitle.textContent = title;
+    if (el.confirmModalMessage) el.confirmModalMessage.textContent = message;
+    if (el.confirmModal) {
+      el.confirmModal.classList.remove("hidden");
+      el.confirmModal.setAttribute("aria-hidden", "false");
+    }
+    if (el.confirmModalBackdrop) el.confirmModalBackdrop.classList.remove("hidden");
   });
 }
 
@@ -454,9 +647,85 @@ function syncGithubCdnPreset() {
   el.settingGithubCdnPreset.value = matched || "";
 }
 
+function createDefaultRule() {
+  return {
+    enabled: true,
+    matcher: "ext",
+    pattern: "",
+    save_dir: "",
+  };
+}
+
+function normalizeRule(raw) {
+  const matcher = String(raw?.matcher || "ext").trim().toLowerCase();
+  return {
+    enabled: !!raw?.enabled,
+    matcher: ["ext", "domain", "type"].includes(matcher) ? matcher : "ext",
+    pattern: String(raw?.pattern || "").trim(),
+    save_dir: String(raw?.save_dir || "").trim(),
+  };
+}
+
+function renderDownloadRules(rules) {
+  if (!el.downloadRulesList) return;
+  const list = Array.isArray(rules) ? rules.map(normalizeRule) : [];
+  el.downloadRulesList.innerHTML = "";
+  list.forEach((rule) => {
+    const row = document.createElement("div");
+    row.className = "rule-row";
+    row.innerHTML = `
+      <label><input type="checkbox" data-role="enabled" ${rule.enabled ? "checked" : ""} /></label>
+      <select data-role="matcher">
+        <option value="ext">${t("options.ruleMatcherExt")}</option>
+        <option value="domain">${t("options.ruleMatcherDomain")}</option>
+        <option value="type">${t("options.ruleMatcherType")}</option>
+      </select>
+      <input data-role="pattern" type="text" placeholder="${t("placeholders.rulePattern")}" />
+      <input data-role="save_dir" type="text" placeholder="${t("placeholders.ruleSaveDir")}" />
+      <button type="button" class="ghost" data-role="remove">${t("actions.removeRule")}</button>
+    `;
+    row.querySelector('[data-role="matcher"]').value = rule.matcher;
+    row.querySelector('[data-role="pattern"]').value = rule.pattern;
+    row.querySelector('[data-role="save_dir"]').value = rule.save_dir;
+    row.querySelector('[data-role="remove"]').onclick = () => row.remove();
+    el.downloadRulesList.appendChild(row);
+  });
+}
+
+function readDownloadRulesFromUi() {
+  if (!el.downloadRulesList) return [];
+  return Array.from(el.downloadRulesList.querySelectorAll(".rule-row"))
+    .map((row) => ({
+      enabled: !!row.querySelector('[data-role="enabled"]')?.checked,
+      matcher: String(row.querySelector('[data-role="matcher"]')?.value || "ext")
+        .trim()
+        .toLowerCase(),
+      pattern: String(row.querySelector('[data-role="pattern"]')?.value || "").trim(),
+      save_dir: String(row.querySelector('[data-role="save_dir"]')?.value || "").trim(),
+    }))
+    .filter((rule) => rule.pattern && rule.save_dir);
+}
+
 function formatTs(ts) {
   const n = Number(ts || 0);
   return n > 0 ? new Date(n * 1000).toLocaleString() : "-";
+}
+
+function formatEta(task) {
+  const speed = Number(task.download_speed || 0);
+  const total = Number(task.total_length || 0);
+  const done = Number(task.completed_length || 0);
+  const remain = Math.max(0, total - done);
+  if (!remain) return "0s";
+  if (!speed) return "-";
+  const secs = Math.floor(remain / speed);
+  if (!Number.isFinite(secs) || secs < 0) return "-";
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
 }
 
 function normalizeStatus(status) {
@@ -488,6 +757,74 @@ function matchTaskStatus(task, statusFilter) {
   const f = String(statusFilter || "all").toLowerCase();
   if (f === "all") return true;
   return normalizeStatus(task.status) === f;
+}
+
+function setTaskSelected(taskId, selected) {
+  if (!taskId) return;
+  if (selected) state.selectedTaskIds.add(taskId);
+  else state.selectedTaskIds.delete(taskId);
+}
+
+function clearSelection() {
+  state.selectedTaskIds.clear();
+}
+
+function pruneSelection() {
+  for (const id of Array.from(state.selectedTaskIds)) {
+    if (!state.tasks.has(id)) state.selectedTaskIds.delete(id);
+  }
+}
+
+function getFilteredTasks() {
+  const all = Array.from(state.tasks.values());
+  const query = state.listQuery;
+  const statusFilter = state.statusFilter;
+  const sortBy = state.sortBy;
+  const downloading = all
+    .filter(isDownloadingTask)
+    .filter((t) => matchTaskQuery(t, query) && matchTaskStatus(t, statusFilter))
+    .sort((a, b) => compareTasksBySort(a, b, sortBy));
+  const completed = all
+    .filter(isCompletedTask)
+    .filter((t) => matchTaskQuery(t, query) && matchTaskStatus(t, statusFilter))
+    .sort((a, b) => compareTasksBySort(a, b, sortBy));
+  return { downloading, completed };
+}
+
+function updateBatchToolbar(visibleTasks) {
+  const selectedVisible = visibleTasks.filter((t) => state.selectedTaskIds.has(t.id));
+  const selectedCount = selectedVisible.length;
+  if (el.batchSelectedCount) {
+    el.batchSelectedCount.textContent = `${t("fields.select")}: ${selectedCount}`;
+  }
+  const inDownloading = state.currentSection === "downloading";
+  if (el.btnBatchPause) el.btnBatchPause.disabled = !inDownloading || selectedCount === 0;
+  if (el.btnBatchResume) el.btnBatchResume.disabled = !inDownloading || selectedCount === 0;
+  if (el.btnBatchRemove) el.btnBatchRemove.disabled = selectedCount === 0;
+  if (el.btnBatchClear) el.btnBatchClear.disabled = selectedCount === 0;
+}
+
+function compareTasksBySort(a, b, sortBy) {
+  const key = String(sortBy || "updated_desc");
+  if (key === "name_asc") {
+    const aName = String(a.name || a.source || a.id || "");
+    const bName = String(b.name || b.source || b.id || "");
+    return aName.localeCompare(bName);
+  }
+  if (key === "created_desc") {
+    return Number(b.created_at || 0) - Number(a.created_at || 0);
+  }
+  if (key === "speed_desc") {
+    const speedDelta = Number(b.download_speed || 0) - Number(a.download_speed || 0);
+    if (speedDelta !== 0) return speedDelta;
+    return Number(b.updated_at || 0) - Number(a.updated_at || 0);
+  }
+  if (key === "progress_desc") {
+    const progressDelta = progressPercent(b) - progressPercent(a);
+    if (progressDelta !== 0) return progressDelta;
+    return Number(b.updated_at || 0) - Number(a.updated_at || 0);
+  }
+  return Number(b.updated_at || 0) - Number(a.updated_at || 0);
 }
 
 function setSection(section) {
@@ -531,13 +868,60 @@ function setAddTab(tab) {
       section.classList.toggle("hidden", section.dataset.addSection !== tab);
     });
   }
+  updateSuggestedSaveDir(tab).catch(() => {});
+}
+
+function addTabToTaskType(tab) {
+  if (tab === "magnet") return "magnet";
+  if (tab === "torrent") return "torrent";
+  return "http";
+}
+
+function getAddSourceByTab(tab) {
+  if (tab === "magnet") return String(el.magnetInput?.value || "").trim();
+  if (tab === "torrent") {
+    const f = el.torrentInput?.files?.[0];
+    return f ? f.name : "";
+  }
+  return String(el.urlInput?.value || "").trim();
+}
+
+function getAddSaveDirInputByTab(tab) {
+  if (tab === "magnet") return el.magnetSaveDirInput;
+  if (tab === "torrent") return el.torrentSaveDirInput;
+  return el.urlSaveDirInput;
+}
+
+async function updateSuggestedSaveDir(tab, force = false) {
+  const input = getAddSaveDirInputByTab(tab);
+  if (!input) return;
+  if (!force && state.addSaveDirTouched[tab]) return;
+  const taskType = addTabToTaskType(tab);
+  const source = getAddSourceByTab(tab);
+  const saveDir = await invoke("suggest_save_dir", {
+    taskType,
+    source: source || null,
+  });
+  input.value = String(saveDir || "");
+}
+
+function resetAddSaveDirTouched() {
+  state.addSaveDirTouched = {
+    url: false,
+    magnet: false,
+    torrent: false,
+  };
 }
 
 function openAddModal() {
   if (el.settingsToolsPanel) el.settingsToolsPanel.classList.add("hidden");
   if (el.addToolsPanel) el.addToolsPanel.classList.remove("hidden");
   if (el.addModalBackdrop) el.addModalBackdrop.classList.remove("hidden");
+  resetAddSaveDirTouched();
   setAddTab(state.currentAddTab || "url");
+  updateSuggestedSaveDir("url", true).catch(() => {});
+  updateSuggestedSaveDir("magnet", true).catch(() => {});
+  updateSuggestedSaveDir("torrent", true).catch(() => {});
 }
 
 function closeAddModal() {
@@ -570,6 +954,49 @@ function togglePanel(panel, forceOpen) {
   panel.classList.toggle("hidden", !open);
 }
 
+function getContextTask() {
+  if (!state.contextMenuTaskId) return null;
+  return state.tasks.get(state.contextMenuTaskId) || null;
+}
+
+function closeContextMenu() {
+  state.contextMenuTaskId = null;
+  if (el.taskContextMenu) el.taskContextMenu.classList.add("hidden");
+}
+
+function openContextMenu(task, x, y) {
+  if (!task || !task.id || !el.taskContextMenu) return;
+  state.contextMenuTaskId = task.id;
+  el.taskContextMenu.classList.remove("hidden");
+
+  const source = String(task.source || "");
+  const retryable = /^magnet:\?/i.test(source) || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(source);
+  if (el.ctxOpenFile) el.ctxOpenFile.disabled = !isCompletedTask(task);
+  if (el.ctxOpenDir) el.ctxOpenDir.disabled = !isCompletedTask(task);
+  if (el.ctxRetry) el.ctxRetry.disabled = !retryable;
+
+  const menuRect = el.taskContextMenu.getBoundingClientRect();
+  const maxLeft = Math.max(0, window.innerWidth - menuRect.width - 8);
+  const maxTop = Math.max(0, window.innerHeight - menuRect.height - 8);
+  const left = Math.max(8, Math.min(x, maxLeft));
+  const top = Math.max(8, Math.min(y, maxTop));
+  el.taskContextMenu.style.left = `${left}px`;
+  el.taskContextMenu.style.top = `${top}px`;
+}
+
+async function copyText(value, label) {
+  const text = String(value || "").trim();
+  if (!text) {
+    toast("Nothing to copy", "warn");
+    return;
+  }
+  if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+    throw new Error("Clipboard API is unavailable in this environment.");
+  }
+  await navigator.clipboard.writeText(text);
+  toast(label, "success");
+}
+
 function renderDownloadingTable(tasks) {
   const wrap = document.createElement("div");
   wrap.className = "completed-table-wrap";
@@ -577,34 +1004,74 @@ function renderDownloadingTable(tasks) {
   table.className = "completed-table";
   const thead = document.createElement("thead");
   thead.innerHTML = `<tr>
+    <th class="col-select">${t("fields.select")}</th>
     <th>${t("table.name")}</th>
     <th>${t("table.progress")}</th>
     <th>${t("table.speed")}</th>
     <th>${t("table.status")}</th>
     <th>${t("table.actions")}</th>
   </tr>`;
+  const headRow = thead.querySelector("tr");
+  const master = document.createElement("input");
+  master.type = "checkbox";
+  const allSelected = tasks.length > 0 && tasks.every((t) => state.selectedTaskIds.has(t.id));
+  master.checked = allSelected;
+  master.onchange = () => {
+    tasks.forEach((t) => setTaskSelected(t.id, master.checked));
+    render();
+  };
+  const firstTh = headRow?.querySelector("th");
+  if (firstTh) {
+    firstTh.innerHTML = "";
+    firstTh.appendChild(master);
+  }
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
   if (tasks.length === 0) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td class="cell-empty" colspan="5">${t("common.noDownloadingTasks")}</td>`;
+    tr.innerHTML = `<td class="cell-empty" colspan="6">${t("common.noDownloadingTasks")}</td>`;
     tbody.appendChild(tr);
   } else {
     tasks.forEach((task) => {
       const tr = document.createElement("tr");
+      tr.oncontextmenu = (e) => {
+        e.preventDefault();
+        openContextMenu(task, e.clientX, e.clientY);
+      };
       const name = task.name || task.source || task.id;
       const p = progressPercent(task);
       const progress = `${p.toFixed(1)}% (${fmtBytes(task.completed_length)} / ${fmtBytes(task.total_length)})`;
       const speed = `DL ${fmtBytes(task.download_speed)}/s | UL ${fmtBytes(task.upload_speed)}/s`;
       const status = normalizeStatus(task.status);
+      const eta = formatEta(task);
       tr.innerHTML = `
+        <td class="cell-select"></td>
         <td class="cell-name" title="${name}">${name}</td>
-        <td class="cell-size">${progress}</td>
+        <td class="cell-size">
+          <div>${progress}</div>
+          <div class="cell-sub">${t("meta.eta")}: ${eta}</div>
+        </td>
         <td class="cell-size">${speed}</td>
-        <td class="cell-status"><span class="task-status">${task.status}</span></td>
+        <td class="cell-status">
+          <span class="task-status">${task.status}</span>
+          ${
+            task.error_message
+              ? `<details class="error-detail"><summary>${t("meta.error")}</summary><pre>${task.error_message}</pre></details>`
+              : ""
+          }
+        </td>
         <td class="cell-actions"></td>
       `;
+      const cellSelect = tr.querySelector(".cell-select");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = state.selectedTaskIds.has(task.id);
+      cb.onchange = () => {
+        setTaskSelected(task.id, cb.checked);
+        updateBatchToolbar(tasks);
+      };
+      cellSelect?.appendChild(cb);
 
       const cellActions = tr.querySelector(".cell-actions");
       const mkBtn = (label, cls, onClick) => {
@@ -640,29 +1107,69 @@ function renderCompletedTable(tasks) {
   table.className = "completed-table";
   const thead = document.createElement("thead");
   thead.innerHTML = `<tr>
+    <th class="col-select">${t("fields.select")}</th>
     <th>${t("table.name")}</th>
     <th>${t("table.size")}</th>
     <th>${t("table.status")}</th>
     <th>${t("table.actions")}</th>
   </tr>`;
+  const headRow = thead.querySelector("tr");
+  const master = document.createElement("input");
+  master.type = "checkbox";
+  const allSelected = tasks.length > 0 && tasks.every((t) => state.selectedTaskIds.has(t.id));
+  master.checked = allSelected;
+  master.onchange = () => {
+    tasks.forEach((t) => setTaskSelected(t.id, master.checked));
+    render();
+  };
+  const firstTh = headRow?.querySelector("th");
+  if (firstTh) {
+    firstTh.innerHTML = "";
+    firstTh.appendChild(master);
+  }
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
   if (tasks.length === 0) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td class="cell-empty" colspan="4">${t("common.noDownloadedTasks")}</td>`;
+    tr.innerHTML = `<td class="cell-empty" colspan="5">${t("common.noDownloadedTasks")}</td>`;
     tbody.appendChild(tr);
   } else {
     tasks.forEach((task) => {
       const tr = document.createElement("tr");
+      tr.oncontextmenu = (e) => {
+        e.preventDefault();
+        openContextMenu(task, e.clientX, e.clientY);
+      };
       const name = task.name || task.source || task.id;
       const size = `${fmtBytes(task.completed_length)} / ${fmtBytes(task.total_length)}`;
+      const completedAt = formatTs(task.updated_at);
       tr.innerHTML = `
+        <td class="cell-select"></td>
         <td class="cell-name" title="${name}">${name}</td>
-        <td class="cell-size">${size}</td>
-        <td class="cell-status"><span class="task-status">${task.status}</span></td>
+        <td class="cell-size">
+          <div>${size}</div>
+          <div class="cell-sub">${t("meta.completedAt")}: ${completedAt}</div>
+        </td>
+        <td class="cell-status">
+          <span class="task-status">${task.status}</span>
+          ${
+            task.error_message
+              ? `<details class="error-detail"><summary>${t("meta.error")}</summary><pre>${task.error_message}</pre></details>`
+              : ""
+          }
+        </td>
         <td class="cell-actions"></td>
       `;
+      const cellSelect = tr.querySelector(".cell-select");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = state.selectedTaskIds.has(task.id);
+      cb.onchange = () => {
+        setTaskSelected(task.id, cb.checked);
+        updateBatchToolbar(tasks);
+      };
+      cellSelect?.appendChild(cb);
 
       const cellActions = tr.querySelector(".cell-actions");
       const mkBtn = (label, cls, onClick) => {
@@ -689,15 +1196,11 @@ function renderCompletedTable(tasks) {
 }
 
 function render() {
-  const all = Array.from(state.tasks.values()).sort((a, b) => b.created_at - a.created_at);
-  const query = state.listQuery;
-  const statusFilter = state.statusFilter;
-  const downloading = all
-    .filter(isDownloadingTask)
-    .filter((t) => matchTaskQuery(t, query) && matchTaskStatus(t, statusFilter));
-  const completed = all
-    .filter(isCompletedTask)
-    .filter((t) => matchTaskQuery(t, query) && matchTaskStatus(t, statusFilter));
+  pruneSelection();
+  if (state.contextMenuTaskId && !state.tasks.has(state.contextMenuTaskId)) {
+    closeContextMenu();
+  }
+  const { downloading, completed } = getFilteredTasks();
 
   el.taskCount.textContent = String(downloading.length);
   el.taskList.innerHTML = "";
@@ -707,6 +1210,8 @@ function render() {
   el.completedList.innerHTML = "";
   el.completedList.appendChild(renderCompletedTable(completed));
 
+  const visible = state.currentSection === "downloading" ? downloading : completed;
+  updateBatchToolbar(visible);
   setSection(state.currentSection);
 }
 
@@ -768,6 +1273,16 @@ async function loadSettings() {
   } else {
     el.settingEnableUpnp.value = "";
   }
+  if (typeof s.browser_bridge_enabled === "boolean") {
+    el.settingBrowserBridgeEnabled.value = s.browser_bridge_enabled ? "true" : "false";
+  } else {
+    el.settingBrowserBridgeEnabled.value = "";
+  }
+  state.themeMode = normalizeThemeMode(s.ui_theme || "system");
+  applyTheme();
+  el.settingBrowserBridgePort.value = s.browser_bridge_port || "";
+  el.settingBrowserBridgeToken.value = s.browser_bridge_token || "";
+  renderDownloadRules(s.download_dir_rules || []);
 }
 
 async function saveSettings(e) {
@@ -781,6 +1296,16 @@ async function saveSettings(e) {
     bt_tracker: el.settingBtTracker.value.trim() || null,
     github_cdn: normalizeCdnValue(el.settingGithubCdn.value),
     github_token: String(el.settingGithubToken.value || "").trim(),
+    download_dir_rules: readDownloadRulesFromUi(),
+    browser_bridge_enabled:
+      el.settingBrowserBridgeEnabled.value === "true"
+        ? true
+        : el.settingBrowserBridgeEnabled.value === "false"
+          ? false
+          : null,
+    browser_bridge_port: toNum(el.settingBrowserBridgePort.value),
+    browser_bridge_token: String(el.settingBrowserBridgeToken.value || "").trim() || null,
+    ui_theme: normalizeThemeMode(el.settingThemeMode?.value || "system"),
     enable_upnp:
       el.settingEnableUpnp.value === "true"
         ? true
@@ -797,13 +1322,14 @@ async function detectAria2Path() {
   const paths = await invoke("detect_aria2_bin_paths");
   const list = Array.isArray(paths) ? paths : [];
   if (list.length === 0) {
-    alert("No aria2 binary found in common locations.");
+    toast("No aria2 binary found in common locations.", "warn");
     return;
   }
   if (el.settingAria2BinPath) {
     el.settingAria2BinPath.value = list[0];
   }
-  alert(`Detected paths:\n${list.join("\n")}`);
+  toast(`Detected aria2 path: ${list[0]}`, "success");
+  setStatus(`Detected paths: ${list.join(" | ")}`, "info");
 }
 
 async function doAddUrl() {
@@ -811,7 +1337,7 @@ async function doAddUrl() {
   let url = el.urlInput.value.trim();
   if (!url) {
     setStatus("URL is empty", "warn");
-    alert("URL is empty");
+    toast("URL is empty", "warn");
     return;
   }
   if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url)) {
@@ -821,12 +1347,18 @@ async function doAddUrl() {
     setStatus(`Adding URL: ${url}`, "info");
     const checked = new URL(url).toString();
     if (submitBtn) submitBtn.disabled = true;
-    await invoke("add_url", { url: checked, options: {} });
+    const saveDir = String(el.urlSaveDirInput?.value || "").trim();
+    await invoke("add_url", {
+      url: checked,
+      options: { save_dir: saveDir || null },
+    });
     el.urlInput.value = "";
+    state.addSaveDirTouched.url = false;
+    await updateSuggestedSaveDir("url", true);
     await Promise.all([refreshTasks(), refreshLogs()]);
     setStatus(t("msg.addUrlSuccess"), "ok");
     closeAddModal();
-    alert(t("msg.addUrlSuccess"));
+    toast(t("msg.addUrlSuccess"), "success");
   } finally {
     if (submitBtn) submitBtn.disabled = false;
   }
@@ -836,8 +1368,14 @@ async function doAddMagnet(e) {
   if (e) e.preventDefault();
   const magnet = el.magnetInput.value.trim();
   if (!magnet) return;
-  await invoke("add_magnet", { magnet, options: {} });
+  const saveDir = String(el.magnetSaveDirInput?.value || "").trim();
+  await invoke("add_magnet", {
+    magnet,
+    options: { save_dir: saveDir || null },
+  });
   el.magnetInput.value = "";
+  state.addSaveDirTouched.magnet = false;
+  await updateSuggestedSaveDir("magnet", true);
   await Promise.all([refreshTasks(), refreshLogs()]);
   closeAddModal();
 }
@@ -855,10 +1393,14 @@ async function doAddTorrent(e) {
   await invoke("add_torrent", {
     torrentFilePath: null,
     torrentBase64: btoa(binary),
-    options: {},
+    options: {
+      save_dir: String(el.torrentSaveDirInput?.value || "").trim() || null,
+    },
   });
 
   el.torrentInput.value = "";
+  state.addSaveDirTouched.torrent = false;
+  await updateSuggestedSaveDir("torrent", true);
   await Promise.all([refreshTasks(), refreshLogs()]);
   closeAddModal();
 }
@@ -874,14 +1416,55 @@ async function doResume(taskId) {
 }
 
 async function doRemove(taskId) {
-  const confirmRemove = window.confirm(t("dialog.removeTask"));
+  const confirmRemove = await askConfirm(t("dialog.removeTask"));
   if (!confirmRemove) return;
-  const deleteFiles = window.confirm(t("dialog.removeFiles"));
+  const deleteFiles = await askConfirm(t("dialog.removeFiles"));
   await invoke("remove_task", { taskId, deleteFiles });
   state.tasks.delete(taskId);
   if (state.selectedTaskId === taskId) closeTaskDetail();
   render();
   await refreshLogs();
+  toast(t("actions.remove"), "success");
+}
+
+function getSelectedVisibleTasks() {
+  const { downloading, completed } = getFilteredTasks();
+  const visible = state.currentSection === "downloading" ? downloading : completed;
+  return visible.filter((t) => state.selectedTaskIds.has(t.id));
+}
+
+async function doBatchPause() {
+  const tasks = getSelectedVisibleTasks();
+  for (const task of tasks) {
+    if (isCompletedTask(task)) continue;
+    await invoke("pause_task", { taskId: task.id });
+  }
+  await Promise.all([refreshTasks(), refreshLogs()]);
+  toast(t("actions.batchPause"), "success");
+}
+
+async function doBatchResume() {
+  const tasks = getSelectedVisibleTasks();
+  for (const task of tasks) {
+    if (isCompletedTask(task)) continue;
+    await invoke("resume_task", { taskId: task.id });
+  }
+  await Promise.all([refreshTasks(), refreshLogs()]);
+  toast(t("actions.batchResume"), "success");
+}
+
+async function doBatchRemove() {
+  const tasks = getSelectedVisibleTasks();
+  if (tasks.length === 0) return;
+  const ok = await askConfirm(`${t("actions.batchRemove")} (${tasks.length})?`);
+  if (!ok) return;
+  const deleteFiles = await askConfirm(t("dialog.removeFiles"));
+  for (const task of tasks) {
+    await invoke("remove_task", { taskId: task.id, deleteFiles });
+    state.selectedTaskIds.delete(task.id);
+  }
+  await Promise.all([refreshTasks(), refreshLogs()]);
+  toast(t("actions.batchRemove"), "success");
 }
 
 async function doOpenTaskFile(taskId) {
@@ -890,6 +1473,29 @@ async function doOpenTaskFile(taskId) {
 
 async function doOpenTaskDir(taskId) {
   await invoke("open_task_dir", { taskId });
+}
+
+async function doRetryTask(taskId) {
+  const task = state.tasks.get(taskId);
+  if (!task) throw new Error("Task not found");
+  const source = String(task.source || "").trim();
+  if (!source) throw new Error("Task source is empty");
+
+  if (/^magnet:\?/i.test(source)) {
+    await invoke("add_magnet", { magnet: source, options: {} });
+  } else {
+    let checked = null;
+    try {
+      checked = new URL(source).toString();
+    } catch (_) {
+      checked = null;
+    }
+    if (!checked) throw new Error("Retry currently supports URL or magnet tasks only.");
+    await invoke("add_url", { url: checked, options: {} });
+  }
+
+  await Promise.all([refreshTasks(), refreshLogs()]);
+  toast(t("actions.retryTask"), "success");
 }
 
 async function doRemoveRecordOnly(taskId) {
@@ -943,7 +1549,7 @@ async function doRpcPing() {
   setStatus("RPC ping...", "info");
   const msg = await invoke("rpc_ping");
   setStatus(msg, "ok");
-  alert(msg);
+  toast(msg, "success");
   await Promise.all([refreshDiagnostics(), refreshLogs()]);
 }
 
@@ -951,26 +1557,36 @@ async function doRestartAria2() {
   setStatus("Restarting aria2...", "info");
   const msg = await invoke("restart_aria2");
   setStatus(msg, "ok");
-  alert(msg);
+  toast(msg, "success");
   await Promise.all([refreshDiagnostics(), refreshTasks(), refreshLogs()]);
+}
+
+async function doStartupCheckAria2() {
+  setStatus("Running startup check...", "info");
+  const msg = await invoke("startup_check_aria2");
+  setStatus(msg, "ok");
+  toast(msg, "success", 3800);
+  await Promise.all([refreshDiagnostics(), refreshLogs()]);
 }
 
 async function doSaveSession() {
   const msg = await invoke("save_session");
-  alert(`${t("msg.saveSessionPrefix")}: ${msg}`);
+  toast(`${t("msg.saveSessionPrefix")}: ${msg}`, "success");
   await refreshLogs();
 }
 
 async function doUpdateAria2Now() {
   const btn = el.btnUpdateAria2Now;
   try {
+    const ok = await askConfirm(t("dialog.updateAria2Now"));
+    if (!ok) return;
     if (btn) btn.disabled = true;
     setStatus(t("msg.updateStart"), "info");
     const result = await invoke("update_aria2_now");
     setStatus(t("msg.updateInstalling"), "info");
     await Promise.all([refreshDiagnostics(), refreshAria2UpdateInfo(), refreshLogs()]);
     setStatus(result?.message || t("msg.updateDone"), "ok");
-    alert(result?.message || t("msg.updateDone"));
+    toast(result?.message || t("msg.updateDone"), "success");
   } catch (err) {
     setStatus(err?.message || String(err), "error");
     throw err;
@@ -980,10 +1596,11 @@ async function doUpdateAria2Now() {
 }
 
 async function doClearLogs() {
-  const ok = window.confirm(t("dialog.clearLogs"));
+  const ok = await askConfirm(t("dialog.clearLogs"));
   if (!ok) return;
   await invoke("clear_operation_logs");
   await refreshLogs();
+  toast(t("actions.clearLogs"), "success");
 }
 
 async function openTaskDetail(taskId) {
@@ -1086,7 +1703,7 @@ function openLogsWindow() {
   invoke("open_logs_window").catch((err) => {
     const msg = `open logs window failed: ${err?.message || String(err)}`;
     setStatus(msg, "error");
-    alert(msg);
+    toast(msg, "error", 3600);
   });
 }
 
@@ -1101,13 +1718,27 @@ function startAutoRefresh() {
 
 async function boot() {
   state.locale = loadSavedLocale() || detectLocale();
+  state.themeMode = "system";
+  applyTheme();
   applyI18n();
   setSection("downloading");
   setSettingsTab("basic");
   setAddTab("url");
+  if (el.taskStatusFilter) el.taskStatusFilter.value = state.statusFilter;
+  if (el.taskSortBy) el.taskSortBy.value = state.sortBy;
 
-  if (el.navDownloading) el.navDownloading.onclick = () => setSection("downloading");
-  if (el.navDownloaded) el.navDownloaded.onclick = () => setSection("downloaded");
+  if (el.navDownloading) {
+    el.navDownloading.onclick = () => {
+      setSection("downloading");
+      render();
+    };
+  }
+  if (el.navDownloaded) {
+    el.navDownloaded.onclick = () => {
+      setSection("downloaded");
+      render();
+    };
+  }
 
   if (el.settingsTabs) {
     el.settingsTabs.forEach((btn) => {
@@ -1123,6 +1754,63 @@ async function boot() {
   if (el.deleteModalBackdrop) el.deleteModalBackdrop.onclick = () => closeDeleteModal();
   if (el.btnDeleteConfirmCancel) el.btnDeleteConfirmCancel.onclick = () => closeDeleteModal();
   if (el.btnDeleteConfirmOk) el.btnDeleteConfirmOk.onclick = () => doConfirmDeleteCompleted().catch(alertError);
+  if (el.confirmModalBackdrop) el.confirmModalBackdrop.onclick = () => resolveConfirm(false);
+  if (el.btnConfirmCancel) el.btnConfirmCancel.onclick = () => resolveConfirm(false);
+  if (el.btnConfirmOk) el.btnConfirmOk.onclick = () => resolveConfirm(true);
+  if (el.ctxDetail) {
+    el.ctxDetail.onclick = () => {
+      const task = getContextTask();
+      closeContextMenu();
+      if (task) openTaskDetail(task.id).catch(alertError);
+    };
+  }
+  if (el.ctxOpenFile) {
+    el.ctxOpenFile.onclick = () => {
+      const task = getContextTask();
+      closeContextMenu();
+      if (task) doOpenTaskFile(task.id).catch(alertError);
+    };
+  }
+  if (el.ctxOpenDir) {
+    el.ctxOpenDir.onclick = () => {
+      const task = getContextTask();
+      closeContextMenu();
+      if (task) doOpenTaskDir(task.id).catch(alertError);
+    };
+  }
+  if (el.ctxCopySource) {
+    el.ctxCopySource.onclick = () => {
+      const task = getContextTask();
+      closeContextMenu();
+      if (task) copyText(task.source, t("actions.copySource")).catch(alertError);
+    };
+  }
+  if (el.ctxCopyId) {
+    el.ctxCopyId.onclick = () => {
+      const task = getContextTask();
+      closeContextMenu();
+      if (task) copyText(task.id, t("actions.copyTaskId")).catch(alertError);
+    };
+  }
+  if (el.ctxRetry) {
+    el.ctxRetry.onclick = () => {
+      const task = getContextTask();
+      closeContextMenu();
+      if (task) doRetryTask(task.id).catch(alertError);
+    };
+  }
+  document.addEventListener("click", (event) => {
+    if (!el.taskContextMenu || el.taskContextMenu.classList.contains("hidden")) return;
+    if (el.taskContextMenu.contains(event.target)) return;
+    closeContextMenu();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeContextMenu();
+    }
+  });
+  window.addEventListener("resize", () => closeContextMenu());
+  window.addEventListener("blur", () => closeContextMenu());
   if (el.addTabs) {
     el.addTabs.forEach((btn) => {
       btn.onclick = () => setAddTab(btn.dataset.addTab || "url");
@@ -1147,6 +1835,9 @@ async function boot() {
   if (el.btnAddMagnet) el.btnAddMagnet.onclick = () => doAddMagnet().catch(alertError);
   if (el.btnAddTorrent) el.btnAddTorrent.onclick = () => doAddTorrent().catch(alertError);
   if (el.urlInput) {
+    el.urlInput.oninput = () => {
+      updateSuggestedSaveDir("url").catch(() => {});
+    };
     el.urlInput.onkeydown = (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
@@ -1154,12 +1845,35 @@ async function boot() {
       }
     };
   }
+  if (el.urlSaveDirInput) {
+    el.urlSaveDirInput.oninput = () => {
+      state.addSaveDirTouched.url = true;
+    };
+  }
   if (el.magnetInput) {
+    el.magnetInput.oninput = () => {
+      updateSuggestedSaveDir("magnet").catch(() => {});
+    };
     el.magnetInput.onkeydown = (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
         doAddMagnet().catch(alertError);
       }
+    };
+  }
+  if (el.magnetSaveDirInput) {
+    el.magnetSaveDirInput.oninput = () => {
+      state.addSaveDirTouched.magnet = true;
+    };
+  }
+  if (el.torrentInput) {
+    el.torrentInput.onchange = () => {
+      updateSuggestedSaveDir("torrent").catch(() => {});
+    };
+  }
+  if (el.torrentSaveDirInput) {
+    el.torrentSaveDirInput.oninput = () => {
+      state.addSaveDirTouched.torrent = true;
     };
   }
   if (el.settingsForm) el.settingsForm.addEventListener("submit", (e) => saveSettings(e).catch(alertError));
@@ -1174,11 +1888,26 @@ async function boot() {
   if (el.settingGithubCdn) {
     el.settingGithubCdn.oninput = () => syncGithubCdnPreset();
   }
+  if (el.btnAddDownloadRule) {
+    el.btnAddDownloadRule.onclick = () => {
+      const rules = readDownloadRulesFromUi();
+      rules.push(createDefaultRule());
+      renderDownloadRules(rules);
+    };
+  }
 
   if (el.btnReloadSettings) el.btnReloadSettings.onclick = () => loadSettings().catch(alertError);
   if (el.btnRefresh) {
     el.btnRefresh.onclick = () =>
       Promise.all([refreshTasks(), refreshDiagnostics(), refreshLogs()]).catch(alertError);
+  }
+  if (el.btnThemeQuick) {
+    el.btnThemeQuick.onclick = () => {
+      const effective = resolveEffectiveTheme(normalizeThemeMode(state.themeMode));
+      state.themeMode = effective === "dark" ? "light" : "dark";
+      applyTheme();
+      if (el.settingThemeMode) el.settingThemeMode.value = state.themeMode;
+    };
   }
   if (el.btnOpenLogsWindow) {
     el.btnOpenLogsWindow.onclick = () => openLogsWindow();
@@ -1195,12 +1924,32 @@ async function boot() {
       state.locale = SUPPORTED_LOCALES.includes(picked) ? picked : "en-US";
       saveLocale(state.locale);
       applyI18n();
+      renderDownloadRules(readDownloadRulesFromUi());
       render();
       refreshLogs().catch(alertError);
       if (state.selectedTaskId) {
         openTaskDetail(state.selectedTaskId).catch(alertError);
       }
     };
+  }
+  if (el.settingThemeMode) {
+    el.settingThemeMode.onchange = () => {
+      state.themeMode = normalizeThemeMode(el.settingThemeMode.value);
+      applyTheme();
+    };
+  }
+  if (window.matchMedia) {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const onMedia = () => {
+      if (normalizeThemeMode(state.themeMode) === "system") {
+        applyTheme();
+      }
+    };
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", onMedia);
+    } else if (typeof media.addListener === "function") {
+      media.addListener(onMedia);
+    }
   }
 
   if (el.taskSearchInput) {
@@ -1215,9 +1964,25 @@ async function boot() {
       render();
     };
   }
+  if (el.taskSortBy) {
+    el.taskSortBy.onchange = () => {
+      state.sortBy = String(el.taskSortBy.value || "updated_desc");
+      render();
+    };
+  }
+  if (el.btnBatchPause) el.btnBatchPause.onclick = () => doBatchPause().catch(alertError);
+  if (el.btnBatchResume) el.btnBatchResume.onclick = () => doBatchResume().catch(alertError);
+  if (el.btnBatchRemove) el.btnBatchRemove.onclick = () => doBatchRemove().catch(alertError);
+  if (el.btnBatchClear) {
+    el.btnBatchClear.onclick = () => {
+      clearSelection();
+      render();
+    };
+  }
 
   if (el.btnRpcPing) el.btnRpcPing.onclick = () => doRpcPing().catch(alertError);
   if (el.btnRestartAria2) el.btnRestartAria2.onclick = () => doRestartAria2().catch(alertError);
+  if (el.btnStartupCheckAria2) el.btnStartupCheckAria2.onclick = () => doStartupCheckAria2().catch(alertError);
   if (el.btnSaveSession) el.btnSaveSession.onclick = () => doSaveSession().catch(alertError);
   if (el.btnCheckAria2Update) el.btnCheckAria2Update.onclick = () => refreshAria2UpdateInfo().catch(alertError);
   if (el.btnUpdateAria2Now) el.btnUpdateAria2Now.onclick = () => doUpdateAria2Now().catch(alertError);
@@ -1234,7 +1999,7 @@ async function boot() {
 
 function alertError(err) {
   setStatus(err?.message || String(err), "error");
-  alert(err?.message || String(err));
+  toast(err?.message || String(err), "error", 3600);
 }
 
 boot().catch(alertError);

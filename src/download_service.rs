@@ -20,8 +20,8 @@ use crate::{
     error::AppError,
     events::SharedEmitter,
     models::{
-        AddTaskOptions, Aria2UpdateApplyResult, Aria2UpdateInfo, Diagnostics, GlobalSettings,
-        OperationLog, Task, TaskFile, TaskStatus, TaskType,
+        AddTaskOptions, Aria2UpdateApplyResult, Aria2UpdateInfo, Diagnostics, DownloadDirRule,
+        GlobalSettings, OperationLog, Task, TaskFile, TaskStatus, TaskType,
     },
 };
 
@@ -50,6 +50,8 @@ impl DownloadService {
         validate_url(url)?;
         self.ensure_aria2_ready().await?;
 
+        let save_dir = self.resolve_save_dir_for_new_task(TaskType::Http, url, &options)?;
+        let options = with_resolved_save_dir(options, save_dir.clone());
         let task_id = Uuid::new_v4().to_string();
         let gid = self
             .aria2
@@ -57,7 +59,6 @@ impl DownloadService {
             .await?;
 
         let now = now_ts();
-        let save_dir = self.configured_download_dir()?;
         self.db.upsert_task(&Task {
             id: task_id.clone(),
             aria2_gid: Some(gid),
@@ -87,6 +88,8 @@ impl DownloadService {
         }
         self.ensure_aria2_ready().await?;
 
+        let save_dir = self.resolve_save_dir_for_new_task(TaskType::Magnet, magnet, &options)?;
+        let options = with_resolved_save_dir(options, save_dir.clone());
         let task_id = Uuid::new_v4().to_string();
         let gid = self
             .aria2
@@ -94,7 +97,6 @@ impl DownloadService {
             .await?;
 
         let now = now_ts();
-        let save_dir = self.configured_download_dir()?;
         self.db.upsert_task(&Task {
             id: task_id.clone(),
             aria2_gid: Some(gid),
@@ -141,6 +143,11 @@ impl DownloadService {
         source_label: Option<String>,
     ) -> Result<String> {
         self.ensure_aria2_ready().await?;
+        let source = source_label
+            .clone()
+            .unwrap_or_else(|| "torrent:base64".to_string());
+        let save_dir = self.resolve_save_dir_for_new_task(TaskType::Torrent, &source, &options)?;
+        let options = with_resolved_save_dir(options, save_dir.clone());
 
         let task_id = Uuid::new_v4().to_string();
         let gid = self
@@ -149,13 +156,12 @@ impl DownloadService {
             .await?;
 
         let now = now_ts();
-        let save_dir = self.configured_download_dir()?;
 
         self.db.upsert_task(&Task {
             id: task_id.clone(),
             aria2_gid: Some(gid),
             task_type: TaskType::Torrent,
-            source: source_label.unwrap_or_else(|| "torrent:base64".to_string()),
+            source,
             status: TaskStatus::Queued,
             name: None,
             save_dir,
@@ -172,6 +178,14 @@ impl DownloadService {
         self.push_log("add_torrent", "torrent task created".to_string());
 
         Ok(task_id)
+    }
+
+    pub fn suggest_save_dir(&self, task_type: TaskType, source: Option<&str>) -> Result<String> {
+        self.resolve_save_dir_for_new_task(
+            task_type,
+            source.unwrap_or_default(),
+            &AddTaskOptions::default(),
+        )
     }
 
     pub async fn pause_task(&self, task_id: &str) -> Result<()> {
@@ -227,7 +241,7 @@ impl DownloadService {
         }
 
         if delete_files {
-            let _ = self.delete_task_files_safely(&task);
+            self.delete_task_files_safely(&task)?;
         }
 
         self.db.remove_task(task_id)?;
@@ -535,6 +549,7 @@ impl DownloadService {
                 aria2_bin_path: self.aria2_bin_path(),
                 aria2_bin_exists: self.aria2_bin_exists(),
                 version,
+                stderr_tail: self.aria2.stderr_tail(),
                 global_stat,
             });
         }
@@ -547,8 +562,59 @@ impl DownloadService {
             aria2_bin_path: self.aria2_bin_path(),
             aria2_bin_exists: self.aria2_bin_exists(),
             version: None,
+            stderr_tail: self.aria2.stderr_tail(),
             global_stat: json!({}),
         })
+    }
+
+    pub async fn startup_check_aria2(&self) -> Result<String> {
+        let _guard = self.lifecycle_guard.lock().await;
+        let mut attempts = Vec::new();
+        let _ = self.aria2.stop().await;
+        for attempt in 1..=2 {
+            match self.aria2.start().await {
+                Ok(ep) => {
+                    let version = self
+                        .aria2
+                        .get_version()
+                        .await
+                        .ok()
+                        .and_then(|v| v.get("version").and_then(Value::as_str).map(ToString::to_string))
+                        .unwrap_or_else(|| "unknown".to_string());
+                    let stderr = self.aria2.stderr_tail().unwrap_or_default();
+                    let message = if stderr.is_empty() {
+                        format!(
+                            "startup check passed on attempt {attempt}: aria2 {version} at {}",
+                            ep.endpoint
+                        )
+                    } else {
+                        format!(
+                            "startup check passed on attempt {attempt}: aria2 {version} at {}. stderr: {stderr}",
+                            ep.endpoint
+                        )
+                    };
+                    self.push_log("startup_check_aria2", message.clone());
+                    return Ok(message);
+                }
+                Err(e) => {
+                    attempts.push(format!("attempt {attempt} failed: {e}"));
+                    let _ = self.aria2.stop().await;
+                    time::sleep(Duration::from_millis(350)).await;
+                }
+            }
+        }
+        let stderr = self.aria2.stderr_tail().unwrap_or_default();
+        let message = if stderr.is_empty() {
+            format!("startup check failed: {}", attempts.join(" | "))
+        } else {
+            format!(
+                "startup check failed: {}. stderr: {}",
+                attempts.join(" | "),
+                stderr
+            )
+        };
+        self.push_log("startup_check_aria2", message.clone());
+        Err(anyhow!(message))
     }
 
     pub async fn check_aria2_update(&self) -> Result<Aria2UpdateInfo> {
@@ -893,6 +959,21 @@ fn absolute_path(base: &Path, value: &str) -> PathBuf {
     }
 }
 
+fn normalize_lexical_path(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut out = PathBuf::new();
+    for comp in path.components() {
+        match comp {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                let _ = out.pop();
+            }
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
+}
+
 fn is_subpath(path: &Path, root: &Path) -> bool {
     path.starts_with(root)
 }
@@ -956,17 +1037,67 @@ impl DownloadService {
                 "aria2 is unavailable. Please set a valid aria2 binary path in Settings and restart aria2."
             ));
         }
-        self.aria2.ensure_started().await.map(|_| ()).map_err(|e| {
-            anyhow!(
-                "aria2 is unavailable. Please check aria2 path in Settings and restart aria2. details: {e}"
-            )
-        })
+        let mut last_err = None;
+        for attempt in 1..=2 {
+            match self.aria2.ensure_started().await {
+                Ok(_) => return Ok(()),
+                Err(e) => {
+                    self.push_log("ensure_aria2_ready", format!("attempt {attempt} failed: {e}"));
+                    last_err = Some(e.to_string());
+                    let _ = self.aria2.stop().await;
+                    time::sleep(Duration::from_millis(300)).await;
+                }
+            }
+        }
+        let err = last_err.unwrap_or_else(|| "unknown startup error".to_string());
+        let stderr = self.aria2.stderr_tail().unwrap_or_default();
+        if stderr.is_empty() {
+            Err(anyhow!(
+                "aria2 is unavailable. Please check aria2 path in Settings and restart aria2. details: {err}"
+            ))
+        } else {
+            Err(anyhow!(
+                "aria2 is unavailable. Please check aria2 path in Settings and restart aria2. details: {err}. stderr: {stderr}"
+            ))
+        }
     }
 
     fn configured_download_dir(&self) -> Result<String> {
         self.db.get_setting("download_dir")?.ok_or_else(|| {
             AppError::InvalidInput("missing required setting: download_dir".to_string()).into()
         })
+    }
+
+    fn configured_download_dir_rules(&self) -> Vec<DownloadDirRule> {
+        self.db
+            .load_global_settings()
+            .map(|s| s.download_dir_rules)
+            .unwrap_or_default()
+    }
+
+    fn resolve_save_dir_for_new_task(
+        &self,
+        task_type: TaskType,
+        source: &str,
+        options: &AddTaskOptions,
+    ) -> Result<String> {
+        if let Some(v) = options.save_dir.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+            return Ok(v.to_string());
+        }
+        let default_dir = self.configured_download_dir()?;
+        for rule in self.configured_download_dir_rules() {
+            if !rule.enabled {
+                continue;
+            }
+            let candidate = rule.save_dir.trim();
+            if candidate.is_empty() {
+                continue;
+            }
+            if rule_matches(&rule, &task_type, source) {
+                return Ok(candidate.to_string());
+            }
+        }
+        Ok(default_dir)
     }
 
     fn aria2_bin_path(&self) -> String {
@@ -986,9 +1117,23 @@ impl DownloadService {
         let configured_root = self.configured_download_dir()?;
         let root_raw = absolute_path(&std::env::current_dir()?, &configured_root);
         if !root_raw.exists() {
+            self.push_log(
+                "delete_task_files",
+                format!("skip cleanup for task {}: download root missing", task.id),
+            );
             return Ok(());
         }
         let root = root_raw.canonicalize()?;
+        let task_save_dir = absolute_path(&std::env::current_dir()?, &task.save_dir);
+        let task_save_dir_canonical = task_save_dir
+            .canonicalize()
+            .map_err(|e| anyhow!("resolve task save_dir failed ({}): {e}", task.save_dir))?;
+        if !is_subpath(&task_save_dir_canonical, &root) {
+            return Err(anyhow!(
+                "refused to delete files outside download root: {}",
+                task_save_dir_canonical.display()
+            ));
+        }
 
         let files = self.db.list_task_files(&task.id)?;
         let mut candidate_set: HashSet<PathBuf> = HashSet::new();
@@ -1008,22 +1153,55 @@ impl DownloadService {
         let mut candidates = candidate_set.into_iter().collect::<Vec<_>>();
         candidates.sort_by_key(|p| std::cmp::Reverse(p.components().count()));
 
+        let mut blocked = Vec::new();
+        let mut failed = Vec::new();
+        let mut removed = 0usize;
+
         for candidate in &candidates {
+            let normalized = normalize_lexical_path(candidate);
+            if !is_subpath(&normalized, &root) {
+                blocked.push(normalized.display().to_string());
+                continue;
+            }
             if !candidate.exists() {
                 continue;
             }
             let canonical = match candidate.canonicalize() {
                 Ok(v) => v,
-                Err(_) => continue,
+                Err(e) => {
+                    failed.push(format!("resolve {} failed: {e}", candidate.display()));
+                    continue;
+                }
             };
             if !is_subpath(&canonical, &root) {
+                blocked.push(canonical.display().to_string());
                 continue;
             }
-            if canonical.is_dir() {
-                let _ = fs::remove_dir_all(&canonical);
+            let remove_result = if canonical.is_dir() {
+                fs::remove_dir_all(&canonical)
             } else {
-                let _ = fs::remove_file(&canonical);
+                fs::remove_file(&canonical)
+            };
+            if let Err(e) = remove_result {
+                failed.push(format!("remove {} failed: {e}", canonical.display()));
+            } else {
+                removed += 1;
             }
+        }
+
+        if !blocked.is_empty() {
+            return Err(anyhow!(
+                "refused to delete {} path(s) outside download root: {}",
+                blocked.len(),
+                blocked.join(" | ")
+            ));
+        }
+        if !failed.is_empty() {
+            return Err(anyhow!(
+                "failed to delete {} path(s): {}",
+                failed.len(),
+                failed.join(" | ")
+            ));
         }
 
         for candidate in &candidates {
@@ -1033,7 +1211,7 @@ impl DownloadService {
         }
         self.push_log(
             "delete_task_files",
-            format!("cleanup finished for task {}", task.id),
+            format!("cleanup finished for task {}: removed {}", task.id, removed),
         );
         Ok(())
     }
@@ -1076,6 +1254,68 @@ impl DownloadService {
             return Ok(());
         }
         self.db.append_operation_logs(&drained)
+    }
+}
+
+fn with_resolved_save_dir(mut options: AddTaskOptions, save_dir: String) -> AddTaskOptions {
+    options.save_dir = Some(save_dir);
+    options
+}
+
+fn rule_matches(rule: &DownloadDirRule, task_type: &TaskType, source: &str) -> bool {
+    let matcher = rule.matcher.trim().to_lowercase();
+    let patterns = rule
+        .pattern
+        .split(',')
+        .map(|v| v.trim().to_lowercase())
+        .filter(|v| !v.is_empty())
+        .collect::<Vec<_>>();
+    if patterns.is_empty() {
+        return false;
+    }
+
+    match matcher.as_str() {
+        "type" => {
+            let t = task_type_str(task_type);
+            patterns.iter().any(|p| p == t)
+        }
+        "domain" => {
+            let host = reqwest::Url::parse(source)
+                .ok()
+                .and_then(|u| u.host_str().map(|v| v.to_lowercase()));
+            let Some(host) = host else {
+                return false;
+            };
+            patterns
+                .iter()
+                .any(|p| host == *p || host.ends_with(&format!(".{p}")))
+        }
+        "ext" => {
+            let ext = reqwest::Url::parse(source)
+                .ok()
+                .and_then(|u| {
+                    Path::new(u.path())
+                        .extension()
+                        .map(|v| v.to_string_lossy().to_lowercase())
+                });
+            let Some(ext) = ext else {
+                return false;
+            };
+            patterns.iter().any(|p| {
+                let p = p.strip_prefix('.').unwrap_or(p.as_str());
+                p == ext
+            })
+        }
+        _ => false,
+    }
+}
+
+fn task_type_str(task_type: &TaskType) -> &'static str {
+    match task_type {
+        TaskType::Http => "http",
+        TaskType::Torrent => "torrent",
+        TaskType::Magnet => "magnet",
+        TaskType::Metalink => "metalink",
     }
 }
 
@@ -1609,10 +1849,10 @@ mod tests {
         aria2_manager::{Aria2Api, Aria2Endpoint},
         db::Database,
         events::EventEmitter,
-        models::{Aria2TaskSnapshot, TaskStatus},
+        models::{Aria2TaskSnapshot, DownloadDirRule, Task, TaskStatus, TaskType},
     };
 
-    use super::{DownloadService, absolute_path, is_subpath};
+    use super::{DownloadService, absolute_path, is_subpath, rule_matches};
 
     #[test]
     fn absolute_path_resolves_relative_to_base() {
@@ -1635,6 +1875,59 @@ mod tests {
         let outside = Path::new("/tmp/other");
         assert!(is_subpath(child, root));
         assert!(!is_subpath(outside, root));
+    }
+
+    #[test]
+    fn download_rule_matches_extension() {
+        let rule = DownloadDirRule {
+            enabled: true,
+            matcher: "ext".to_string(),
+            pattern: "zip,mp4".to_string(),
+            save_dir: "/tmp/media".to_string(),
+        };
+        assert!(rule_matches(
+            &rule,
+            &TaskType::Http,
+            "https://example.com/archive/file.zip"
+        ));
+        assert!(!rule_matches(
+            &rule,
+            &TaskType::Http,
+            "https://example.com/archive/file.txt"
+        ));
+    }
+
+    #[test]
+    fn download_rule_matches_domain_and_type() {
+        let domain_rule = DownloadDirRule {
+            enabled: true,
+            matcher: "domain".to_string(),
+            pattern: "github.com,example.org".to_string(),
+            save_dir: "/tmp/code".to_string(),
+        };
+        assert!(rule_matches(
+            &domain_rule,
+            &TaskType::Http,
+            "https://github.com/owner/repo/archive/main.zip"
+        ));
+        assert!(rule_matches(
+            &domain_rule,
+            &TaskType::Http,
+            "https://a.github.com/file.bin"
+        ));
+
+        let type_rule = DownloadDirRule {
+            enabled: true,
+            matcher: "type".to_string(),
+            pattern: "magnet,torrent".to_string(),
+            save_dir: "/tmp/bt".to_string(),
+        };
+        assert!(rule_matches(&type_rule, &TaskType::Magnet, "magnet:?xt=urn:btih:abc"));
+        assert!(!rule_matches(
+            &type_rule,
+            &TaskType::Http,
+            "https://example.com/a.bin"
+        ));
     }
 
     #[derive(Default)]
@@ -1774,6 +2067,10 @@ mod tests {
             self.call("save_session");
             Ok("ok".to_string())
         }
+
+        fn stderr_tail(&self) -> Option<String> {
+            None
+        }
     }
 
     fn build_service(
@@ -1781,6 +2078,7 @@ mod tests {
     ) -> (Arc<DownloadService>, Arc<Database>, Arc<MockAria2>) {
         let db_path = std::env::temp_dir().join(format!("tarui-svc-{}.sqlite", Uuid::new_v4()));
         let db = Arc::new(Database::new(&db_path).expect("create db"));
+        std::fs::create_dir_all("/tmp/tarui-tests").expect("create test download root");
         db.set_setting("download_dir", "/tmp/tarui-tests")
             .expect("set download_dir");
         let emitter = Arc::new(NoopEmitter) as crate::events::SharedEmitter;
@@ -1843,6 +2141,57 @@ mod tests {
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].status, TaskStatus::Active);
         assert!(tasks[0].source.contains("aria2:recovered:gid-orphan"));
+    }
+
+    #[tokio::test]
+    async fn remove_with_delete_files_rejects_outside_download_root() {
+        let mock = Arc::new(MockAria2::default());
+        let (service, db, _mock) = build_service(mock);
+        let task_id = Uuid::new_v4().to_string();
+        let now = super::now_ts();
+        db.upsert_task(&Task {
+            id: task_id.clone(),
+            aria2_gid: Some("gid-outside".to_string()),
+            task_type: TaskType::Http,
+            source: "https://example.com/a.bin".to_string(),
+            status: TaskStatus::Completed,
+            name: Some("a.bin".to_string()),
+            save_dir: "/tmp/tarui-tests".to_string(),
+            total_length: 10,
+            completed_length: 10,
+            download_speed: 0,
+            upload_speed: 0,
+            connections: 0,
+            error_code: None,
+            error_message: None,
+            created_at: now,
+            updated_at: now,
+        })
+        .expect("upsert task");
+        db.replace_task_files(
+            &task_id,
+            &[crate::models::TaskFile {
+                task_id: task_id.clone(),
+                path: "/tmp/outside-danger.bin".to_string(),
+                length: 10,
+                completed_length: 10,
+                selected: true,
+            }],
+        )
+        .expect("replace files");
+
+        let err = service
+            .remove_task(&task_id, true)
+            .await
+            .expect_err("remove should reject outside path");
+        let msg = err.to_string();
+        assert!(msg.contains("outside download root"));
+        assert!(
+            db.get_task(&task_id)
+                .expect("get task")
+                .is_some(),
+            "task record should remain when file delete is rejected"
+        );
     }
 }
 

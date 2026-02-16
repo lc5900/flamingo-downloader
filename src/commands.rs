@@ -113,6 +113,15 @@ pub fn get_global_settings(service: Arc<DownloadService>) -> Result<GlobalSettin
 }
 
 #[allow(dead_code)]
+pub fn suggest_save_dir(
+    service: Arc<DownloadService>,
+    task_type: crate::models::TaskType,
+    source: Option<String>,
+) -> Result<String> {
+    service.suggest_save_dir(task_type, source.as_deref())
+}
+
+#[allow(dead_code)]
 pub async fn rpc_ping(service: Arc<DownloadService>) -> Result<String> {
     service.rpc_ping().await
 }
@@ -120,6 +129,11 @@ pub async fn rpc_ping(service: Arc<DownloadService>) -> Result<String> {
 #[allow(dead_code)]
 pub async fn restart_aria2(service: Arc<DownloadService>) -> Result<String> {
     service.restart_aria2().await
+}
+
+#[allow(dead_code)]
+pub async fn startup_check_aria2(service: Arc<DownloadService>) -> Result<String> {
+    service.startup_check_aria2().await
 }
 
 #[allow(dead_code)]
