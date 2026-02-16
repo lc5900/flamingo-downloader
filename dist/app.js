@@ -7,6 +7,8 @@ const state = {
   currentSection: "downloading",
   currentSettingsTab: "basic",
   currentAddTab: "url",
+  listQuery: "",
+  statusFilter: "all",
   pendingDeleteTaskId: null,
   autoRefreshTimer: null,
   uiLogs: [],
@@ -55,6 +57,8 @@ const I18N = {
     "fields.githubToken": "GitHub Token (optional)",
     "fields.githubCdnPreset": "Preset CDN",
     "fields.enableUpnp": "Enable UPnP",
+    "fields.search": "Search",
+    "fields.statusFilter": "Status",
     "fields.language": "Language",
     "languages.enUS": "English",
     "languages.zhCN": "Simplified Chinese",
@@ -66,6 +70,14 @@ const I18N = {
     "placeholders.btTrackerList": "udp://tracker.opentrackr.org:1337/announce",
     "placeholders.githubCdn": "https://ghproxy.com/ or https://cdn.example/{url}",
     "placeholders.githubToken": "ghp_xxx...",
+    "placeholders.searchTasks": "Search by name / URL / task id",
+    "filters.all": "All",
+    "filters.active": "Active",
+    "filters.paused": "Paused",
+    "filters.queued": "Queued",
+    "filters.error": "Error",
+    "filters.metadata": "Metadata",
+    "filters.completed": "Completed",
     "cdnPreset.custom": "Custom / Direct",
     "cdnPreset.ghproxy": "ghproxy.com",
     "cdnPreset.ghfast": "ghfast.top",
@@ -162,6 +174,8 @@ const I18N = {
     "fields.githubToken": "GitHub Token（可选）",
     "fields.githubCdnPreset": "预置 CDN",
     "fields.enableUpnp": "启用 UPnP",
+    "fields.search": "搜索",
+    "fields.statusFilter": "状态",
     "fields.language": "语言",
     "languages.enUS": "英文",
     "languages.zhCN": "简体中文",
@@ -173,6 +187,14 @@ const I18N = {
     "placeholders.btTrackerList": "udp://tracker.opentrackr.org:1337/announce",
     "placeholders.githubCdn": "https://ghproxy.com/ 或 https://cdn.example/{url}",
     "placeholders.githubToken": "ghp_xxx...",
+    "placeholders.searchTasks": "按名称 / 链接 / 任务ID 搜索",
+    "filters.all": "全部",
+    "filters.active": "进行中",
+    "filters.paused": "已暂停",
+    "filters.queued": "排队中",
+    "filters.error": "错误",
+    "filters.metadata": "元数据",
+    "filters.completed": "已完成",
     "cdnPreset.custom": "自定义 / 直连",
     "cdnPreset.ghproxy": "ghproxy.com",
     "cdnPreset.ghfast": "ghfast.top",
@@ -249,6 +271,8 @@ const el = {
   completedList: document.getElementById("completed-list"),
   taskCount: document.getElementById("task-count"),
   completedCount: document.getElementById("completed-count"),
+  taskSearchInput: document.getElementById("task-search-input"),
+  taskStatusFilter: document.getElementById("task-status-filter"),
   btnPauseAll: document.getElementById("btn-pause-all"),
   btnResumeAll: document.getElementById("btn-resume-all"),
 
@@ -445,6 +469,25 @@ function isCompletedTask(task) {
 
 function isDownloadingTask(task) {
   return !isCompletedTask(task) && normalizeStatus(task.status) !== "removed";
+}
+
+function matchTaskQuery(task, query) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return true;
+  const haystack = [
+    task.name || "",
+    task.source || "",
+    task.id || "",
+  ]
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(q);
+}
+
+function matchTaskStatus(task, statusFilter) {
+  const f = String(statusFilter || "all").toLowerCase();
+  if (f === "all") return true;
+  return normalizeStatus(task.status) === f;
 }
 
 function setSection(section) {
@@ -647,8 +690,14 @@ function renderCompletedTable(tasks) {
 
 function render() {
   const all = Array.from(state.tasks.values()).sort((a, b) => b.created_at - a.created_at);
-  const downloading = all.filter(isDownloadingTask);
-  const completed = all.filter(isCompletedTask);
+  const query = state.listQuery;
+  const statusFilter = state.statusFilter;
+  const downloading = all
+    .filter(isDownloadingTask)
+    .filter((t) => matchTaskQuery(t, query) && matchTaskStatus(t, statusFilter));
+  const completed = all
+    .filter(isCompletedTask)
+    .filter((t) => matchTaskQuery(t, query) && matchTaskStatus(t, statusFilter));
 
   el.taskCount.textContent = String(downloading.length);
   el.taskList.innerHTML = "";
@@ -1151,6 +1200,19 @@ async function boot() {
       if (state.selectedTaskId) {
         openTaskDetail(state.selectedTaskId).catch(alertError);
       }
+    };
+  }
+
+  if (el.taskSearchInput) {
+    el.taskSearchInput.oninput = () => {
+      state.listQuery = String(el.taskSearchInput.value || "");
+      render();
+    };
+  }
+  if (el.taskStatusFilter) {
+    el.taskStatusFilter.onchange = () => {
+      state.statusFilter = String(el.taskStatusFilter.value || "all");
+      render();
     };
   }
 

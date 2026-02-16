@@ -136,6 +136,31 @@ h3 { font-size: 14px; font-weight: 620; }
   font-size: 12px;
 }
 
+.inline-input {
+  display: inline-grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  min-width: min(420px, 100%);
+}
+
+.list-toolbar {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f9fbff;
+  padding: 10px;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.list-toolbar input {
+  min-width: min(420px, 100%);
+}
+
 button {
   border: 1px solid transparent;
   border-radius: 10px;
@@ -336,7 +361,7 @@ select:focus {
 }
 
 .task-list {
-  margin-top: 10px;
+  margin-top: 8px;
   min-height: 0;
   overflow: auto;
   padding-right: 4px;

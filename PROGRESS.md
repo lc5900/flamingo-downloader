@@ -621,3 +621,14 @@
 - Verified no old naming remains via repository grep and by running:
   - `cargo check`
   - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 78 - List Search and Status Filter UX Upgrade (Done)
+- Added a new list toolbar in main panel with:
+  - task keyword search input (name/source/task id)
+  - status filter dropdown (`all/active/paused/queued/error/metadata/completed`)
+- Applied filtering to both Downloading and Downloaded views, with real-time rendering.
+- Added i18n keys and localized text for new filter/search controls (EN + ZH).
+- Improved toolbar styling for a cleaner, more modern list interaction area.
+- Verified by:
+  - `node --check dist/app.js`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`

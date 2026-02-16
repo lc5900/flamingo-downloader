@@ -195,6 +195,24 @@
                 <button id="btn-resume-all" class="ghost" data-i18n="actions.resumeAll">Resume All</button>
               </div>
             </div>
+            <div class="list-toolbar">
+              <label class="inline-input">
+                <span data-i18n="fields.search">Search</span>
+                <input id="task-search-input" type="text" data-i18n-placeholder="placeholders.searchTasks" placeholder="Search by name / URL / task id" />
+              </label>
+              <label class="inline-select">
+                <span data-i18n="fields.statusFilter">Status</span>
+                <select id="task-status-filter">
+                  <option value="all" data-i18n="filters.all">All</option>
+                  <option value="active" data-i18n="filters.active">Active</option>
+                  <option value="paused" data-i18n="filters.paused">Paused</option>
+                  <option value="queued" data-i18n="filters.queued">Queued</option>
+                  <option value="error" data-i18n="filters.error">Error</option>
+                  <option value="metadata" data-i18n="filters.metadata">Metadata</option>
+                  <option value="completed" data-i18n="filters.completed">Completed</option>
+                </select>
+              </label>
+            </div>
             <div id="task-list" class="task-list"></div>
             <div id="completed-list" class="task-list hidden"></div>
           </section>
