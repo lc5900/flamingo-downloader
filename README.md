@@ -48,6 +48,24 @@ Core principles:
 cargo run --manifest-path src-tauri/Cargo.toml
 ```
 
+### React + Ant Design migration workspace (WIP)
+
+A new React UI workspace is added under `ui/` and currently in staged migration:
+
+```bash
+cd ui
+npm install
+npm run dev
+```
+
+Build React UI into app static assets:
+
+```bash
+cd ui
+npm run build
+cp -R dist/* ../dist/
+```
+
 ### 3. First-time setup
 
 In Settings:

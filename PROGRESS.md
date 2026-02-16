@@ -889,3 +889,25 @@
 - Verified by:
   - `node --check dist/app.js`
   - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 92 - React + Ant Design Migration (Stage 1) (Done)
+- Initialized new frontend workspace at `ui/` using Vite + React + TypeScript.
+- Added Ant Design + Icons + Tauri API dependencies.
+- Implemented first React shell:
+  - left navigation (`Downloading` / `Downloaded`)
+  - top toolbar (new task, settings, theme quick switch, refresh)
+  - task table with progress/status/actions
+  - add URL modal
+  - appearance modal with `system/light/dark` theme segmented switch
+- Wired basic backend command calls from React:
+  - `list_tasks`
+  - `add_url`
+  - `pause_task` / `resume_task`
+  - `remove_task`
+  - `get_global_settings` / `set_global_settings` (theme)
+- Built React app and connected compiled assets to runtime entry by replacing `dist/index.html` and adding `dist/assets/*`.
+- Kept existing independent logs window page (`dist/logs.html`) intact.
+- Updated README / README_zh with React migration run/build notes.
+- Verified by:
+  - `cd ui && npm run build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`

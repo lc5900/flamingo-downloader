@@ -48,6 +48,24 @@ English README: [`README.md`](README.md)
 cargo run --manifest-path src-tauri/Cargo.toml
 ```
 
+### React + Ant Design 迁移工作区（进行中）
+
+仓库已新增 `ui/`（React + AntD）用于渐进迁移：
+
+```bash
+cd ui
+npm install
+npm run dev
+```
+
+将 React 构建产物同步到应用静态资源：
+
+```bash
+cd ui
+npm run build
+cp -R dist/* ../dist/
+```
+
 ### 3. 首次配置
 
 进入设置页后：
