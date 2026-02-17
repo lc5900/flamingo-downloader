@@ -1,5 +1,6 @@
 .root-layout {
   min-height: 100vh;
+  background: transparent;
 }
 
 .side {
@@ -25,4 +26,44 @@
 .content {
   padding: 16px;
   overflow: auto;
+}
+
+.settings-form .ant-typography {
+  margin-bottom: 10px;
+}
+
+.settings-tabs {
+  height: 100%;
+}
+
+.settings-tabs .ant-tabs-content-holder {
+  max-height: calc(72vh - 52px);
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.settings-tabs .ant-tabs-nav {
+  margin-bottom: 10px;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 12px;
+}
+
+.grid-rule {
+  display: grid;
+  grid-template-columns: 120px 140px 1fr 1fr;
+  gap: 0 10px;
+}
+
+@media (max-width: 980px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .grid-rule {
+    grid-template-columns: 1fr;
+  }
 }
