@@ -13,7 +13,9 @@ use flamingo_downloader::{
         TaskStatus, TaskType,
     },
 };
-use tauri::{ActivationPolicy, Emitter, Manager, State};
+#[cfg(target_os = "macos")]
+use tauri::ActivationPolicy;
+use tauri::{Emitter, Manager, State};
 #[cfg(not(target_os = "macos"))]
 use tauri::include_image;
 #[cfg(not(target_os = "macos"))]
@@ -76,7 +78,9 @@ fn restore_main_window(app: &tauri::AppHandle) {
     let do_restore_on_main = |h: tauri::AppHandle| {
         let h_for_closure = h.clone();
         let _ = h.run_on_main_thread(move || {
+            #[cfg(target_os = "macos")]
             let _ = h_for_closure.set_activation_policy(ActivationPolicy::Regular);
+            #[cfg(target_os = "macos")]
             let _ = h_for_closure.show();
 
             if h_for_closure.get_webview_window("main").is_none() {
@@ -553,6 +557,7 @@ fn main() {
         })
         .setup(move |app| {
             emitter_for_setup.bind(app.handle().clone());
+            #[cfg(target_os = "macos")]
             let _ = app.set_activation_policy(ActivationPolicy::Regular);
 
             let cwd = std::env::current_dir()?;
