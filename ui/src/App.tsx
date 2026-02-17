@@ -36,6 +36,7 @@ import {
   DeleteOutlined,
   DownloadOutlined,
   FileDoneOutlined,
+  FileSearchOutlined,
   FolderOpenOutlined,
   GlobalOutlined,
   PlusOutlined,
@@ -166,6 +167,14 @@ type SaveDirSuggestion = {
   matched_rule?: DownloadRule | null
 }
 
+type BrowserBridgeStatus = {
+  enabled: boolean
+  endpoint: string
+  token_set: boolean
+  connected: boolean
+  message: string
+}
+
 type TaskSortKey = 'updated_desc' | 'speed_desc' | 'progress_desc' | 'name_asc'
 type TableDensity = 'small' | 'middle' | 'large'
 type TableLayout = {
@@ -209,6 +218,7 @@ const I18N: Record<Locale, Record<string, string>> = {
     newDownload: 'New Download',
     settings: 'Settings',
     refresh: 'Refresh',
+    logsWindow: 'Logs',
     darkLight: 'Dark/Light',
     currentDownloads: 'Current Downloads',
     downloadedList: 'Downloaded',
@@ -333,8 +343,12 @@ const I18N: Record<Locale, Record<string, string>> = {
     metadataTimeout: 'Metadata Timeout (seconds)',
     speedPlan: 'Speed Plan (JSON)',
     trayPrefs: 'Tray / Notification',
+    trayPrefsMac: 'Dock / Notification',
     startMinimized: 'Start minimized',
     minimizeToTray: 'Minimize to tray on close',
+    minimizeToTrayMac: 'Minimize on close (restore from Dock)',
+    trayRecoverHintMac: 'On macOS, restore the app from Dock. Menu bar icon is mainly for quick menu actions.',
+    trayDisabledMac: 'Menu bar tray icon is disabled on macOS for reliability.',
     notifyOnComplete: 'Notify when download completes',
     resetSettingsDefaults: 'Reset Settings',
     resetUiLayout: 'Reset UI Layout',
@@ -347,6 +361,11 @@ const I18N: Record<Locale, Record<string, string>> = {
     bridgeEnabled: 'Browser Bridge Enabled',
     bridgePort: 'Browser Bridge Port',
     bridgeToken: 'Browser Bridge Token',
+    bridgeStatus: 'Bridge Status',
+    bridgeCheck: 'Check Bridge',
+    bridgeReconnect: 'Reconnect',
+    bridgeConnected: 'Connected',
+    bridgeDisconnected: 'Disconnected',
     clipboardWatchEnabled: 'Clipboard Watcher',
     clipboardDetectedTitle: 'Clipboard download link detected',
     clipboardDetectedUse: 'Use this link to create a new task?',
@@ -396,6 +415,7 @@ const I18N: Record<Locale, Record<string, string>> = {
     newDownload: '新建下载',
     settings: '设置',
     refresh: '刷新',
+    logsWindow: '日志',
     darkLight: '暗/亮切换',
     currentDownloads: '当前下载',
     downloadedList: '已下载',
@@ -520,8 +540,12 @@ const I18N: Record<Locale, Record<string, string>> = {
     metadataTimeout: '元数据超时（秒）',
     speedPlan: '速度计划（JSON）',
     trayPrefs: '托盘 / 通知',
+    trayPrefsMac: 'Dock / 通知',
     startMinimized: '启动时最小化',
     minimizeToTray: '关闭时最小化到托盘',
+    minimizeToTrayMac: '关闭时最小化（从 Dock 恢复）',
+    trayRecoverHintMac: '在 macOS 上建议从 Dock 恢复应用，菜单栏图标主要用于快捷菜单操作。',
+    trayDisabledMac: '为保证稳定性，macOS 下默认不使用菜单栏托盘图标。',
     notifyOnComplete: '下载完成时通知',
     resetSettingsDefaults: '重置设置',
     resetUiLayout: '重置界面布局',
@@ -534,6 +558,11 @@ const I18N: Record<Locale, Record<string, string>> = {
     bridgeEnabled: '浏览器桥接启用',
     bridgePort: '浏览器桥接端口',
     bridgeToken: '浏览器桥接令牌',
+    bridgeStatus: '桥接状态',
+    bridgeCheck: '检查连接',
+    bridgeReconnect: '重连',
+    bridgeConnected: '已连接',
+    bridgeDisconnected: '未连接',
     clipboardWatchEnabled: '剪贴板监听',
     clipboardDetectedTitle: '检测到下载链接',
     clipboardDetectedUse: '是否使用该链接创建新任务？',
@@ -760,13 +789,24 @@ function ResizableTitle(props: ResizeableHeaderProps) {
 }
 
 export default function App() {
-  const [msg, msgCtx] = message.useMessage()
+  const [msg, msgCtx] = message.useMessage({
+    top: 72,
+    duration: 1.8,
+    maxCount: 2,
+  })
   const [locale, setLocale] = useState<Locale>(() => {
     const saved = localStorage.getItem(LOCALE_KEY)
     return saved === 'zh-CN' || saved === 'en-US' ? saved : detectLocale()
   })
 
   const t = useCallback((k: string) => I18N[locale][k] || k, [locale])
+  const isMac = useMemo(
+    () =>
+      /mac|iphone|ipad|ipod/i.test(
+        `${navigator.platform || ''} ${navigator.userAgent || ''}`,
+      ),
+    [],
+  )
 
   useEffect(() => {
     localStorage.setItem(LOCALE_KEY, locale)
@@ -803,6 +843,8 @@ export default function App() {
   const [startupSummary, setStartupSummary] = useState<StartupSelfCheck | null>(null)
   const [updateText, setUpdateText] = useState('')
   const [appUpdateStrategyText, setAppUpdateStrategyText] = useState('')
+  const [bridgeStatus, setBridgeStatus] = useState<BrowserBridgeStatus | null>(null)
+  const [bridgeChecking, setBridgeChecking] = useState(false)
   const [ioOpen, setIoOpen] = useState(false)
   const [exportJsonText, setExportJsonText] = useState('')
   const [importJsonText, setImportJsonText] = useState('')
@@ -913,6 +955,24 @@ export default function App() {
     }
   }, [])
 
+  const checkBridgeStatus = useCallback(async () => {
+    setBridgeChecking(true)
+    try {
+      const status = await invoke<BrowserBridgeStatus>('check_browser_bridge_status')
+      setBridgeStatus(status)
+    } catch (err) {
+      setBridgeStatus({
+        enabled: false,
+        endpoint: '',
+        token_set: false,
+        connected: false,
+        message: parseErr(err),
+      })
+    } finally {
+      setBridgeChecking(false)
+    }
+  }, [])
+
   useEffect(() => {
     refresh()
     loadSettings()
@@ -926,9 +986,9 @@ export default function App() {
         const notice = await invoke<StartupNotice | null>('consume_startup_notice')
         if (!notice?.message) return
         const level = String(notice.level || 'info').toLowerCase()
-        if (level === 'warning') msg.warning(notice.message, 5)
-        else if (level === 'error') msg.error(notice.message, 6)
-        else msg.success(notice.message, 4)
+        if (level === 'warning') msg.warning(notice.message, 2.5)
+        else if (level === 'error') msg.error(notice.message, 3)
+        else msg.success(notice.message, 2.2)
       } catch {
         // ignore startup notice failures
       }
@@ -1652,7 +1712,15 @@ export default function App() {
 
   const openSettings = async () => {
     setSettingsOpen(true)
-    await Promise.all([loadSettings(), loadDiagnostics(), loadUpdateInfo()])
+    await Promise.all([loadSettings(), loadDiagnostics(), loadUpdateInfo(), checkBridgeStatus()])
+  }
+
+  const openLogsWindow = async () => {
+    try {
+      await invoke('open_logs_window')
+    } catch (err) {
+      msg.error(parseErr(err))
+    }
   }
 
   const suggestAndSetSaveDir = async (taskType: 'http' | 'magnet' | 'torrent', source: string | null) => {
@@ -2003,6 +2071,9 @@ export default function App() {
                 </Button>
                 <Button icon={<SettingOutlined />} onClick={openSettings}>
                   {t('settings')}
+                </Button>
+                <Button icon={<FileSearchOutlined />} onClick={openLogsWindow}>
+                  {t('logsWindow')}
                 </Button>
                 <Button icon={<SyncOutlined />} onClick={quickToggleTheme}>
                   {t('darkLight')}
@@ -2606,6 +2677,26 @@ export default function App() {
                     <Form.Item name="browser_bridge_token" label={t('bridgeToken')}>
                       <Input />
                     </Form.Item>
+                    <Space wrap style={{ marginBottom: 8 }}>
+                      <Button loading={bridgeChecking} onClick={checkBridgeStatus}>
+                        {t('bridgeCheck')}
+                      </Button>
+                      <Button
+                        loading={bridgeChecking}
+                        onClick={async () => {
+                          await saveSettings()
+                          await checkBridgeStatus()
+                        }}
+                      >
+                        {t('bridgeReconnect')}
+                      </Button>
+                      <Tag color={bridgeStatus?.connected ? 'green' : 'orange'}>
+                        {t('bridgeStatus')}: {bridgeStatus?.connected ? t('bridgeConnected') : t('bridgeDisconnected')}
+                      </Tag>
+                    </Space>
+                    <Typography.Text type="secondary" style={{ display: 'block', marginTop: -4, marginBottom: 8 }}>
+                      {bridgeStatus?.endpoint ? `${bridgeStatus.endpoint} - ${bridgeStatus.message}` : bridgeStatus?.message || '-'}
+                    </Typography.Text>
                     <Form.Item name="clipboard_watch_enabled" label={t('clipboardWatchEnabled')} valuePropName="checked">
                       <Switch />
                     </Form.Item>
@@ -2634,14 +2725,28 @@ export default function App() {
                     </Form.Item>
 
                     <Divider />
-                    <Typography.Title level={5}>{t('trayPrefs')}</Typography.Title>
+                    <Typography.Title level={5}>{isMac ? t('trayPrefsMac') : t('trayPrefs')}</Typography.Title>
                     <div className="grid-2">
                       <Form.Item name="start_minimized" label={t('startMinimized')} valuePropName="checked">
                         <Switch />
                       </Form.Item>
-                      <Form.Item name="minimize_to_tray" label={t('minimizeToTray')} valuePropName="checked">
+                      <Form.Item
+                        name="minimize_to_tray"
+                        label={isMac ? t('minimizeToTrayMac') : t('minimizeToTray')}
+                        valuePropName="checked"
+                      >
                         <Switch />
                       </Form.Item>
+                      {isMac && (
+                        <Typography.Text type="secondary" style={{ display: 'block', marginTop: -8 }}>
+                          {t('trayRecoverHintMac')}
+                        </Typography.Text>
+                      )}
+                      {isMac && (
+                        <Typography.Text type="secondary" style={{ display: 'block', marginTop: 4 }}>
+                          {t('trayDisabledMac')}
+                        </Typography.Text>
+                      )}
                       <Form.Item name="notify_on_complete" label={t('notifyOnComplete')} valuePropName="checked">
                         <Switch />
                       </Form.Item>

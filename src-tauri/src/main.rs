@@ -1,4 +1,7 @@
-use std::sync::{Arc, RwLock};
+use std::{
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 
 use serde::Serialize;
 use flamingo_downloader::{
@@ -10,8 +13,12 @@ use flamingo_downloader::{
         TaskStatus, TaskType,
     },
 };
-use tauri::{Emitter, Manager, State, include_image};
+use tauri::{ActivationPolicy, Emitter, Manager, State};
+#[cfg(not(target_os = "macos"))]
+use tauri::include_image;
+#[cfg(not(target_os = "macos"))]
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
+#[cfg(not(target_os = "macos"))]
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 
 #[derive(Default)]
@@ -49,10 +56,61 @@ struct AppState {
     service: Arc<flamingo_downloader::download_service::DownloadService>,
 }
 
+#[cfg(not(target_os = "macos"))]
+struct TrayState {
+    _tray: tauri::tray::TrayIcon,
+}
+
 #[derive(Serialize)]
 struct TaskDetailResponse {
     task: Task,
     files: Vec<TaskFile>,
+}
+
+fn restore_main_window(app: &tauri::AppHandle) {
+    if let Some(state) = app.try_state::<AppState>() {
+        state
+            .service
+            .append_operation_log("restore_main_window", "restore requested");
+    }
+    let do_restore_on_main = |h: tauri::AppHandle| {
+        let h_for_closure = h.clone();
+        let _ = h.run_on_main_thread(move || {
+            let _ = h_for_closure.set_activation_policy(ActivationPolicy::Regular);
+            let _ = h_for_closure.show();
+
+            if h_for_closure.get_webview_window("main").is_none() {
+                let _ = tauri::WebviewWindowBuilder::new(
+                    &h_for_closure,
+                    "main",
+                    tauri::WebviewUrl::App("index.html".into()),
+                )
+                .title("Flamingo Downloader")
+                .inner_size(1200.0, 780.0)
+                .resizable(true)
+                .build();
+            }
+
+            if let Some(win) = h_for_closure.get_webview_window("main") {
+                let _ = win.set_skip_taskbar(false);
+                let _ = win.show();
+                let _ = win.unminimize();
+                let _ = win.set_focus();
+                let _ = win.set_always_on_top(true);
+                let _ = win.set_always_on_top(false);
+            }
+        });
+    };
+
+    // Run immediately on main thread.
+    do_restore_on_main(app.clone());
+
+    // And again shortly after (macOS sometimes ignores the first request).
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        std::thread::sleep(Duration::from_millis(120));
+        do_restore_on_main(app_handle);
+    });
 }
 
 #[tauri::command]
@@ -280,6 +338,17 @@ async fn get_diagnostics(state: State<'_, AppState>) -> Result<flamingo_download
 }
 
 #[tauri::command]
+async fn check_browser_bridge_status(
+    state: State<'_, AppState>,
+) -> Result<flamingo_downloader::models::BrowserBridgeStatus, String> {
+    state
+        .service
+        .check_browser_bridge_status()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn export_debug_bundle(state: State<'_, AppState>) -> Result<String, String> {
     state
         .service
@@ -402,6 +471,11 @@ async fn get_app_update_strategy(state: State<'_, AppState>) -> Result<AppUpdate
 
 #[tauri::command]
 fn open_logs_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(state) = app.try_state::<AppState>() {
+        state
+            .service
+            .append_operation_log("open_logs_window", "open logs window");
+    }
     let label = "logs-window-external";
     if let Some(win) = app.get_webview_window(label) {
         let _ = win.show();
@@ -432,11 +506,17 @@ fn close_logs_window(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn debug_restore_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    restore_main_window(&app);
+    Ok(())
+}
+
 fn main() {
     let emitter = Arc::new(TauriEventEmitter::default());
     let emitter_for_setup = emitter.clone();
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
@@ -454,12 +534,26 @@ fn main() {
                     .unwrap_or(false);
                 if minimize_to_tray {
                     api.prevent_close();
-                    let _ = window.hide();
+                    #[cfg(target_os = "macos")]
+                    {
+                        let _ = window.set_skip_taskbar(false);
+                        let _ = window.minimize();
+                    }
+                    #[cfg(not(target_os = "macos"))]
+                    {
+                        let _ = window.hide();
+                    }
+                } else {
+                    // With tray icon enabled, closing the last window may keep process alive.
+                    // Explicitly exit the app when user did not opt into minimize-to-tray.
+                    api.prevent_close();
+                    window.app_handle().exit(0);
                 }
             }
         })
         .setup(move |app| {
             emitter_for_setup.bind(app.handle().clone());
+            let _ = app.set_activation_policy(ActivationPolicy::Regular);
 
             let cwd = std::env::current_dir()?;
             if let Ok(resource_dir) = app.path().resource_dir() {
@@ -479,60 +573,108 @@ fn main() {
             app.manage(AppState {
                 service: handles.service,
             });
+            app.state::<AppState>()
+                .service
+                .append_operation_log("setup_started", "setup initialized, app state managed");
 
             if let Some(main_win) = app.get_webview_window("main")
                 && let Ok(settings) = app.state::<AppState>().service.get_global_settings()
                 && settings.start_minimized.unwrap_or(false)
             {
                 if settings.minimize_to_tray.unwrap_or(false) {
-                    let _ = main_win.hide();
+                    #[cfg(target_os = "macos")]
+                    {
+                        let _ = main_win.set_skip_taskbar(false);
+                        let _ = main_win.minimize();
+                    }
+                    #[cfg(not(target_os = "macos"))]
+                    {
+                        let _ = main_win.hide();
+                    }
                 } else {
                     let _ = main_win.minimize();
                 }
             }
 
-            let show_item = MenuItemBuilder::with_id("tray_show", "Show").build(app)?;
-            let quit_item = MenuItemBuilder::with_id("tray_quit", "Quit").build(app)?;
-            let tray_menu = MenuBuilder::new(app)
-                .items(&[&show_item, &quit_item])
-                .build()?;
-            let tray_icon = if cfg!(target_os = "windows") {
-                Some(include_image!("icons/icon.ico"))
-            } else {
-                Some(include_image!("icons/icon.png"))
-            };
-            let mut tray_builder = TrayIconBuilder::new()
-                .menu(&tray_menu)
-                .tooltip("Flamingo Downloader");
-            if let Some(icon) = tray_icon {
-                tray_builder = tray_builder.icon(icon);
-            } else if let Some(icon) = app.default_window_icon() {
-                tray_builder = tray_builder.icon(icon.clone());
-            }
-            let tray = tray_builder
-                .on_menu_event(|app, event| match event.id().as_ref() {
-                    "tray_show" => {
-                        if let Some(win) = app.get_webview_window("main") {
-                            let _ = win.show();
-                            let _ = win.set_focus();
+            #[cfg(not(target_os = "macos"))]
+            {
+                let show_item = MenuItemBuilder::with_id("tray_show", "Show").build(app)?;
+                let logs_item = MenuItemBuilder::with_id("tray_logs", "Logs").build(app)?;
+                let quit_item = MenuItemBuilder::with_id("tray_quit", "Quit").build(app)?;
+                let tray_menu = MenuBuilder::new(app)
+                    .items(&[&show_item, &logs_item, &quit_item])
+                    .build()?;
+                let tray_icon = if cfg!(target_os = "windows") {
+                    Some(include_image!("icons/icon.ico"))
+                } else {
+                    Some(include_image!("icons/icon.png"))
+                };
+                let mut tray_builder = TrayIconBuilder::new()
+                    .menu(&tray_menu)
+                    .tooltip("Flamingo Downloader")
+                    .show_menu_on_left_click(false);
+                if let Some(icon) = tray_icon {
+                    tray_builder = tray_builder.icon(icon);
+                } else if let Some(icon) = app.default_window_icon() {
+                    tray_builder = tray_builder.icon(icon.clone());
+                }
+                let tray = tray_builder
+                    .on_menu_event({
+                        let service = app.state::<AppState>().service.clone();
+                        move |app, event| {
+                            service.append_operation_log(
+                                "tray_menu_event",
+                                format!("id={}", event.id().as_ref()),
+                            );
+                            match event.id().as_ref() {
+                                "tray_show" => {
+                                    restore_main_window(app);
+                                }
+                                "tray_logs" => {
+                                    let _ = open_logs_window(app.clone());
+                                }
+                                "tray_quit" => {
+                                    app.exit(0);
+                                }
+                                _ => {}
+                            }
+                        }
+                    })
+                    .on_tray_icon_event({
+                        let service = app.state::<AppState>().service.clone();
+                        move |tray, event| {
+                            service.append_operation_log("tray_icon_event", format!("{event:?}"));
+                            match event {
+                                TrayIconEvent::Click { .. } | TrayIconEvent::DoubleClick { .. } => {
+                                    restore_main_window(tray.app_handle());
+                                }
+                                _ => {}
+                            }
+                        }
+                    })
+                    .build(app)?;
+                let _ = tray.set_visible(true);
+                app.manage(TrayState { _tray: tray.clone() });
+                app.state::<AppState>()
+                    .service
+                    .append_operation_log("tray_initialized", "tray icon/menu initialized and set visible");
+                app.on_tray_icon_event({
+                    let service = app.state::<AppState>().service.clone();
+                    move |app, event| {
+                        service.append_operation_log("app_tray_icon_event", format!("{event:?}"));
+                        match event {
+                            TrayIconEvent::Click { .. } | TrayIconEvent::DoubleClick { .. } => {
+                                restore_main_window(app);
+                            }
+                            _ => {}
                         }
                     }
-                    "tray_quit" => {
-                        app.exit(0);
-                    }
-                    _ => {}
-                })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click { .. } = event
-                        && let Some(win) = tray.app_handle().get_webview_window("main")
-                    {
-                        let _ = win.show();
-                        let _ = win.set_focus();
-                    }
-                })
-                .build(app)?;
-            // Keep tray icon alive for app lifetime.
-            std::mem::forget(tray);
+                });
+            }
+            #[cfg(target_os = "macos")]
+            app.state::<AppState>()
+                .service
+                .append_operation_log("tray_disabled_macos", "tray is disabled on macOS; use Dock to restore");
 
             Ok(())
         })
@@ -559,6 +701,7 @@ fn main() {
             suggest_save_dir_detail,
             detect_aria2_bin_paths,
             get_diagnostics,
+            check_browser_bridge_status,
             export_debug_bundle,
             rpc_ping,
             restart_aria2,
@@ -574,8 +717,26 @@ fn main() {
             update_aria2_now,
             get_app_update_strategy,
             open_logs_window,
-            close_logs_window
+            close_logs_window,
+            debug_restore_main_window
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Reopen { .. } = event {
+            let main_window_present = app_handle.get_webview_window("main").is_some();
+            if let Some(state) = app_handle.try_state::<AppState>() {
+                state.service.append_operation_log(
+                    "run_event_reopen",
+                    format!(
+                        "dock/app reopen event, main_window_present={}",
+                        main_window_present
+                    ),
+                );
+            }
+            restore_main_window(app_handle);
+        }
+    });
 }

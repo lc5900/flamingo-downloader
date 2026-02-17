@@ -1,0 +1,24 @@
+html,
+body,
+#root {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.logs-root {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 12px;
+}
+
+.logs-card {
+  height: 100%;
+}
+
+.logs-card .ant-card-body {
+  height: calc(100% - 58px);
+  display: flex;
+  flex-direction: column;
+}

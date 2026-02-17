@@ -206,6 +206,13 @@ pub async fn get_diagnostics(service: Arc<DownloadService>) -> Result<crate::mod
 }
 
 #[allow(dead_code)]
+pub async fn check_browser_bridge_status(
+    service: Arc<DownloadService>,
+) -> Result<crate::models::BrowserBridgeStatus> {
+    service.check_browser_bridge_status().await
+}
+
+#[allow(dead_code)]
 pub async fn export_debug_bundle(service: Arc<DownloadService>) -> Result<String> {
     service.export_debug_bundle().await
 }

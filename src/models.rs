@@ -244,3 +244,12 @@ pub struct SaveDirSuggestion {
     pub save_dir: String,
     pub matched_rule: Option<DownloadDirRule>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserBridgeStatus {
+    pub enabled: bool,
+    pub endpoint: String,
+    pub token_set: bool,
+    pub connected: bool,
+    pub message: String,
+}

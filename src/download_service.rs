@@ -26,7 +26,7 @@ use crate::{
     models::{
         AddTaskOptions, AppUpdateStrategy, Aria2UpdateApplyResult, Aria2UpdateInfo, Diagnostics,
         DownloadDirRule, GlobalSettings, ImportTaskListResult, OperationLog, SaveDirSuggestion,
-        StartupSelfCheck, Task, TaskFile, TaskListSnapshot, TaskStatus, TaskType,
+        StartupSelfCheck, Task, TaskFile, TaskListSnapshot, TaskStatus, TaskType, BrowserBridgeStatus,
     },
 };
 
@@ -505,6 +505,82 @@ impl DownloadService {
 
     pub fn get_global_settings(&self) -> Result<GlobalSettings> {
         self.db.load_global_settings()
+    }
+
+    pub async fn check_browser_bridge_status(&self) -> Result<BrowserBridgeStatus> {
+        let settings = self.get_global_settings()?;
+        let enabled = settings.browser_bridge_enabled.unwrap_or(true);
+        let port = settings.browser_bridge_port.unwrap_or(16789);
+        let token = settings
+            .browser_bridge_token
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        let endpoint = format!("http://127.0.0.1:{port}/health");
+
+        if !enabled {
+            return Ok(BrowserBridgeStatus {
+                enabled,
+                endpoint,
+                token_set: !token.is_empty(),
+                connected: false,
+                message: "browser bridge is disabled".to_string(),
+            });
+        }
+        if token.is_empty() {
+            return Ok(BrowserBridgeStatus {
+                enabled,
+                endpoint,
+                token_set: false,
+                connected: false,
+                message: "bridge token is empty".to_string(),
+            });
+        }
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(2))
+            .build()?;
+        let result = client
+            .get(&endpoint)
+            .header("X-Token", token)
+            .send()
+            .await;
+        match result {
+            Ok(resp) if resp.status().is_success() => {
+                let body = resp.text().await.unwrap_or_default();
+                if body.contains("\"ok\":true") || body.contains("\"ok\": true") {
+                    Ok(BrowserBridgeStatus {
+                        enabled,
+                        endpoint,
+                        token_set: true,
+                        connected: true,
+                        message: "bridge is healthy".to_string(),
+                    })
+                } else {
+                    Ok(BrowserBridgeStatus {
+                        enabled,
+                        endpoint,
+                        token_set: true,
+                        connected: false,
+                        message: "bridge responded but payload is unexpected".to_string(),
+                    })
+                }
+            }
+            Ok(resp) => Ok(BrowserBridgeStatus {
+                enabled,
+                endpoint,
+                token_set: true,
+                connected: false,
+                message: format!("bridge unhealthy: HTTP {}", resp.status()),
+            }),
+            Err(e) => Ok(BrowserBridgeStatus {
+                enabled,
+                endpoint,
+                token_set: true,
+                connected: false,
+                message: format!("bridge request failed: {e}"),
+            }),
+        }
     }
 
     pub async fn reset_global_settings_to_defaults(&self) -> Result<()> {
@@ -1826,6 +1902,11 @@ impl DownloadService {
             format!("cleanup finished for task {}: removed {}", task.id, removed),
         );
         Ok(())
+    }
+
+    pub fn append_operation_log(&self, action: &str, message: impl Into<String>) {
+        self.push_log(action, message.into());
+        let _ = self.flush_pending_logs();
     }
 
     fn push_log(&self, action: &str, message: String) {

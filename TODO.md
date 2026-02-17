@@ -96,7 +96,7 @@
 
 ### P2 - Browser Takeover Hardening
 
-- [ ] Finish extension handshake UX (pairing token, connection status, reconnect)
+- [x] Finish extension handshake UX (pairing token, connection status, reconnect)
 - [ ] Add "send to Flamingo Downloader" context menu item and optional auto-intercept downloads
 - [ ] Add Firefox build and docs alongside Chromium build
 
