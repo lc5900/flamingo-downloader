@@ -24,6 +24,17 @@
   },
   "bundle": {
     "active": true,
+    "fileAssociations": [
+      {
+        "ext": [
+          "torrent"
+        ],
+        "name": "BitTorrent File",
+        "description": "BitTorrent metadata file",
+        "mimeType": "application/x-bittorrent",
+        "role": "Editor"
+      }
+    ],
     "resources": [
       "resources/**/*"
     ],

@@ -92,7 +92,7 @@
 
 - [x] Desktop notifications on complete/error with action buttons (open file/folder)
 - [x] Show dock/taskbar/tray badge counts (active/completed/error)
-- [ ] Register as handler for `magnet:` links and `.torrent` files (optional)
+- [x] Register as handler for `magnet:` links and `.torrent` files (optional)
 
 ### P2 - Browser Takeover Hardening
 

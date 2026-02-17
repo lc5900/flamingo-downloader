@@ -69,6 +69,81 @@ struct TaskDetailResponse {
     files: Vec<TaskFile>,
 }
 
+enum ExternalOpenTarget {
+    Magnet(String),
+    TorrentPath(String),
+}
+
+fn parse_external_open_arg(arg: &str) -> Option<ExternalOpenTarget> {
+    let value = arg.trim();
+    if value.is_empty() {
+        return None;
+    }
+    if value.starts_with("magnet:?") {
+        return Some(ExternalOpenTarget::Magnet(value.to_string()));
+    }
+
+    let path = std::path::Path::new(value);
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.eq_ignore_ascii_case("torrent"))
+        .unwrap_or(false);
+    if ext && path.exists() {
+        return Some(ExternalOpenTarget::TorrentPath(value.to_string()));
+    }
+
+    None
+}
+
+fn queue_external_open(app: &tauri::AppHandle, target: ExternalOpenTarget, source: &str) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let service = state.service.clone();
+    match target {
+        ExternalOpenTarget::Magnet(magnet) => {
+            service.append_operation_log(
+                "external_open",
+                format!("source={source}, kind=magnet, value={magnet}"),
+            );
+            tauri::async_runtime::spawn(async move {
+                match service.add_magnet(&magnet, AddTaskOptions::default()).await {
+                    Ok(task_id) => service.append_operation_log(
+                        "external_open_applied",
+                        format!("kind=magnet, task_id={task_id}"),
+                    ),
+                    Err(e) => service.append_operation_log(
+                        "external_open_failed",
+                        format!("kind=magnet, error={e}"),
+                    ),
+                }
+            });
+        }
+        ExternalOpenTarget::TorrentPath(path) => {
+            service.append_operation_log(
+                "external_open",
+                format!("source={source}, kind=torrent, path={path}"),
+            );
+            tauri::async_runtime::spawn(async move {
+                match service
+                    .add_torrent_from_file(&path, AddTaskOptions::default())
+                    .await
+                {
+                    Ok(task_id) => service.append_operation_log(
+                        "external_open_applied",
+                        format!("kind=torrent, task_id={task_id}"),
+                    ),
+                    Err(e) => service.append_operation_log(
+                        "external_open_failed",
+                        format!("kind=torrent, error={e}"),
+                    ),
+                }
+            });
+        }
+    }
+}
+
 fn restore_main_window(app: &tauri::AppHandle) {
     if let Some(state) = app.try_state::<AppState>() {
         state
@@ -582,6 +657,12 @@ fn main() {
                 .service
                 .append_operation_log("setup_started", "setup initialized, app state managed");
 
+            for arg in std::env::args().skip(1) {
+                if let Some(target) = parse_external_open_arg(&arg) {
+                    queue_external_open(&app.handle().clone(), target, "startup_arg");
+                }
+            }
+
             if let Some(main_win) = app.get_webview_window("main")
                 && let Ok(settings) = app.state::<AppState>().service.get_global_settings()
                 && settings.start_minimized.unwrap_or(false)
@@ -729,6 +810,27 @@ fn main() {
         .expect("error while building tauri application");
 
     app.run(|app_handle, event| {
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Opened { urls } = &event {
+            for url in urls {
+                if url.scheme() == "magnet" {
+                    queue_external_open(
+                        app_handle,
+                        ExternalOpenTarget::Magnet(url.to_string()),
+                        "run_event_opened",
+                    );
+                    continue;
+                }
+                if url.scheme() == "file"
+                    && let Ok(path) = url.to_file_path()
+                {
+                    let path_string = path.to_string_lossy().to_string();
+                    if let Some(target) = parse_external_open_arg(&path_string) {
+                        queue_external_open(app_handle, target, "run_event_opened");
+                    }
+                }
+            }
+        }
         #[cfg(target_os = "macos")]
         if let tauri::RunEvent::Reopen { .. } = event {
             let main_window_present = app_handle.get_webview_window("main").is_some();
