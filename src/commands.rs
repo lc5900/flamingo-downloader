@@ -4,7 +4,10 @@ use anyhow::Result;
 
 use crate::{
     download_service::DownloadService,
-    models::{AddTaskOptions, GlobalSettings, OperationLog, Task, TaskFile, TaskStatus},
+    models::{
+        AddTaskOptions, GlobalSettings, ImportTaskListResult, OperationLog, Task, TaskFile,
+        TaskStatus,
+    },
 };
 
 #[allow(dead_code)]
@@ -155,6 +158,24 @@ pub fn clear_operation_logs(service: Arc<DownloadService>) -> Result<()> {
 }
 
 #[allow(dead_code)]
+pub fn export_task_list_json(service: Arc<DownloadService>) -> Result<String> {
+    service.export_task_list_json()
+}
+
+#[allow(dead_code)]
+pub fn import_task_list_json(
+    service: Arc<DownloadService>,
+    payload: String,
+) -> Result<ImportTaskListResult> {
+    service.import_task_list_json(&payload)
+}
+
+#[allow(dead_code)]
 pub async fn get_diagnostics(service: Arc<DownloadService>) -> Result<crate::models::Diagnostics> {
     service.get_diagnostics().await
+}
+
+#[allow(dead_code)]
+pub async fn export_debug_bundle(service: Arc<DownloadService>) -> Result<String> {
+    service.export_debug_bundle().await
 }

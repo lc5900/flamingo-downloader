@@ -1,5 +1,7 @@
 use std::{
+    collections::HashMap,
     collections::HashSet,
+    fs::File,
     fs,
     io::{Cursor, Read},
     path::{Path, PathBuf},
@@ -13,6 +15,8 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde_json::{Value, json};
 use tokio::{sync::Mutex as AsyncMutex, time};
 use uuid::Uuid;
+use zip::write::SimpleFileOptions;
+use chrono::{Datelike, Local, Timelike};
 
 use crate::{
     aria2_manager::Aria2Api,
@@ -20,8 +24,9 @@ use crate::{
     error::AppError,
     events::SharedEmitter,
     models::{
-        AddTaskOptions, Aria2UpdateApplyResult, Aria2UpdateInfo, Diagnostics, DownloadDirRule,
-        GlobalSettings, OperationLog, Task, TaskFile, TaskStatus, TaskType,
+        AddTaskOptions, AppUpdateStrategy, Aria2UpdateApplyResult, Aria2UpdateInfo, Diagnostics,
+        DownloadDirRule, GlobalSettings, ImportTaskListResult, OperationLog, Task, TaskFile,
+        TaskListSnapshot, TaskStatus, TaskType,
     },
 };
 
@@ -32,6 +37,22 @@ pub struct DownloadService {
     logs: Mutex<Vec<OperationLog>>,
     pending_logs: Mutex<Vec<OperationLog>>,
     lifecycle_guard: AsyncMutex<()>,
+    retry_state: Mutex<HashMap<String, RetryState>>,
+    last_speed_limit: Mutex<Option<String>>,
+}
+
+#[derive(Debug, Clone)]
+struct RetryState {
+    attempts: u32,
+    next_retry_at: i64,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+struct SpeedPlanRule {
+    days: Option<String>,  // "1,2,3" (Mon=1..Sun=7)
+    start: Option<String>, // "HH:MM"
+    end: Option<String>,   // "HH:MM"
+    limit: String,         // "0" / "2M"
 }
 
 impl DownloadService {
@@ -43,6 +64,8 @@ impl DownloadService {
             logs: Mutex::new(Vec::new()),
             pending_logs: Mutex::new(Vec::new()),
             lifecycle_guard: AsyncMutex::new(()),
+            retry_state: Mutex::new(HashMap::new()),
+            last_speed_limit: Mutex::new(None),
         }
     }
 
@@ -851,12 +874,312 @@ impl DownloadService {
         Ok(())
     }
 
+    pub async fn export_debug_bundle(&self) -> Result<String> {
+        let diagnostics = self.get_diagnostics().await?;
+        let logs = self.list_operation_logs(1000)?;
+        let tasks = self.db.list_tasks(None, u32::MAX, 0)?;
+        let mut files = Vec::<TaskFile>::new();
+        for task in &tasks {
+            let mut task_files = self.db.list_task_files(&task.id)?;
+            files.append(&mut task_files);
+        }
+
+        let ts = now_ts();
+        let base_dir = std::env::temp_dir().join(format!("flamingo-debug-{ts}"));
+        fs::create_dir_all(&base_dir)?;
+
+        let diagnostics_path = base_dir.join("diagnostics.json");
+        let logs_path = base_dir.join("operation_logs.json");
+        let tasks_path = base_dir.join("tasks.json");
+        let files_path = base_dir.join("task_files.json");
+
+        fs::write(&diagnostics_path, serde_json::to_vec_pretty(&diagnostics)?)?;
+        fs::write(&logs_path, serde_json::to_vec_pretty(&logs)?)?;
+        fs::write(&tasks_path, serde_json::to_vec_pretty(&tasks)?)?;
+        fs::write(&files_path, serde_json::to_vec_pretty(&files)?)?;
+
+        let zip_path = std::env::temp_dir().join(format!("flamingo-debug-{ts}.zip"));
+        let zip_file = File::create(&zip_path)?;
+        let mut zip = zip::ZipWriter::new(zip_file);
+        let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+
+        for (name, path) in [
+            ("diagnostics.json", diagnostics_path),
+            ("operation_logs.json", logs_path),
+            ("tasks.json", tasks_path),
+            ("task_files.json", files_path),
+        ] {
+            let content = fs::read(path)?;
+            zip.start_file(name, opts)?;
+            use std::io::Write as _;
+            zip.write_all(&content)?;
+        }
+        zip.finish()?;
+        self.push_log(
+            "export_debug_bundle",
+            format!("debug bundle exported to {}", zip_path.display()),
+        );
+        Ok(zip_path.to_string_lossy().to_string())
+    }
+
+    pub fn export_task_list_json(&self) -> Result<String> {
+        let tasks = self.db.list_tasks(None, u32::MAX, 0)?;
+        let mut task_files = Vec::new();
+        for task in &tasks {
+            let mut files = self.db.list_task_files(&task.id)?;
+            task_files.append(&mut files);
+        }
+        let snapshot = TaskListSnapshot {
+            version: 1,
+            exported_at: now_ts(),
+            tasks,
+            task_files,
+        };
+        serde_json::to_string_pretty(&snapshot).map_err(Into::into)
+    }
+
+    pub fn import_task_list_json(&self, payload: &str) -> Result<ImportTaskListResult> {
+        let snapshot: TaskListSnapshot =
+            serde_json::from_str(payload).map_err(|e| anyhow!("invalid snapshot json: {e}"))?;
+        let mut imported_tasks = 0usize;
+        let mut imported_files = 0usize;
+
+        for mut task in snapshot.tasks {
+            task.aria2_gid = None;
+            self.db.upsert_task(&task)?;
+            imported_tasks += 1;
+        }
+
+        let mut by_task: std::collections::HashMap<String, Vec<TaskFile>> =
+            std::collections::HashMap::new();
+        for file in snapshot.task_files {
+            by_task.entry(file.task_id.clone()).or_default().push(file);
+        }
+        for (task_id, files) in by_task {
+            self.db.replace_task_files(&task_id, &files)?;
+            imported_files += files.len();
+        }
+
+        self.push_log(
+            "import_task_list_json",
+            format!("imported tasks={imported_tasks}, files={imported_files}"),
+        );
+        Ok(ImportTaskListResult {
+            imported_tasks,
+            imported_files,
+        })
+    }
+
+    pub fn get_app_update_strategy(&self) -> Result<AppUpdateStrategy> {
+        Ok(AppUpdateStrategy {
+            mode: "manual_release".to_string(),
+            current_version: env!("CARGO_PKG_VERSION").to_string(),
+            channel: "stable".to_string(),
+            notes: "Current build uses GitHub release artifacts for manual updates. Future migration target: Tauri updater with signed metadata feed.".to_string(),
+        })
+    }
+
+    pub fn set_startup_notice(&self, level: &str, message: &str) -> Result<()> {
+        self.db.set_setting("startup_notice_level", level)?;
+        self.db.set_setting("startup_notice_message", message)?;
+        Ok(())
+    }
+
+    pub fn consume_startup_notice(&self) -> Result<Option<crate::models::StartupNotice>> {
+        let message = self
+            .db
+            .get_setting("startup_notice_message")?
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        if message.is_empty() {
+            return Ok(None);
+        }
+        let level = self
+            .db
+            .get_setting("startup_notice_level")?
+            .unwrap_or_else(|| "info".to_string());
+        self.db.set_setting("startup_notice_message", "")?;
+        self.db.set_setting("startup_notice_level", "")?;
+        Ok(Some(crate::models::StartupNotice { level, message }))
+    }
+
+    async fn apply_speed_plan_if_needed(&self) -> Result<()> {
+        let settings = self.get_global_settings()?;
+        let plan_json = settings.speed_plan.unwrap_or_default();
+        if plan_json.trim().is_empty() {
+            return Ok(());
+        }
+        let rules: Vec<SpeedPlanRule> = serde_json::from_str(&plan_json).unwrap_or_default();
+        if rules.is_empty() {
+            return Ok(());
+        }
+        let desired = select_speed_limit(&rules).unwrap_or_else(|| "0".to_string());
+        let prev = self
+            .last_speed_limit
+            .lock()
+            .expect("last_speed_limit mutex poisoned")
+            .clone();
+        if prev.as_deref() == Some(desired.as_str()) {
+            return Ok(());
+        }
+        if self.aria2.endpoint().await.is_some() {
+            let _ = self
+                .aria2
+                .change_global_option(json!({ "max-overall-download-limit": desired }))
+                .await;
+        }
+        *self
+            .last_speed_limit
+            .lock()
+            .expect("last_speed_limit mutex poisoned") = Some(desired.clone());
+        self.push_log("speed_plan", format!("applied max-overall-download-limit={desired}"));
+        Ok(())
+    }
+
+    async fn process_retry_and_metadata_policies(&self) -> Result<()> {
+        let settings = self.get_global_settings()?;
+        let retry_max_attempts = settings.retry_max_attempts.unwrap_or(2);
+        let retry_backoff_secs = settings.retry_backoff_secs.unwrap_or(15) as i64;
+        let metadata_timeout_secs = settings.metadata_timeout_secs.unwrap_or(180) as i64;
+        let mirrors = settings
+            .retry_fallback_mirrors
+            .unwrap_or_default()
+            .split([',', '\n'])
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>();
+
+        let tasks = self.db.list_tasks(None, 2000, 0)?;
+        let now = now_ts();
+        for mut task in tasks {
+            match task.status {
+                TaskStatus::Metadata => {
+                    if now - task.created_at > metadata_timeout_secs
+                        && task.total_length == 0
+                    {
+                        task.status = TaskStatus::Error;
+                        task.error_code = Some("METADATA_TIMEOUT".to_string());
+                        task.error_message = Some(format!(
+                            "magnet metadata timed out after {}s",
+                            metadata_timeout_secs
+                        ));
+                        task.updated_at = now;
+                        self.db.upsert_task(&task)?;
+                        self.push_log(
+                            "metadata_timeout",
+                            format!("task {} metadata timed out", task.id),
+                        );
+                    }
+                }
+                TaskStatus::Error => {
+                    if retry_max_attempts == 0 {
+                        continue;
+                    }
+                    let current_state = {
+                        let mut lock = self.retry_state.lock().expect("retry_state mutex poisoned");
+                        lock.entry(task.id.clone())
+                            .or_insert(RetryState {
+                                attempts: 0,
+                                next_retry_at: now,
+                            })
+                            .clone()
+                    };
+                    if current_state.attempts >= retry_max_attempts || now < current_state.next_retry_at {
+                        continue;
+                    }
+                    if let Ok(new_gid) = self
+                        .retry_task_with_fallback(&task, current_state.attempts as usize, &mirrors)
+                        .await
+                    {
+                        task.aria2_gid = Some(new_gid);
+                        task.status = TaskStatus::Queued;
+                        task.error_code = None;
+                        task.error_message = None;
+                        task.updated_at = now;
+                        self.db.upsert_task(&task)?;
+                        let mut lock = self.retry_state.lock().expect("retry_state mutex poisoned");
+                        let state = lock.entry(task.id.clone()).or_insert(RetryState {
+                            attempts: 0,
+                            next_retry_at: now,
+                        });
+                        state.attempts += 1;
+                        state.next_retry_at = now + retry_backoff_secs * (state.attempts as i64 + 1);
+                        self.push_log(
+                            "auto_retry",
+                            format!("retried task {} attempt {}", task.id, state.attempts),
+                        );
+                    } else {
+                        let mut lock = self.retry_state.lock().expect("retry_state mutex poisoned");
+                        let state = lock.entry(task.id.clone()).or_insert(RetryState {
+                            attempts: 0,
+                            next_retry_at: now,
+                        });
+                        state.attempts += 1;
+                        state.next_retry_at = now + retry_backoff_secs * (state.attempts as i64 + 1);
+                    }
+                }
+                _ => {
+                    self.retry_state
+                        .lock()
+                        .expect("retry_state mutex poisoned")
+                        .remove(&task.id);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn retry_task_with_fallback(
+        &self,
+        task: &Task,
+        attempt: usize,
+        mirrors: &[String],
+    ) -> Result<String> {
+        self.ensure_aria2_ready().await?;
+        match task.task_type {
+            TaskType::Http => {
+                let source = apply_fallback_source(&task.source, attempt, mirrors);
+                self.aria2
+                    .add_uri(
+                        vec![source],
+                        Some(to_aria2_options(AddTaskOptions {
+                            save_dir: Some(task.save_dir.clone()),
+                            out: task.name.clone(),
+                            ..AddTaskOptions::default()
+                        })),
+                    )
+                    .await
+            }
+            TaskType::Magnet => self
+                .aria2
+                .add_uri(
+                    vec![task.source.clone()],
+                    Some(to_aria2_options(AddTaskOptions {
+                        save_dir: Some(task.save_dir.clone()),
+                        ..AddTaskOptions::default()
+                    })),
+                )
+                .await,
+            _ => Err(anyhow!("auto retry currently supports http/magnet tasks")),
+        }
+    }
+
     pub fn start_sync_loop(self: Arc<Self>) {
         tokio::spawn(async move {
             let mut interval = time::interval(Duration::from_millis(1000));
+            let mut tick: u64 = 0;
             loop {
                 interval.tick().await;
+                tick = tick.wrapping_add(1);
                 let _ = self.flush_pending_logs();
+                if tick.is_multiple_of(30) {
+                    let _ = self.apply_speed_plan_if_needed().await;
+                }
+                if tick.is_multiple_of(5) {
+                    let _ = self.process_retry_and_metadata_policies().await;
+                }
                 let snapshots = match self.aria2.tell_all().await {
                     Ok(v) => v,
                     Err(_) => continue,
@@ -940,6 +1263,35 @@ fn to_aria2_options(options: AddTaskOptions) -> Value {
     if let Some(v) = options.split {
         m.insert("split".to_string(), json!(v.to_string()));
     }
+    if let Some(v) = options.max_download_limit {
+        let limit = v.trim();
+        if !limit.is_empty() {
+            m.insert("max-download-limit".to_string(), json!(limit));
+        }
+    }
+    if let Some(v) = options.user_agent {
+        let ua = v.trim();
+        if !ua.is_empty() {
+            m.insert("user-agent".to_string(), json!(ua));
+        }
+    }
+    if let Some(v) = options.referer {
+        let referer = v.trim();
+        if !referer.is_empty() {
+            m.insert("referer".to_string(), json!(referer));
+        }
+    }
+    if !options.headers.is_empty() {
+        let headers = options
+            .headers
+            .into_iter()
+            .map(|h| h.trim().to_string())
+            .filter(|h| !h.is_empty())
+            .collect::<Vec<_>>();
+        if !headers.is_empty() {
+            m.insert("header".to_string(), json!(headers));
+        }
+    }
     Value::Object(m)
 }
 
@@ -948,6 +1300,69 @@ fn now_ts() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or_default()
+}
+
+fn select_speed_limit(rules: &[SpeedPlanRule]) -> Option<String> {
+    let now = Local::now();
+    let weekday = now.weekday().number_from_monday();
+    let current_minute = now.hour() as i32 * 60 + now.minute() as i32;
+    for rule in rules {
+        let limit = rule.limit.trim();
+        if limit.is_empty() {
+            continue;
+        }
+        if let Some(days) = &rule.days {
+            let allowed = days
+                .split(',')
+                .filter_map(|d| d.trim().parse::<u32>().ok())
+                .any(|d| d == weekday);
+            if !allowed {
+                continue;
+            }
+        }
+        let start = rule
+            .start
+            .as_deref()
+            .and_then(parse_hhmm_minutes)
+            .unwrap_or(0);
+        let end = rule
+            .end
+            .as_deref()
+            .and_then(parse_hhmm_minutes)
+            .unwrap_or(24 * 60);
+        let in_range = if start <= end {
+            current_minute >= start && current_minute < end
+        } else {
+            current_minute >= start || current_minute < end
+        };
+        if in_range {
+            return Some(limit.to_string());
+        }
+    }
+    None
+}
+
+fn parse_hhmm_minutes(v: &str) -> Option<i32> {
+    let (h, m) = v.split_once(':')?;
+    let hh = h.parse::<i32>().ok()?;
+    let mm = m.parse::<i32>().ok()?;
+    if !(0..=23).contains(&hh) || !(0..=59).contains(&mm) {
+        return None;
+    }
+    Some(hh * 60 + mm)
+}
+
+fn apply_fallback_source(source: &str, attempt: usize, mirrors: &[String]) -> String {
+    if mirrors.is_empty() || attempt == 0 {
+        return source.to_string();
+    }
+    let idx = (attempt - 1) % mirrors.len();
+    let prefix = mirrors[idx].trim_end_matches('/');
+    if source.starts_with("http://") || source.starts_with("https://") {
+        format!("{prefix}/{}", source.trim_start_matches('/'))
+    } else {
+        source.to_string()
+    }
 }
 
 fn absolute_path(base: &Path, value: &str) -> PathBuf {

@@ -111,9 +111,77 @@ jobs:
           fi
           echo "Asset file count: ${count}"
 
+      - name: Normalize artifact names + checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME:-${GITHUB_REF##*/}}"
+          mkdir -p release-assets-flat
+          shopt -s globstar nullglob
+
+          linux_count=0
+          windows_count=0
+          macos_count=0
+
+          for f in release-assets/**/*; do
+            [ -f "$f" ] || continue
+            bn="$(basename "$f")"
+            platform="unknown"
+            case "$f" in
+              *flamingo-linux-x64/*) platform="linux-x64"; linux_count=$((linux_count + 1)) ;;
+              *flamingo-windows-x64/*) platform="windows-x64"; windows_count=$((windows_count + 1)) ;;
+              *flamingo-macos-arm64/*) platform="macos-arm64"; macos_count=$((macos_count + 1)) ;;
+            esac
+
+            ext=""
+            case "$bn" in
+              *.AppImage) ext=".AppImage" ;;
+              *.dmg) ext=".dmg" ;;
+              *.msi) ext=".msi" ;;
+              *.exe) ext=".exe" ;;
+              *.deb) ext=".deb" ;;
+              *.rpm) ext=".rpm" ;;
+              *.app.tar.gz) ext=".app.tar.gz" ;;
+              *.tar.gz) ext=".tar.gz" ;;
+              *.zip) ext=".zip" ;;
+              *) continue ;;
+            esac
+
+            out="Flamingo-Downloader-${tag}-${platform}${ext}"
+            cp "$f" "release-assets-flat/$out"
+          done
+
+          if [ "$linux_count" -eq 0 ] || [ "$windows_count" -eq 0 ] || [ "$macos_count" -eq 0 ]; then
+            echo "Expected artifacts missing: linux=$linux_count windows=$windows_count macos=$macos_count"
+            exit 1
+          fi
+
+          if ! find release-assets-flat -type f | grep -q .; then
+            echo "No normalized release assets generated"
+            exit 1
+          fi
+
+          (cd release-assets-flat && sha256sum * > SHA256SUMS.txt)
+          echo "Normalized assets:"
+          find release-assets-flat -type f -print
+
+      - name: Generate release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME:-${GITHUB_REF##*/}}"
+          cp .github/RELEASE_TEMPLATE.md release-notes.md
+          sed -i "s/__VERSION__/${tag}/g" release-notes.md
+          {
+            echo ""
+            echo "## Artifacts"
+            find release-assets-flat -maxdepth 1 -type f -printf -- "- %f\n" | sort
+          } >> release-notes.md
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: release-assets/**/*
+          files: release-assets-flat/**/*
           fail_on_unmatched_files: false
           overwrite_files: true
+          body_path: release-notes.md

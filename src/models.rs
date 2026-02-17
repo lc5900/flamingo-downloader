@@ -86,6 +86,11 @@ pub struct AddTaskOptions {
     pub out: Option<String>,
     pub max_connection_per_server: Option<u32>,
     pub split: Option<u32>,
+    pub max_download_limit: Option<String>,
+    pub user_agent: Option<String>,
+    pub referer: Option<String>,
+    #[serde(default)]
+    pub headers: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -113,6 +118,14 @@ pub struct GlobalSettings {
     pub browser_bridge_port: Option<u16>,
     pub browser_bridge_token: Option<String>,
     pub ui_theme: Option<String>, // system | light | dark
+    pub retry_max_attempts: Option<u32>,
+    pub retry_backoff_secs: Option<u32>,
+    pub retry_fallback_mirrors: Option<String>, // newline/comma separated URL prefixes
+    pub metadata_timeout_secs: Option<u32>,
+    pub speed_plan: Option<String>, // JSON array: [{"days":"1,2,3","start":"09:00","end":"18:00","limit":"2M"}]
+    pub first_run_done: Option<bool>,
+    pub minimize_to_tray: Option<bool>,
+    pub notify_on_complete: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -176,4 +189,32 @@ pub struct OperationLog {
     pub ts: i64,
     pub action: String,
     pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StartupNotice {
+    pub level: String, // info | warning | error
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskListSnapshot {
+    pub version: u32,
+    pub exported_at: i64,
+    pub tasks: Vec<Task>,
+    pub task_files: Vec<TaskFile>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportTaskListResult {
+    pub imported_tasks: usize,
+    pub imported_files: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppUpdateStrategy {
+    pub mode: String, // manual_release | tauri_updater_future
+    pub current_version: String,
+    pub channel: String,
+    pub notes: String,
 }

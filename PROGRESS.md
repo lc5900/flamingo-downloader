@@ -911,3 +911,290 @@
 - Verified by:
   - `cd ui && npm run build`
   - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 93 - React List UX Parity (Part 1) (Done)
+- Added list toolbar controls in React UI:
+  - keyword search (`name/source/task id`)
+  - status filter (`all/active/paused/queued/error/metadata/completed`)
+  - sort selector (`updated/speed/progress/name`)
+- Implemented list filtering/sorting logic in `useMemo` pipeline before table render.
+- Replaced simple remove action with explicit remove dialog:
+  - supports `delete_files` switch
+  - calls `remove_task(taskId, deleteFiles)` with selected value
+- Added i18n keys (EN/ZH) for new toolbar and remove-dialog copy.
+- Synced latest React build assets into `dist/`.
+- Verified by:
+  - `cd ui && npm run build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 94 - React Batch Actions (Done)
+- Added row multi-selection in React task table (`rowSelection`).
+- Added batch action toolbar controls:
+  - selected count
+  - pause selected
+  - resume selected
+  - remove selected
+- Implemented batch handlers using existing backend commands:
+  - `pause_task`
+  - `resume_task`
+  - `remove_task`
+- Reused remove dialog for both single and batch removal, including `delete_files` toggle.
+- Added EN/ZH i18n keys for batch controls and selected count.
+- Synced latest React build artifacts into `dist/`.
+- Verified by:
+  - `cd ui && npm run build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 95 - React Rich Row Info (ETA + Error Details) (Done)
+- Added richer task table fields in React UI:
+  - new ETA column computed from `remaining_bytes / download_speed`
+  - fallback to `--` when ETA is unavailable
+  - `0s` for completed tasks
+- Extended task typing and rendering with backend error fields:
+  - `error_code`
+  - `error_message`
+- Added expandable row details for each task:
+  - source URL/magnet
+  - task ID
+  - full error detail block (`[error_code] error_message`) when available
+- Improved inline status readability for failed tasks:
+  - compact inline error preview beside ERROR status tag
+  - ellipsis overflow handling to keep table compact
+- Added new EN/ZH i18n copy:
+  - ETA column
+  - no-ETA fallback
+  - error details / source / task ID labels
+- Updated TODO:
+  - marked `React rich row info (ETA, error details)` as done.
+- Verified by:
+  - `cd ui && npm run build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 96 - Better Add-Task UX (Done)
+- Upgraded add-task modal usability for URL/magnet flows:
+  - auto-detect clipboard content when opening the modal
+  - prefill URL or magnet field if detected and show a hint toast
+  - infer suggested save directory from detected source type/content
+- Added Enter-to-submit support:
+  - pressing Enter in URL/magnet input now triggers add action directly
+- Added smart paste switching:
+  - pasting a magnet into URL tab auto-switches to magnet tab and fills value
+  - pasting a URL into magnet tab auto-switches to URL tab and fills value
+- Improved validation and error feedback:
+  - explicit type mismatch check (URL tab with magnet input, or reverse)
+  - unified add failure message prefix for clearer diagnostics
+  - keeps AntD field-level validation behavior (no duplicate noise)
+- Added EN/ZH i18n keys for:
+  - clipboard hint
+  - add failure prefix
+  - invalid type message
+- Updated TODO:
+  - marked `Better add-task UX (paste auto-detect, Enter submit, clearer errors)` as done.
+- Verified by:
+  - `cd ui && npm run build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 97 - Startup Auto-Reconcile / Session-Recovery Messaging (Done)
+- Added backend startup notice model and persistence:
+  - new `StartupNotice { level, message }` response type
+  - startup notices are stored in settings keys:
+    - `startup_notice_level`
+    - `startup_notice_message`
+- Added service APIs for startup messaging:
+  - `set_startup_notice(level, message)`
+  - `consume_startup_notice()` (read once and clear)
+- Enhanced backend startup flow in `init_backend`:
+  - aria2 start success:
+    - runs reconcile
+    - writes startup info notice with recovered count when applicable
+  - aria2 start failure:
+    - writes warning notice with actionable hint to check Settings
+  - aria2 binary missing:
+    - writes warning notice prompting path setup in Settings
+- Exposed Tauri command:
+  - `consume_startup_notice`
+- Wired React app to auto-show startup notice on launch:
+  - success toast for info notices
+  - warning/error toast for failure cases
+  - one-time consumption prevents repeated popups
+- Updated TODO:
+  - marked `Startup auto-reconcile/session-recovery messaging` as done.
+- Verified by:
+  - `cd ui && npm run build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 98 - Per-Task Options (Done)
+- Extended backend `AddTaskOptions` to support richer per-task controls:
+  - `out` (filename)
+  - `max_download_limit`
+  - `max_connection_per_server`
+  - `split`
+  - `user_agent`
+  - `referer`
+  - `headers` (multi-line request headers)
+- Updated aria2 option mapping in service layer:
+  - `max-download-limit`
+  - `user-agent`
+  - `referer`
+  - `header`
+- Upgraded add-task modal (React) with advanced options section:
+  - filename
+  - per-task speed limit
+  - per-task max connections / split
+  - user-agent / referer
+  - cookie input (mapped to `Cookie:` header)
+  - extra headers textarea (one header per line)
+- Unified option payload for URL / magnet / torrent add commands, so advanced options apply consistently.
+- Added EN/ZH i18n labels for all new advanced option fields.
+- Updated TODO:
+  - marked `Per-task options (save dir, filename, limits, headers/cookies/UA)` as done.
+- Verified by:
+  - `cd ui && npm run build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 99 - Empty States + Skeleton Loading (Done)
+- Improved main task list loading/empty UX:
+  - added first-load skeleton placeholders to avoid abrupt blank content
+  - keeps normal table loading state for subsequent refreshes
+- Added clearer empty states for both sections:
+  - `Downloading`: "No active downloads"
+  - `Downloaded`: "No completed downloads yet"
+  - contextual hint text for onboarding
+  - quick "New Download" CTA button in empty downloading state
+- Added EN/ZH i18n keys for empty-state copy.
+- Updated TODO:
+  - marked `Better empty states and skeleton loading` as done.
+- Verified by:
+  - `cd ui && npm run build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 100 - Add Dialog UX/Scroll Optimization (Done)
+- Removed automatic clipboard read on `New Download` open:
+  - prevents OS-level paste permission prompt/button appearing before modal
+  - keeps smart paste detection when user actually pastes into URL/magnet fields
+- Redesigned add-task modal for better density and stability:
+  - fixed-height modal shell
+  - internal body scrolling only (no whole-page scroll side effects)
+  - advanced options moved into collapsed section (`Collapse`)
+- Added dedicated add-modal layout styles:
+  - locked modal wrap overflow
+  - flex column modal content/body
+  - scroll container inside modal body
+- Verified by:
+  - `cd ui && npm run build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 101 - Release Notes Template + Artifact Naming Checks (Done)
+- Added release notes template:
+  - new file `.github/RELEASE_TEMPLATE.md`
+  - includes highlights, notes, and checksum guidance
+- Upgraded release workflow (`.github/workflows/build-release.yml`):
+  - normalizes release artifact names to:
+    - `Flamingo-Downloader-<tag>-<platform>.<ext>`
+  - supports common bundle types (`.dmg`, `.msi`, `.exe`, `.deb`, `.rpm`, `.AppImage`, `.zip`, `.tar.gz`)
+  - enforces per-platform artifact presence checks (linux/windows/macos)
+  - generates `SHA256SUMS.txt` for published assets
+  - generates `release-notes.md` from template and appends artifact list
+  - publishes release from normalized directory with `body_path`
+- Updated TODO:
+  - marked `Release notes template and artifact naming checks` as done.
+
+## Step 102 - Advanced Table UX (Resizable + Sticky Columns) (Done)
+- Added draggable column resize support for task table:
+  - integrated `react-resizable`
+  - custom resizable table header cell (`ResizableTitle`)
+  - per-column width state with minimum width guards
+- Upgraded table layout for better large-data usability:
+  - sticky key columns:
+    - `Name` and `Status` fixed on the left
+    - `Actions` fixed on the right
+  - enabled horizontal scroll for narrow windows
+- Added table UX styles:
+  - explicit resize handle affordance
+  - fixed-column z-index and header cell positioning tweaks
+- Updated TODO:
+  - marked `Advanced table UX (resizable columns, sticky key columns)` as done.
+- Verified by:
+  - `cd ui && npm run build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 103 - Import / Export Task List (Done)
+- Added backend task list snapshot support:
+  - `TaskListSnapshot` model (`version`, `exported_at`, `tasks`, `task_files`)
+  - `ImportTaskListResult` model (`imported_tasks`, `imported_files`)
+- Added service-layer APIs:
+  - `export_task_list_json()`:
+    - exports all tasks + related file rows into pretty JSON
+  - `import_task_list_json(payload)`:
+    - validates and imports task snapshot JSON
+    - clears `aria2_gid` on imported tasks to avoid stale runtime binding
+    - upserts tasks and replaces task file mappings
+    - logs import counts
+- Exposed Tauri commands:
+  - `export_task_list_json`
+  - `import_task_list_json`
+- Added React UI entry in Settings (Basic -> aria2 group):
+  - `Import / Export` button
+  - modal with:
+    - exported JSON viewer
+    - copy button
+    - import JSON textarea
+    - apply import action
+  - success toast with imported counts
+- Updated TODO:
+  - marked `Import/export task list` as done.
+- Verified by:
+  - `cd ui && npm run build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 104 - Local Crash/Debug Log Export Package (Done)
+- Added backend debug bundle export capability:
+  - new async service API: `export_debug_bundle()`
+  - writes a temporary ZIP package with:
+    - `diagnostics.json`
+    - `operation_logs.json`
+    - `tasks.json`
+    - `task_files.json`
+  - logs output path to operation logs
+- Exposed Tauri command:
+  - `export_debug_bundle`
+- Added diagnostics page action:
+  - new button `Export Debug Bundle`
+  - shows success toast with generated zip path
+  - refreshes diagnostics view after export
+- Updated TODO:
+  - marked `Local crash-log export package` as done.
+- Verified by:
+  - `cd ui && npm run build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Step 105 - Remaining TODO Batch Completion (Done)
+- Download capability strategy features:
+  - global speed plan execution added in sync loop (time-window JSON rules -> auto apply `max-overall-download-limit`)
+  - service-layer retry policy added for `error` tasks:
+    - retry attempts / backoff config
+    - fallback mirror prefixes for HTTP source retry
+  - metadata timeout handling added for magnet metadata stage (`METADATA_TIMEOUT`)
+- BT/magnet UX improvements:
+  - file selection workflow added in task row actions (`Files`)
+  - fetches `get_task_detail`, displays selectable file list modal
+  - applies selection via `set_task_file_selection`
+  - tracker preset quick-fill buttons added in settings
+- Settings/onboarding improvements:
+  - first-run setup wizard modal added (blocking until basic setup saved)
+  - reliability/tray preference settings added and persisted
+  - grouped settings architecture expanded with reliability/tray sections
+- Application update strategy:
+  - backend command `get_app_update_strategy` added
+  - updates page now shows app update strategy payload alongside aria2 update data
+- Visual refinement:
+  - unified transition/motion polish added to buttons/cards/inputs
+  - subtle app entry animation and hover lift interactions
+- Data model/settings storage extended:
+  - added global setting fields for retry/speed-plan/metadata-timeout/first-run/tray prefs
+  - DB save/load pathways wired for all new fields
+- Updated TODO:
+  - all remaining items marked complete.
+- Verified by:
+  - `cd ui && npm run build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`

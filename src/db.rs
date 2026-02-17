@@ -374,6 +374,30 @@ impl Database {
         if let Some(v) = &settings.ui_theme {
             self.set_setting("ui_theme", v)?;
         }
+        if let Some(v) = settings.retry_max_attempts {
+            self.set_setting("retry_max_attempts", &v.to_string())?;
+        }
+        if let Some(v) = settings.retry_backoff_secs {
+            self.set_setting("retry_backoff_secs", &v.to_string())?;
+        }
+        if let Some(v) = &settings.retry_fallback_mirrors {
+            self.set_setting("retry_fallback_mirrors", v)?;
+        }
+        if let Some(v) = settings.metadata_timeout_secs {
+            self.set_setting("metadata_timeout_secs", &v.to_string())?;
+        }
+        if let Some(v) = &settings.speed_plan {
+            self.set_setting("speed_plan", v)?;
+        }
+        if let Some(v) = settings.first_run_done {
+            self.set_setting("first_run_done", if v { "true" } else { "false" })?;
+        }
+        if let Some(v) = settings.minimize_to_tray {
+            self.set_setting("minimize_to_tray", if v { "true" } else { "false" })?;
+        }
+        if let Some(v) = settings.notify_on_complete {
+            self.set_setting("notify_on_complete", if v { "true" } else { "false" })?;
+        }
         let rules_json = serde_json::to_string(&settings.download_dir_rules)
             .context("serialize download_dir_rules")?;
         self.set_setting("download_dir_rules", &rules_json)?;
@@ -418,6 +442,38 @@ impl Database {
                 .and_then(|v| v.parse::<u16>().ok()),
             browser_bridge_token: self.get_setting("browser_bridge_token")?,
             ui_theme: self.get_setting("ui_theme")?,
+            retry_max_attempts: self
+                .get_setting("retry_max_attempts")?
+                .and_then(|v| v.parse::<u32>().ok()),
+            retry_backoff_secs: self
+                .get_setting("retry_backoff_secs")?
+                .and_then(|v| v.parse::<u32>().ok()),
+            retry_fallback_mirrors: self.get_setting("retry_fallback_mirrors")?,
+            metadata_timeout_secs: self
+                .get_setting("metadata_timeout_secs")?
+                .and_then(|v| v.parse::<u32>().ok()),
+            speed_plan: self.get_setting("speed_plan")?,
+            first_run_done: self
+                .get_setting("first_run_done")?
+                .and_then(|v| match v.as_str() {
+                    "true" => Some(true),
+                    "false" => Some(false),
+                    _ => None,
+                }),
+            minimize_to_tray: self
+                .get_setting("minimize_to_tray")?
+                .and_then(|v| match v.as_str() {
+                    "true" => Some(true),
+                    "false" => Some(false),
+                    _ => None,
+                }),
+            notify_on_complete: self
+                .get_setting("notify_on_complete")?
+                .and_then(|v| match v.as_str() {
+                    "true" => Some(true),
+                    "false" => Some(false),
+                    _ => None,
+                }),
         })
     }
 

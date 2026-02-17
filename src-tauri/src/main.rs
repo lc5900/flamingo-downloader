@@ -5,11 +5,14 @@ use flamingo_downloader::{
     events::EventEmitter,
     init_backend,
     models::{
-        AddTaskOptions, Aria2UpdateApplyResult, Aria2UpdateInfo, GlobalSettings, OperationLog,
-        Task, TaskFile, TaskStatus, TaskType,
+        AddTaskOptions, AppUpdateStrategy, Aria2UpdateApplyResult, Aria2UpdateInfo,
+        GlobalSettings, ImportTaskListResult, OperationLog, StartupNotice, Task, TaskFile,
+        TaskStatus, TaskType,
     },
 };
 use tauri::{Emitter, Manager, State};
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 
 #[derive(Default)]
 struct TauriEventEmitter {
@@ -232,6 +235,15 @@ async fn get_diagnostics(state: State<'_, AppState>) -> Result<flamingo_download
 }
 
 #[tauri::command]
+async fn export_debug_bundle(state: State<'_, AppState>) -> Result<String, String> {
+    state
+        .service
+        .export_debug_bundle()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn rpc_ping(state: State<'_, AppState>) -> Result<String, String> {
     state.service.rpc_ping().await.map_err(|e| e.to_string())
 }
@@ -280,6 +292,33 @@ async fn clear_operation_logs(state: State<'_, AppState>) -> Result<(), String> 
 }
 
 #[tauri::command]
+async fn export_task_list_json(state: State<'_, AppState>) -> Result<String, String> {
+    state
+        .service
+        .export_task_list_json()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn import_task_list_json(
+    state: State<'_, AppState>,
+    payload: String,
+) -> Result<ImportTaskListResult, String> {
+    state
+        .service
+        .import_task_list_json(&payload)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn consume_startup_notice(state: State<'_, AppState>) -> Result<Option<StartupNotice>, String> {
+    state
+        .service
+        .consume_startup_notice()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn check_aria2_update(state: State<'_, AppState>) -> Result<Aria2UpdateInfo, String> {
     state
         .service
@@ -294,6 +333,14 @@ async fn update_aria2_now(state: State<'_, AppState>) -> Result<Aria2UpdateApply
         .service
         .update_aria2_now()
         .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_app_update_strategy(state: State<'_, AppState>) -> Result<AppUpdateStrategy, String> {
+    state
+        .service
+        .get_app_update_strategy()
         .map_err(|e| e.to_string())
 }
 
@@ -334,10 +381,32 @@ fn main() {
     let emitter_for_setup = emitter.clone();
 
     tauri::Builder::default()
+        .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let minimize_to_tray = window
+                    .state::<AppState>()
+                    .service
+                    .get_global_settings()
+                    .ok()
+                    .and_then(|s| s.minimize_to_tray)
+                    .unwrap_or(false);
+                if minimize_to_tray {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .setup(move |app| {
             emitter_for_setup.bind(app.handle().clone());
 
             let cwd = std::env::current_dir()?;
+            if let Ok(resource_dir) = app.path().resource_dir() {
+                // Rust 2024 marks environment mutation as unsafe.
+                unsafe { std::env::set_var("FLAMINGO_RESOURCE_DIR", resource_dir) };
+            }
             let runtime_dir = cwd.join("runtime");
             std::fs::create_dir_all(&runtime_dir)?;
 
@@ -351,6 +420,40 @@ fn main() {
             app.manage(AppState {
                 service: handles.service,
             });
+
+            let show_item = MenuItemBuilder::with_id("tray_show", "Show").build(app)?;
+            let quit_item = MenuItemBuilder::with_id("tray_quit", "Quit").build(app)?;
+            let tray_menu = MenuBuilder::new(app)
+                .items(&[&show_item, &quit_item])
+                .build()?;
+            let mut tray_builder = TrayIconBuilder::new().menu(&tray_menu);
+            if let Some(icon) = app.default_window_icon() {
+                tray_builder = tray_builder.icon(icon.clone());
+            }
+            let tray = tray_builder
+                .on_menu_event(|app, event| match event.id().as_ref() {
+                    "tray_show" => {
+                        if let Some(win) = app.get_webview_window("main") {
+                            let _ = win.show();
+                            let _ = win.set_focus();
+                        }
+                    }
+                    "tray_quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click { .. } = event
+                        && let Some(win) = tray.app_handle().get_webview_window("main")
+                    {
+                        let _ = win.show();
+                        let _ = win.set_focus();
+                    }
+                })
+                .build(app)?;
+            // Keep tray icon alive for app lifetime.
+            std::mem::forget(tray);
 
             Ok(())
         })
@@ -373,14 +476,19 @@ fn main() {
             suggest_save_dir,
             detect_aria2_bin_paths,
             get_diagnostics,
+            export_debug_bundle,
             rpc_ping,
             restart_aria2,
             startup_check_aria2,
             save_session,
             list_operation_logs,
             clear_operation_logs,
+            export_task_list_json,
+            import_task_list_json,
+            consume_startup_notice,
             check_aria2_update,
             update_aria2_now,
+            get_app_update_strategy,
             open_logs_window,
             close_logs_window
         ])

@@ -87,7 +87,8 @@ fn resolve_default_download_dir(base_dir: &Path) -> PathBuf {
 
 fn resolve_aria2_bin(base_dir: &Path) -> PathBuf {
     let bin_dir = base_dir.join("aria2").join("bin");
-    let mut candidates = if cfg!(target_os = "windows") {
+    let mut candidates = bundled_aria2_candidates();
+    let base_candidates = if cfg!(target_os = "windows") {
         vec![
             bin_dir.join("windows").join("aria2c.exe"),
             bin_dir.join("aria2c.exe"),
@@ -104,6 +105,7 @@ fn resolve_aria2_bin(base_dir: &Path) -> PathBuf {
             bin_dir.join("aria2c"),
         ]
     };
+    candidates.extend(base_candidates);
 
     candidates.extend(system_aria2_candidates());
 
@@ -117,6 +119,26 @@ fn resolve_aria2_bin(base_dir: &Path) -> PathBuf {
                 bin_dir.join("aria2c")
             }
         })
+}
+
+fn bundled_aria2_candidates() -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let Some(resource_dir) = std::env::var_os("FLAMINGO_RESOURCE_DIR").map(PathBuf::from) else {
+        return out;
+    };
+    let bin_dir = resource_dir.join("aria2").join("bin");
+    if cfg!(target_os = "windows") {
+        out.push(bin_dir.join("windows").join("aria2c.exe"));
+        out.push(bin_dir.join("aria2c.exe"));
+    } else if cfg!(target_os = "macos") {
+        out.push(bin_dir.join("macos").join("aria2c"));
+        out.push(bin_dir.join("darwin").join("aria2c"));
+        out.push(bin_dir.join("aria2c"));
+    } else {
+        out.push(bin_dir.join("linux").join("aria2c"));
+        out.push(bin_dir.join("aria2c"));
+    }
+    out
 }
 
 fn system_aria2_candidates() -> Vec<PathBuf> {

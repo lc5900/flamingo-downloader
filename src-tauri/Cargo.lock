@@ -810,6 +810,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "bzip2",
+ "chrono",
  "dirs 5.0.1",
  "flate2",
  "reqwest 0.12.28",

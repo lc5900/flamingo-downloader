@@ -38,6 +38,13 @@ pub async fn init_backend(
         &aria2_cfg.default_download_dir.to_string_lossy(),
     )?;
     db.set_setting_if_absent("aria2_bin_path", &aria2_cfg.aria2_bin.to_string_lossy())?;
+    if db
+        .get_setting("aria2_bin_path")?
+        .map(|v| !v.trim().is_empty() && Path::new(v.trim()).exists())
+        != Some(true)
+    {
+        db.set_setting("aria2_bin_path", &aria2_cfg.aria2_bin.to_string_lossy())?;
+    }
     db.set_setting_if_absent(
         "max_concurrent_downloads",
         &aria2_cfg.max_concurrent_downloads.to_string(),
@@ -64,6 +71,16 @@ pub async fn init_backend(
     db.set_setting_if_absent("browser_bridge_enabled", "true")?;
     db.set_setting_if_absent("browser_bridge_port", "16789")?;
     db.set_setting_if_absent("ui_theme", "system")?;
+    db.set_setting_if_absent("retry_max_attempts", "2")?;
+    db.set_setting_if_absent("retry_backoff_secs", "15")?;
+    db.set_setting_if_absent("retry_fallback_mirrors", "")?;
+    db.set_setting_if_absent("metadata_timeout_secs", "180")?;
+    db.set_setting_if_absent("speed_plan", "[]")?;
+    db.set_setting_if_absent("first_run_done", "false")?;
+    db.set_setting_if_absent("minimize_to_tray", "false")?;
+    db.set_setting_if_absent("notify_on_complete", "true")?;
+    db.set_setting_if_absent("startup_notice_level", "")?;
+    db.set_setting_if_absent("startup_notice_message", "")?;
     let bridge_token = match db.get_setting("browser_bridge_token")? {
         Some(v) if !v.trim().is_empty() => v,
         _ => {
@@ -77,12 +94,34 @@ pub async fn init_backend(
     let service = Arc::new(DownloadService::new(db.clone(), aria2.clone(), emitter));
 
     if aria2_cfg.aria2_bin.exists() {
-        if let Ok(_ep) = aria2.start().await {
-            let _ = service.reconcile_with_aria2().await;
-            aria2.clone().start_health_guard().await;
-            service.clone().start_sync_loop();
-            service.clone().start_log_flush_loop();
+        match aria2.start().await {
+            Ok(ep) => {
+                let recovered = service.reconcile_with_aria2().await.unwrap_or(0);
+                let message = if recovered > 0 {
+                    format!(
+                        "Startup recovery complete: recovered {recovered} task(s), aria2 ready at {}",
+                        ep.endpoint
+                    )
+                } else {
+                    format!("Startup check complete: aria2 ready at {}", ep.endpoint)
+                };
+                let _ = service.set_startup_notice("info", &message);
+                aria2.clone().start_health_guard().await;
+                service.clone().start_sync_loop();
+                service.clone().start_log_flush_loop();
+            }
+            Err(e) => {
+                let _ = service.set_startup_notice(
+                    "warning",
+                    &format!("Startup check failed: {e}. Please verify aria2 path in Settings."),
+                );
+            }
         }
+    } else {
+        let _ = service.set_startup_notice(
+            "warning",
+            "aria2 binary not found on startup. Please set a valid aria2 path in Settings.",
+        );
     }
 
     let bridge_enabled = db

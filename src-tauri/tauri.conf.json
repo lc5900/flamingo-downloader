@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "",
     "beforeBuildCommand": "",
-    "frontendDist": "../dist"
+    "frontendDist": "../ui/dist"
   },
   "app": {
     "withGlobalTauri": true,
@@ -24,6 +24,9 @@
   },
   "bundle": {
     "active": true,
+    "resources": [
+      "resources/**/*"
+    ],
     "icon": [
       "icons/icon.icns",
       "icons/icon.ico",
