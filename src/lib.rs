@@ -70,6 +70,7 @@ pub async fn init_backend(
     db.set_setting_if_absent("download_dir_rules", "[]")?;
     db.set_setting_if_absent("browser_bridge_enabled", "true")?;
     db.set_setting_if_absent("browser_bridge_port", "16789")?;
+    db.set_setting_if_absent("clipboard_watch_enabled", "false")?;
     db.set_setting_if_absent("ui_theme", "system")?;
     db.set_setting_if_absent("retry_max_attempts", "2")?;
     db.set_setting_if_absent("retry_backoff_secs", "15")?;
@@ -77,6 +78,7 @@ pub async fn init_backend(
     db.set_setting_if_absent("metadata_timeout_secs", "180")?;
     db.set_setting_if_absent("speed_plan", "[]")?;
     db.set_setting_if_absent("first_run_done", "false")?;
+    db.set_setting_if_absent("start_minimized", "false")?;
     db.set_setting_if_absent("minimize_to_tray", "false")?;
     db.set_setting_if_absent("notify_on_complete", "true")?;
     db.set_setting_if_absent("startup_notice_level", "")?;
@@ -93,30 +95,47 @@ pub async fn init_backend(
     let aria2 = Arc::new(Aria2Manager::new(aria2_cfg.clone()));
     let service = Arc::new(DownloadService::new(db.clone(), aria2.clone(), emitter));
 
+    service.clone().start_sync_loop();
+    service.clone().start_log_flush_loop();
     if aria2_cfg.aria2_bin.exists() {
-        match aria2.start().await {
-            Ok(ep) => {
-                let recovered = service.reconcile_with_aria2().await.unwrap_or(0);
-                let message = if recovered > 0 {
-                    format!(
-                        "Startup recovery complete: recovered {recovered} task(s), aria2 ready at {}",
-                        ep.endpoint
-                    )
-                } else {
-                    format!("Startup check complete: aria2 ready at {}", ep.endpoint)
-                };
-                let _ = service.set_startup_notice("info", &message);
-                aria2.clone().start_health_guard().await;
-                service.clone().start_sync_loop();
-                service.clone().start_log_flush_loop();
+        let aria2_bg = aria2.clone();
+        let service_bg = service.clone();
+        tokio::spawn(async move {
+            let _ = service_bg.set_startup_notice(
+                "info",
+                "Starting aria2 in background...",
+            );
+            match aria2_bg.start().await {
+                Ok(ep) => {
+                    let _ = service_bg.apply_saved_runtime_global_options().await;
+                    let recovered = service_bg.reconcile_with_aria2().await.unwrap_or(0);
+                    let compat_hint = if ep.compat_mode {
+                        " (compatibility mode: skipped unsupported aria2 flags)"
+                    } else {
+                        ""
+                    };
+                    let message = if recovered > 0 {
+                        format!(
+                            "Startup recovery complete: recovered {recovered} task(s), aria2 ready at {}{}",
+                            ep.endpoint, compat_hint
+                        )
+                    } else {
+                        format!(
+                            "Startup check complete: aria2 ready at {}{}",
+                            ep.endpoint, compat_hint
+                        )
+                    };
+                    let _ = service_bg.set_startup_notice("info", &message);
+                    aria2_bg.start_health_guard().await;
+                }
+                Err(e) => {
+                    let _ = service_bg.set_startup_notice(
+                        "warning",
+                        &format!("Startup check failed: {e}. Please verify aria2 path in Settings."),
+                    );
+                }
             }
-            Err(e) => {
-                let _ = service.set_startup_notice(
-                    "warning",
-                    &format!("Startup check failed: {e}. Please verify aria2 path in Settings."),
-                );
-            }
-        }
+        });
     } else {
         let _ = service.set_startup_notice(
             "warning",

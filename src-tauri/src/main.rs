@@ -10,7 +10,7 @@ use flamingo_downloader::{
         TaskStatus, TaskType,
     },
 };
-use tauri::{Emitter, Manager, State};
+use tauri::{Emitter, Manager, State, include_image};
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 
@@ -166,6 +166,18 @@ async fn list_tasks(
 }
 
 #[tauri::command]
+async fn set_task_category(
+    state: State<'_, AppState>,
+    task_id: String,
+    category: Option<String>,
+) -> Result<(), String> {
+    state
+        .service
+        .set_task_category(&task_id, category.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn get_task_detail(state: State<'_, AppState>, task_id: String) -> Result<TaskDetailResponse, String> {
     let (task, files) = state
         .service
@@ -173,6 +185,18 @@ async fn get_task_detail(state: State<'_, AppState>, task_id: String) -> Result<
         .await
         .map_err(|e| e.to_string())?;
     Ok(TaskDetailResponse { task, files })
+}
+
+#[tauri::command]
+async fn get_task_runtime_status(
+    state: State<'_, AppState>,
+    task_id: String,
+) -> Result<serde_json::Value, String> {
+    state
+        .service
+        .get_task_runtime_status(&task_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -206,6 +230,15 @@ async fn get_global_settings(state: State<'_, AppState>) -> Result<GlobalSetting
 }
 
 #[tauri::command]
+async fn reset_global_settings_to_defaults(state: State<'_, AppState>) -> Result<(), String> {
+    state
+        .service
+        .reset_global_settings_to_defaults()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn suggest_save_dir(
     state: State<'_, AppState>,
     task_type: TaskType,
@@ -214,6 +247,18 @@ async fn suggest_save_dir(
     state
         .service
         .suggest_save_dir(task_type, source.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn suggest_save_dir_detail(
+    state: State<'_, AppState>,
+    task_type: TaskType,
+    source: Option<String>,
+) -> Result<flamingo_downloader::models::SaveDirSuggestion, String> {
+    state
+        .service
+        .suggest_save_dir_detail(task_type, source.as_deref())
         .map_err(|e| e.to_string())
 }
 
@@ -262,6 +307,17 @@ async fn startup_check_aria2(state: State<'_, AppState>) -> Result<String, Strin
     state
         .service
         .startup_check_aria2()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn startup_self_check_summary(
+    state: State<'_, AppState>,
+) -> Result<flamingo_downloader::models::StartupSelfCheck, String> {
+    state
+        .service
+        .startup_self_check_summary()
         .await
         .map_err(|e| e.to_string())
 }
@@ -381,6 +437,9 @@ fn main() {
     let emitter_for_setup = emitter.clone();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .on_window_event(|window, event| {
             if window.label() != "main" {
                 return;
@@ -421,13 +480,33 @@ fn main() {
                 service: handles.service,
             });
 
+            if let Some(main_win) = app.get_webview_window("main")
+                && let Ok(settings) = app.state::<AppState>().service.get_global_settings()
+                && settings.start_minimized.unwrap_or(false)
+            {
+                if settings.minimize_to_tray.unwrap_or(false) {
+                    let _ = main_win.hide();
+                } else {
+                    let _ = main_win.minimize();
+                }
+            }
+
             let show_item = MenuItemBuilder::with_id("tray_show", "Show").build(app)?;
             let quit_item = MenuItemBuilder::with_id("tray_quit", "Quit").build(app)?;
             let tray_menu = MenuBuilder::new(app)
                 .items(&[&show_item, &quit_item])
                 .build()?;
-            let mut tray_builder = TrayIconBuilder::new().menu(&tray_menu);
-            if let Some(icon) = app.default_window_icon() {
+            let tray_icon = if cfg!(target_os = "windows") {
+                Some(include_image!("icons/icon.ico"))
+            } else {
+                Some(include_image!("icons/icon.png"))
+            };
+            let mut tray_builder = TrayIconBuilder::new()
+                .menu(&tray_menu)
+                .tooltip("Flamingo Downloader");
+            if let Some(icon) = tray_icon {
+                tray_builder = tray_builder.icon(icon);
+            } else if let Some(icon) = app.default_window_icon() {
                 tray_builder = tray_builder.icon(icon.clone());
             }
             let tray = tray_builder
@@ -469,17 +548,22 @@ fn main() {
             open_task_file,
             open_task_dir,
             list_tasks,
+            set_task_category,
             get_task_detail,
+            get_task_runtime_status,
             set_task_file_selection,
             set_global_settings,
             get_global_settings,
+            reset_global_settings_to_defaults,
             suggest_save_dir,
+            suggest_save_dir_detail,
             detect_aria2_bin_paths,
             get_diagnostics,
             export_debug_bundle,
             rpc_ping,
             restart_aria2,
             startup_check_aria2,
+            startup_self_check_summary,
             save_session,
             list_operation_logs,
             clear_operation_logs,

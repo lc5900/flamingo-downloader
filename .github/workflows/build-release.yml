@@ -73,6 +73,40 @@ jobs:
         run: |
           ./scripts/ci/prepare_aria2_windows.ps1
 
+      - name: Verify staged aria2 (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${RUNNER_OS}" in
+            Linux) platform="linux" ;;
+            macOS) platform="macos" ;;
+            *) echo "unsupported runner os: ${RUNNER_OS}" ; exit 1 ;;
+          esac
+          test -x "aria2/bin/aria2c"
+          test -x "aria2/bin/${platform}/aria2c"
+          test -x "src-tauri/resources/aria2/bin/aria2c"
+          test -x "src-tauri/resources/aria2/bin/${platform}/aria2c"
+          aria2/bin/aria2c --version | head -n 1
+          src-tauri/resources/aria2/bin/aria2c --version | head -n 1
+
+      - name: Verify staged aria2 (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $paths = @(
+            "aria2/bin/aria2c.exe",
+            "aria2/bin/windows/aria2c.exe",
+            "src-tauri/resources/aria2/bin/aria2c.exe",
+            "src-tauri/resources/aria2/bin/windows/aria2c.exe"
+          )
+          foreach ($p in $paths) {
+            if (!(Test-Path $p)) { throw "missing staged aria2 binary: $p" }
+          }
+          & "aria2/bin/aria2c.exe" --version | Select-Object -First 1
+          & "src-tauri/resources/aria2/bin/aria2c.exe" --version | Select-Object -First 1
+
       - name: Install tauri-cli
         run: cargo install tauri-cli --version "^2.0" --locked
 

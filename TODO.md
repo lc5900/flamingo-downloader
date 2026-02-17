@@ -57,3 +57,50 @@
 - [x] Release notes template and artifact naming checks
 - [x] Application self-update strategy
 - [x] Local crash-log export package
+
+## Next Iteration (Backlog)
+
+### P0 - Tray and Startup
+
+- [x] Ensure tray icon is always visible on macOS/Windows/Linux (explicit icon + fallback)
+- [x] Add "start minimized" behavior and restore window state on app relaunch
+- [x] Make aria2 startup non-blocking (UI renders immediately; background start + status indicator)
+- [x] Add startup self-check summary page (aria2 path, RPC reachability, download dir permissions)
+
+### P0 - Settings and Reliability
+
+- [x] Apply more global settings to aria2 at runtime (e.g. overall speed limit, UPnP toggle) and reflect current effective values in UI
+- [x] Improve aria2 option compatibility: detect unsupported flags and auto-fallback to a minimal arg set with a clear warning
+- [x] Make aria2 path picker support "browse file" and validate executable permissions
+- [x] Add safe "reset settings to defaults" and "reset UI layout" actions
+
+### P1 - UX and Productivity
+
+- [x] Persist table layout per list (column widths, order, hidden columns, density)
+- [x] Add task details drawer (files, trackers, options, retry history, raw aria2 status)
+- [x] Support drag-and-drop (URL text, `.torrent` file) into main window to open New Download
+- [x] Add clipboard watcher (optional) to suggest creating a task when URL/magnet detected
+- [x] Add per-task tags/categories and a simple filter
+
+### P1 - Rules and Directories
+
+- [x] Show which download-dir rule matched (and allow override) in the New Download dialog
+- [x] Add "by mime/type" rule support for HTTP tasks after headers are known (fallback to extension)
+- [x] Add per-rule "create subfolder by date/domain" toggles
+
+### P1 - Notifications and Integrations
+
+- [x] Desktop notifications on complete/error with action buttons (open file/folder)
+- [x] Show dock/taskbar/tray badge counts (active/completed/error)
+- [ ] Register as handler for `magnet:` links and `.torrent` files (optional)
+
+### P2 - Browser Takeover Hardening
+
+- [ ] Finish extension handshake UX (pairing token, connection status, reconnect)
+- [ ] Add "send to Flamingo Downloader" context menu item and optional auto-intercept downloads
+- [ ] Add Firefox build and docs alongside Chromium build
+
+### P2 - QA and CI
+
+- [x] CI: verify bundled aria2 binary runs (`aria2c --version`) on each OS and fail fast if missing
+- [x] Add unit tests for retry scheduling, speed plan evaluation, and download-dir rules

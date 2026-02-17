@@ -25,8 +25,8 @@ use crate::{
     events::SharedEmitter,
     models::{
         AddTaskOptions, AppUpdateStrategy, Aria2UpdateApplyResult, Aria2UpdateInfo, Diagnostics,
-        DownloadDirRule, GlobalSettings, ImportTaskListResult, OperationLog, Task, TaskFile,
-        TaskListSnapshot, TaskStatus, TaskType,
+        DownloadDirRule, GlobalSettings, ImportTaskListResult, OperationLog, SaveDirSuggestion,
+        StartupSelfCheck, Task, TaskFile, TaskListSnapshot, TaskStatus, TaskType,
     },
 };
 
@@ -73,7 +73,9 @@ impl DownloadService {
         validate_url(url)?;
         self.ensure_aria2_ready().await?;
 
-        let save_dir = self.resolve_save_dir_for_new_task(TaskType::Http, url, &options)?;
+        let http_type = detect_http_content_type(url).await;
+        let save_dir =
+            self.resolve_save_dir_for_new_task(TaskType::Http, url, &options, http_type.as_deref())?;
         let options = with_resolved_save_dir(options, save_dir.clone());
         let task_id = Uuid::new_v4().to_string();
         let gid = self
@@ -89,6 +91,7 @@ impl DownloadService {
             source: url.to_string(),
             status: TaskStatus::Queued,
             name: None,
+            category: None,
             save_dir,
             total_length: 0,
             completed_length: 0,
@@ -111,7 +114,7 @@ impl DownloadService {
         }
         self.ensure_aria2_ready().await?;
 
-        let save_dir = self.resolve_save_dir_for_new_task(TaskType::Magnet, magnet, &options)?;
+        let save_dir = self.resolve_save_dir_for_new_task(TaskType::Magnet, magnet, &options, None)?;
         let options = with_resolved_save_dir(options, save_dir.clone());
         let task_id = Uuid::new_v4().to_string();
         let gid = self
@@ -127,6 +130,7 @@ impl DownloadService {
             source: magnet.to_string(),
             status: TaskStatus::Metadata,
             name: None,
+            category: None,
             save_dir,
             total_length: 0,
             completed_length: 0,
@@ -169,7 +173,8 @@ impl DownloadService {
         let source = source_label
             .clone()
             .unwrap_or_else(|| "torrent:base64".to_string());
-        let save_dir = self.resolve_save_dir_for_new_task(TaskType::Torrent, &source, &options)?;
+        let save_dir =
+            self.resolve_save_dir_for_new_task(TaskType::Torrent, &source, &options, None)?;
         let options = with_resolved_save_dir(options, save_dir.clone());
 
         let task_id = Uuid::new_v4().to_string();
@@ -187,6 +192,7 @@ impl DownloadService {
             source,
             status: TaskStatus::Queued,
             name: None,
+            category: None,
             save_dir,
             total_length: 0,
             completed_length: 0,
@@ -204,11 +210,25 @@ impl DownloadService {
     }
 
     pub fn suggest_save_dir(&self, task_type: TaskType, source: Option<&str>) -> Result<String> {
-        self.resolve_save_dir_for_new_task(
+        self.suggest_save_dir_detail(task_type, source)
+            .map(|v| v.save_dir)
+    }
+
+    pub fn suggest_save_dir_detail(
+        &self,
+        task_type: TaskType,
+        source: Option<&str>,
+    ) -> Result<SaveDirSuggestion> {
+        let (save_dir, matched_rule) = self.resolve_save_dir_for_new_task_detail(
             task_type,
             source.unwrap_or_default(),
             &AddTaskOptions::default(),
-        )
+            None,
+        )?;
+        Ok(SaveDirSuggestion {
+            save_dir,
+            matched_rule,
+        })
     }
 
     pub async fn pause_task(&self, task_id: &str) -> Result<()> {
@@ -344,6 +364,19 @@ impl DownloadService {
         self.db.list_tasks(status, limit, offset)
     }
 
+    pub fn set_task_category(&self, task_id: &str, category: Option<&str>) -> Result<()> {
+        let clean = category
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(ToString::to_string);
+        self.db.set_task_category(task_id, clean.as_deref())?;
+        self.push_log(
+            "set_task_category",
+            format!("task {task_id} category set to {}", clean.as_deref().unwrap_or("<none>")),
+        );
+        Ok(())
+    }
+
     pub async fn get_task_detail(&self, task_id: &str) -> Result<(Task, Vec<TaskFile>)> {
         let mut task = self
             .db
@@ -365,6 +398,18 @@ impl DownloadService {
 
         let files = self.db.list_task_files(task_id)?;
         Ok((task, files))
+    }
+
+    pub async fn get_task_runtime_status(&self, task_id: &str) -> Result<Value> {
+        let task = self
+            .db
+            .get_task(task_id)?
+            .ok_or_else(|| AppError::TaskNotFound(task_id.to_string()))?;
+        let gid = task
+            .aria2_gid
+            .ok_or_else(|| AppError::InvalidInput("task has no aria2 gid".to_string()))?;
+        self.ensure_aria2_ready().await?;
+        self.aria2.tell_status(&gid).await
     }
 
     pub async fn set_task_file_selection(
@@ -408,6 +453,9 @@ impl DownloadService {
             if !p.is_file() {
                 return Err(anyhow!("aria2_bin_path is not a file: {path}"));
             }
+            if !is_executable(p) {
+                return Err(anyhow!("aria2_bin_path is not executable: {path}"));
+            }
         }
 
         self.db.save_global_settings(&settings)?;
@@ -426,38 +474,7 @@ impl DownloadService {
             }
         }
 
-        let mut aria2_options = serde_json::Map::new();
-        if let Some(v) = settings.download_dir {
-            aria2_options.insert("dir".to_string(), json!(v));
-        }
-        if let Some(v) = settings.max_concurrent_downloads {
-            aria2_options.insert("max-concurrent-downloads".to_string(), json!(v.to_string()));
-        }
-        if let Some(v) = settings.max_connection_per_server {
-            aria2_options.insert(
-                "max-connection-per-server".to_string(),
-                json!(v.to_string()),
-            );
-        }
-        if let Some(v) = settings.max_overall_download_limit {
-            aria2_options.insert("max-overall-download-limit".to_string(), json!(v));
-        }
-        if let Some(v) = settings.bt_tracker {
-            aria2_options.insert("bt-tracker".to_string(), json!(v));
-        }
-
-        if !aria2_options.is_empty() {
-            if self.aria2.endpoint().await.is_some() {
-                self.aria2
-                    .change_global_option(Value::Object(aria2_options))
-                    .await?;
-            } else {
-                self.push_log(
-                    "set_global_settings",
-                    "aria2 not running, options saved and will apply on next restart".to_string(),
-                );
-            }
-        }
+        self.apply_saved_runtime_global_options().await?;
         self.push_log("set_global_settings", "global settings updated".to_string());
         Ok(())
     }
@@ -488,6 +505,48 @@ impl DownloadService {
 
     pub fn get_global_settings(&self) -> Result<GlobalSettings> {
         self.db.load_global_settings()
+    }
+
+    pub async fn reset_global_settings_to_defaults(&self) -> Result<()> {
+        let current = self.db.load_global_settings()?;
+        let default_download_dir = dirs::download_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .or(current.download_dir.clone())
+            .unwrap_or_else(|| ".".to_string());
+
+        let defaults = GlobalSettings {
+            aria2_bin_path: current.aria2_bin_path,
+            download_dir: Some(default_download_dir),
+            max_concurrent_downloads: Some(5),
+            max_connection_per_server: Some(8),
+            max_overall_download_limit: Some("0".to_string()),
+            bt_tracker: Some(String::new()),
+            enable_upnp: Some(true),
+            github_cdn: Some(String::new()),
+            github_token: Some(String::new()),
+            download_dir_rules: Vec::new(),
+            browser_bridge_enabled: Some(true),
+            browser_bridge_port: Some(16789),
+            browser_bridge_token: current.browser_bridge_token,
+            clipboard_watch_enabled: Some(false),
+            ui_theme: Some("system".to_string()),
+            retry_max_attempts: Some(2),
+            retry_backoff_secs: Some(15),
+            retry_fallback_mirrors: Some(String::new()),
+            metadata_timeout_secs: Some(180),
+            speed_plan: Some("[]".to_string()),
+            first_run_done: Some(true),
+            start_minimized: Some(false),
+            minimize_to_tray: Some(false),
+            notify_on_complete: Some(true),
+        };
+        self.db.save_global_settings(&defaults)?;
+        let _ = self.apply_saved_runtime_global_options().await;
+        self.push_log(
+            "reset_global_settings_to_defaults",
+            "settings reset to defaults".to_string(),
+        );
+        Ok(())
     }
 
     pub fn detect_aria2_bin_paths(&self) -> Result<Vec<String>> {
@@ -559,6 +618,11 @@ impl DownloadService {
                 .get_global_stat()
                 .await
                 .unwrap_or_else(|_| json!({}));
+            let global_option = self
+                .aria2
+                .get_global_option()
+                .await
+                .unwrap_or_else(|_| json!({}));
             let version = self.aria2.get_version().await.ok().and_then(|v| {
                 v.get("version")
                     .and_then(Value::as_str)
@@ -574,6 +638,7 @@ impl DownloadService {
                 version,
                 stderr_tail: self.aria2.stderr_tail(),
                 global_stat,
+                global_option,
             });
         }
 
@@ -587,6 +652,7 @@ impl DownloadService {
             version: None,
             stderr_tail: self.aria2.stderr_tail(),
             global_stat: json!({}),
+            global_option: json!({}),
         })
     }
 
@@ -638,6 +704,36 @@ impl DownloadService {
         };
         self.push_log("startup_check_aria2", message.clone());
         Err(anyhow!(message))
+    }
+
+    pub async fn startup_self_check_summary(&self) -> Result<StartupSelfCheck> {
+        let aria2_bin_path = self.aria2_bin_path();
+        let aria2_path = PathBuf::from(&aria2_bin_path);
+        let aria2_bin_exists = aria2_path.exists();
+        let aria2_bin_executable = is_executable(&aria2_path);
+
+        let download_dir = self.configured_download_dir()?;
+        let download_path = PathBuf::from(&download_dir);
+        let download_dir_exists = download_path.exists();
+        if !download_dir_exists {
+            let _ = fs::create_dir_all(&download_path);
+        }
+        let download_dir_writable = is_dir_writable(&download_path);
+
+        let endpoint = self.aria2.endpoint().await;
+        let rpc_ready = endpoint.is_some();
+        let rpc_endpoint = endpoint.map(|ep| ep.endpoint);
+
+        Ok(StartupSelfCheck {
+            aria2_bin_path,
+            aria2_bin_exists,
+            aria2_bin_executable,
+            download_dir,
+            download_dir_exists: download_path.exists(),
+            download_dir_writable,
+            rpc_ready,
+            rpc_endpoint,
+        })
     }
 
     pub async fn check_aria2_update(&self) -> Result<Aria2UpdateInfo> {
@@ -789,6 +885,7 @@ impl DownloadService {
                 source: format!("aria2:recovered:{}", snapshot.gid),
                 status,
                 name: snapshot.name.clone(),
+                category: None,
                 save_dir: default_dir.clone(),
                 total_length: snapshot.total_length,
                 completed_length: snapshot.completed_length,
@@ -840,8 +937,14 @@ impl DownloadService {
         let _guard = self.lifecycle_guard.lock().await;
         self.aria2.stop().await?;
         let endpoint = self.aria2.start().await?;
+        let _ = self.apply_saved_runtime_global_options().await;
         let _ = self.reconcile_with_aria2_inner().await;
-        let message = format!("restarted at {}", endpoint.endpoint);
+        let compat_hint = if endpoint.compat_mode {
+            " (compatibility mode)"
+        } else {
+            ""
+        };
+        let message = format!("restarted at {}{}", endpoint.endpoint, compat_hint);
         self.push_log("restart_aria2", message.clone());
         Ok(message)
     }
@@ -1004,6 +1107,44 @@ impl DownloadService {
         Ok(Some(crate::models::StartupNotice { level, message }))
     }
 
+    pub async fn apply_saved_runtime_global_options(&self) -> Result<()> {
+        let settings = self.db.load_global_settings()?;
+        let mut aria2_options = serde_json::Map::new();
+        if let Some(v) = settings.download_dir.filter(|v| !v.trim().is_empty()) {
+            aria2_options.insert("dir".to_string(), json!(v));
+        }
+        if let Some(v) = settings.max_concurrent_downloads {
+            aria2_options.insert("max-concurrent-downloads".to_string(), json!(v.to_string()));
+        }
+        if let Some(v) = settings.max_connection_per_server {
+            aria2_options.insert(
+                "max-connection-per-server".to_string(),
+                json!(v.to_string()),
+            );
+        }
+        if let Some(v) = settings.max_overall_download_limit.filter(|v| !v.trim().is_empty()) {
+            aria2_options.insert("max-overall-download-limit".to_string(), json!(v));
+        }
+        if let Some(v) = settings.bt_tracker.filter(|v| !v.trim().is_empty()) {
+            aria2_options.insert("bt-tracker".to_string(), json!(v));
+        }
+
+        if aria2_options.is_empty() {
+            return Ok(());
+        }
+        if self.aria2.endpoint().await.is_some() {
+            self.aria2
+                .change_global_option(Value::Object(aria2_options))
+                .await?;
+            return Ok(());
+        }
+        self.push_log(
+            "apply_runtime_options",
+            "aria2 not running, options saved and will apply on next restart".to_string(),
+        );
+        Ok(())
+    }
+
     async fn apply_speed_plan_if_needed(&self) -> Result<()> {
         let settings = self.get_global_settings()?;
         let plan_json = settings.speed_plan.unwrap_or_default();
@@ -1104,7 +1245,8 @@ impl DownloadService {
                             next_retry_at: now,
                         });
                         state.attempts += 1;
-                        state.next_retry_at = now + retry_backoff_secs * (state.attempts as i64 + 1);
+                        state.next_retry_at =
+                            compute_next_retry_at(now, retry_backoff_secs, state.attempts);
                         self.push_log(
                             "auto_retry",
                             format!("retried task {} attempt {}", task.id, state.attempts),
@@ -1116,7 +1258,8 @@ impl DownloadService {
                             next_retry_at: now,
                         });
                         state.attempts += 1;
-                        state.next_retry_at = now + retry_backoff_secs * (state.attempts as i64 + 1);
+                        state.next_retry_at =
+                            compute_next_retry_at(now, retry_backoff_secs, state.attempts);
                     }
                 }
                 _ => {
@@ -1242,6 +1385,43 @@ fn validate_url(url: &str) -> Result<()> {
     Ok(())
 }
 
+fn is_dir_writable(path: &Path) -> bool {
+    if !path.exists() || !path.is_dir() {
+        return false;
+    }
+    let probe = path.join(format!(".flamingo-write-check-{}", Uuid::new_v4()));
+    match fs::write(&probe, b"ok") {
+        Ok(_) => {
+            let _ = fs::remove_file(probe);
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+fn is_executable(path: &Path) -> bool {
+    if !path.exists() || !path.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        return fs::metadata(path)
+            .map(|m| m.permissions().mode() & 0o111 != 0)
+            .unwrap_or(false);
+    }
+    #[cfg(windows)]
+    {
+        return path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| matches!(e.to_ascii_lowercase().as_str(), "exe" | "bat" | "cmd"))
+            .unwrap_or(false);
+    }
+    #[allow(unreachable_code)]
+    false
+}
+
 fn to_aria2_options(options: AddTaskOptions) -> Value {
     let mut m = serde_json::Map::new();
     if let Some(dir) = options.save_dir {
@@ -1350,6 +1530,10 @@ fn parse_hhmm_minutes(v: &str) -> Option<i32> {
         return None;
     }
     Some(hh * 60 + mm)
+}
+
+fn compute_next_retry_at(now_ts: i64, backoff_secs: i64, attempts: u32) -> i64 {
+    now_ts + backoff_secs * (attempts as i64 + 1)
 }
 
 fn apply_fallback_source(source: &str, attempt: usize, mirrors: &[String]) -> String {
@@ -1495,9 +1679,21 @@ impl DownloadService {
         task_type: TaskType,
         source: &str,
         options: &AddTaskOptions,
+        http_content_type: Option<&str>,
     ) -> Result<String> {
+        self.resolve_save_dir_for_new_task_detail(task_type, source, options, http_content_type)
+            .map(|v| v.0)
+    }
+
+    fn resolve_save_dir_for_new_task_detail(
+        &self,
+        task_type: TaskType,
+        source: &str,
+        options: &AddTaskOptions,
+        http_content_type: Option<&str>,
+    ) -> Result<(String, Option<DownloadDirRule>)> {
         if let Some(v) = options.save_dir.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
-            return Ok(v.to_string());
+            return Ok((v.to_string(), None));
         }
         let default_dir = self.configured_download_dir()?;
         for rule in self.configured_download_dir_rules() {
@@ -1508,11 +1704,12 @@ impl DownloadService {
             if candidate.is_empty() {
                 continue;
             }
-            if rule_matches(&rule, &task_type, source) {
-                return Ok(candidate.to_string());
+            if rule_matches(&rule, &task_type, source, http_content_type) {
+                let resolved = apply_rule_subdir(candidate, &rule, source);
+                return Ok((resolved, Some(rule)));
             }
         }
-        Ok(default_dir)
+        Ok((default_dir, None))
     }
 
     fn aria2_bin_path(&self) -> String {
@@ -1677,7 +1874,12 @@ fn with_resolved_save_dir(mut options: AddTaskOptions, save_dir: String) -> AddT
     options
 }
 
-fn rule_matches(rule: &DownloadDirRule, task_type: &TaskType, source: &str) -> bool {
+fn rule_matches(
+    rule: &DownloadDirRule,
+    task_type: &TaskType,
+    source: &str,
+    http_content_type: Option<&str>,
+) -> bool {
     let matcher = rule.matcher.trim().to_lowercase();
     let patterns = rule
         .pattern
@@ -1692,7 +1894,16 @@ fn rule_matches(rule: &DownloadDirRule, task_type: &TaskType, source: &str) -> b
     match matcher.as_str() {
         "type" => {
             let t = task_type_str(task_type);
-            patterns.iter().any(|p| p == t)
+            if patterns.iter().any(|p| p == t) {
+                return true;
+            }
+            if !matches!(task_type, TaskType::Http) {
+                return false;
+            }
+            let inferred = infer_http_type_candidates(source, http_content_type);
+            patterns
+                .iter()
+                .any(|p| inferred.iter().any(|v| v == p))
         }
         "domain" => {
             let host = reqwest::Url::parse(source)
@@ -1725,6 +1936,59 @@ fn rule_matches(rule: &DownloadDirRule, task_type: &TaskType, source: &str) -> b
     }
 }
 
+fn infer_http_type_candidates(source: &str, http_content_type: Option<&str>) -> Vec<String> {
+    let mut out = Vec::<String>::new();
+    if let Some(ct) = http_content_type {
+        let ct = ct.trim().to_lowercase();
+        if !ct.is_empty() {
+            out.push(ct.clone());
+            if let Some(group) = ct.split('/').next()
+                && !group.is_empty()
+            {
+                out.push(group.to_string());
+            }
+        }
+    }
+    if let Some(ext) = reqwest::Url::parse(source)
+        .ok()
+        .and_then(|u| {
+            Path::new(u.path())
+                .extension()
+                .map(|v| v.to_string_lossy().to_lowercase())
+        })
+    {
+        out.push(ext_to_type_group(&ext).to_string());
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+fn ext_to_type_group(ext: &str) -> &'static str {
+    match ext {
+        "mp4" | "mkv" | "avi" | "mov" | "wmv" | "flv" | "webm" => "video",
+        "mp3" | "flac" | "wav" | "aac" | "ogg" | "m4a" => "audio",
+        "jpg" | "jpeg" | "png" | "gif" | "bmp" | "webp" | "svg" => "image",
+        "zip" | "rar" | "7z" | "tar" | "gz" | "bz2" | "xz" => "archive",
+        "pdf" | "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx" => "document",
+        "txt" | "md" | "csv" | "json" | "xml" | "html" | "htm" => "text",
+        _ => "binary",
+    }
+}
+
+async fn detect_http_content_type(url: &str) -> Option<String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(2))
+        .build()
+        .ok()?;
+    let response = client.head(url).send().await.ok()?;
+    response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.split(';').next().unwrap_or(v).trim().to_lowercase())
+}
+
 fn task_type_str(task_type: &TaskType) -> &'static str {
     match task_type {
         TaskType::Http => "http",
@@ -1732,6 +1996,24 @@ fn task_type_str(task_type: &TaskType) -> &'static str {
         TaskType::Magnet => "magnet",
         TaskType::Metalink => "metalink",
     }
+}
+
+fn apply_rule_subdir(base: &str, rule: &DownloadDirRule, source: &str) -> String {
+    let mut path = PathBuf::from(base);
+    if rule.subdir_by_domain
+        && let Some(host) = reqwest::Url::parse(source)
+            .ok()
+            .and_then(|u| u.host_str().map(ToString::to_string))
+            .map(|v| v.trim().to_lowercase())
+            .filter(|v| !v.is_empty())
+    {
+        path = path.join(host);
+    }
+    if rule.subdir_by_date {
+        let date = Local::now().format("%Y-%m-%d").to_string();
+        path = path.join(date);
+    }
+    path.to_string_lossy().to_string()
 }
 
 #[derive(Debug, Clone)]
@@ -2267,7 +2549,10 @@ mod tests {
         models::{Aria2TaskSnapshot, DownloadDirRule, Task, TaskStatus, TaskType},
     };
 
-    use super::{DownloadService, absolute_path, is_subpath, rule_matches};
+    use super::{
+        DownloadService, SpeedPlanRule, absolute_path, compute_next_retry_at, is_subpath,
+        rule_matches, select_speed_limit,
+    };
 
     #[test]
     fn absolute_path_resolves_relative_to_base() {
@@ -2299,16 +2584,20 @@ mod tests {
             matcher: "ext".to_string(),
             pattern: "zip,mp4".to_string(),
             save_dir: "/tmp/media".to_string(),
+            subdir_by_date: false,
+            subdir_by_domain: false,
         };
         assert!(rule_matches(
             &rule,
             &TaskType::Http,
-            "https://example.com/archive/file.zip"
+            "https://example.com/archive/file.zip",
+            None
         ));
         assert!(!rule_matches(
             &rule,
             &TaskType::Http,
-            "https://example.com/archive/file.txt"
+            "https://example.com/archive/file.txt",
+            None
         ));
     }
 
@@ -2319,16 +2608,20 @@ mod tests {
             matcher: "domain".to_string(),
             pattern: "github.com,example.org".to_string(),
             save_dir: "/tmp/code".to_string(),
+            subdir_by_date: false,
+            subdir_by_domain: false,
         };
         assert!(rule_matches(
             &domain_rule,
             &TaskType::Http,
-            "https://github.com/owner/repo/archive/main.zip"
+            "https://github.com/owner/repo/archive/main.zip",
+            None
         ));
         assert!(rule_matches(
             &domain_rule,
             &TaskType::Http,
-            "https://a.github.com/file.bin"
+            "https://a.github.com/file.bin",
+            None
         ));
 
         let type_rule = DownloadDirRule {
@@ -2336,13 +2629,49 @@ mod tests {
             matcher: "type".to_string(),
             pattern: "magnet,torrent".to_string(),
             save_dir: "/tmp/bt".to_string(),
+            subdir_by_date: false,
+            subdir_by_domain: false,
         };
-        assert!(rule_matches(&type_rule, &TaskType::Magnet, "magnet:?xt=urn:btih:abc"));
+        assert!(rule_matches(
+            &type_rule,
+            &TaskType::Magnet,
+            "magnet:?xt=urn:btih:abc",
+            None
+        ));
         assert!(!rule_matches(
             &type_rule,
             &TaskType::Http,
-            "https://example.com/a.bin"
+            "https://example.com/a.bin",
+            None
         ));
+    }
+
+    #[test]
+    fn speed_plan_selects_non_empty_limit_rule() {
+        let rules = vec![
+            SpeedPlanRule {
+                days: None,
+                start: None,
+                end: None,
+                limit: "".to_string(),
+            },
+            SpeedPlanRule {
+                days: None,
+                start: None,
+                end: None,
+                limit: "2M".to_string(),
+            },
+        ];
+        let selected = select_speed_limit(&rules);
+        assert_eq!(selected.as_deref(), Some("2M"));
+    }
+
+    #[test]
+    fn retry_next_time_uses_backoff_and_attempt() {
+        let now = 1_700_000_000_i64;
+        let backoff = 15_i64;
+        assert_eq!(compute_next_retry_at(now, backoff, 1), now + 30);
+        assert_eq!(compute_next_retry_at(now, backoff, 2), now + 45);
     }
 
     #[derive(Default)]
@@ -2388,6 +2717,7 @@ mod tests {
                 endpoint: "http://127.0.0.1:6800/jsonrpc".to_string(),
                 secret: "mock".to_string(),
                 port: 6800,
+                compat_mode: false,
             })
         }
 
@@ -2401,6 +2731,7 @@ mod tests {
                 endpoint: "http://127.0.0.1:6800/jsonrpc".to_string(),
                 secret: "mock".to_string(),
                 port: 6800,
+                compat_mode: false,
             })
         }
 
@@ -2473,6 +2804,11 @@ mod tests {
             Ok(json!({}))
         }
 
+        async fn get_global_option(&self) -> Result<Value> {
+            self.call("get_global_option");
+            Ok(json!({}))
+        }
+
         async fn get_version(&self) -> Result<Value> {
             self.call("get_version");
             Ok(json!({ "version": "mock" }))
@@ -2496,6 +2832,12 @@ mod tests {
         std::fs::create_dir_all("/tmp/tarui-tests").expect("create test download root");
         db.set_setting("download_dir", "/tmp/tarui-tests")
             .expect("set download_dir");
+        #[cfg(unix)]
+        db.set_setting("aria2_bin_path", "/bin/sh")
+            .expect("set aria2_bin_path");
+        #[cfg(windows)]
+        db.set_setting("aria2_bin_path", "C:\\Windows\\System32\\cmd.exe")
+            .expect("set aria2_bin_path");
         let emitter = Arc::new(NoopEmitter) as crate::events::SharedEmitter;
         let service = Arc::new(DownloadService::new(db.clone(), mock.clone(), emitter));
         (service, db, mock)
@@ -2571,6 +2913,7 @@ mod tests {
             source: "https://example.com/a.bin".to_string(),
             status: TaskStatus::Completed,
             name: Some("a.bin".to_string()),
+            category: None,
             save_dir: "/tmp/tarui-tests".to_string(),
             total_length: 10,
             completed_length: 10,

@@ -84,6 +84,15 @@ pub fn list_tasks(
 }
 
 #[allow(dead_code)]
+pub fn set_task_category(
+    service: Arc<DownloadService>,
+    task_id: String,
+    category: Option<String>,
+) -> Result<()> {
+    service.set_task_category(&task_id, category.as_deref())
+}
+
+#[allow(dead_code)]
 pub async fn get_task_detail(
     service: Arc<DownloadService>,
     task_id: String,
@@ -116,12 +125,26 @@ pub fn get_global_settings(service: Arc<DownloadService>) -> Result<GlobalSettin
 }
 
 #[allow(dead_code)]
+pub async fn reset_global_settings_to_defaults(service: Arc<DownloadService>) -> Result<()> {
+    service.reset_global_settings_to_defaults().await
+}
+
+#[allow(dead_code)]
 pub fn suggest_save_dir(
     service: Arc<DownloadService>,
     task_type: crate::models::TaskType,
     source: Option<String>,
 ) -> Result<String> {
     service.suggest_save_dir(task_type, source.as_deref())
+}
+
+#[allow(dead_code)]
+pub fn suggest_save_dir_detail(
+    service: Arc<DownloadService>,
+    task_type: crate::models::TaskType,
+    source: Option<String>,
+) -> Result<crate::models::SaveDirSuggestion> {
+    service.suggest_save_dir_detail(task_type, source.as_deref())
 }
 
 #[allow(dead_code)]
@@ -137,6 +160,13 @@ pub async fn restart_aria2(service: Arc<DownloadService>) -> Result<String> {
 #[allow(dead_code)]
 pub async fn startup_check_aria2(service: Arc<DownloadService>) -> Result<String> {
     service.startup_check_aria2().await
+}
+
+#[allow(dead_code)]
+pub async fn startup_self_check_summary(
+    service: Arc<DownloadService>,
+) -> Result<crate::models::StartupSelfCheck> {
+    service.startup_self_check_summary().await
 }
 
 #[allow(dead_code)]

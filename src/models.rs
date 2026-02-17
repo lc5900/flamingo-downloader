@@ -59,6 +59,7 @@ pub struct Task {
     pub source: String,
     pub status: TaskStatus,
     pub name: Option<String>,
+    pub category: Option<String>,
     pub save_dir: String,
     pub total_length: i64,
     pub completed_length: i64,
@@ -99,6 +100,10 @@ pub struct DownloadDirRule {
     pub matcher: String, // ext | domain | type
     pub pattern: String,
     pub save_dir: String,
+    #[serde(default)]
+    pub subdir_by_date: bool,
+    #[serde(default)]
+    pub subdir_by_domain: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -117,6 +122,7 @@ pub struct GlobalSettings {
     pub browser_bridge_enabled: Option<bool>,
     pub browser_bridge_port: Option<u16>,
     pub browser_bridge_token: Option<String>,
+    pub clipboard_watch_enabled: Option<bool>,
     pub ui_theme: Option<String>, // system | light | dark
     pub retry_max_attempts: Option<u32>,
     pub retry_backoff_secs: Option<u32>,
@@ -124,6 +130,7 @@ pub struct GlobalSettings {
     pub metadata_timeout_secs: Option<u32>,
     pub speed_plan: Option<String>, // JSON array: [{"days":"1,2,3","start":"09:00","end":"18:00","limit":"2M"}]
     pub first_run_done: Option<bool>,
+    pub start_minimized: Option<bool>,
     pub minimize_to_tray: Option<bool>,
     pub notify_on_complete: Option<bool>,
 }
@@ -163,6 +170,7 @@ pub struct Diagnostics {
     pub version: Option<String>,
     pub stderr_tail: Option<String>,
     pub global_stat: serde_json::Value,
+    pub global_option: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -198,6 +206,18 @@ pub struct StartupNotice {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StartupSelfCheck {
+    pub aria2_bin_path: String,
+    pub aria2_bin_exists: bool,
+    pub aria2_bin_executable: bool,
+    pub download_dir: String,
+    pub download_dir_exists: bool,
+    pub download_dir_writable: bool,
+    pub rpc_ready: bool,
+    pub rpc_endpoint: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskListSnapshot {
     pub version: u32,
     pub exported_at: i64,
@@ -217,4 +237,10 @@ pub struct AppUpdateStrategy {
     pub current_version: String,
     pub channel: String,
     pub notes: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SaveDirSuggestion {
+    pub save_dir: String,
+    pub matched_rule: Option<DownloadDirRule>,
 }

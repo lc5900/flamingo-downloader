@@ -6,6 +6,7 @@ import {
   Collapse,
   ConfigProvider,
   Divider,
+  Drawer,
   Dropdown,
   Empty,
   Form,
@@ -22,9 +23,11 @@ import {
   Table,
   Tabs,
   Tag,
+  Descriptions,
   Typography,
   Upload,
   message,
+  notification,
   theme,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
@@ -38,11 +41,15 @@ import {
   PlusOutlined,
   ReloadOutlined,
   SettingOutlined,
+  SlidersOutlined,
   SyncOutlined,
 } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import { readText as readClipboardText } from '@tauri-apps/plugin-clipboard-manager'
+import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { Resizable } from 'react-resizable'
 import './App.css'
 import 'react-resizable/css/styles.css'
@@ -54,10 +61,13 @@ type MatcherType = 'ext' | 'domain' | 'type'
 
 type Task = {
   id: string
+  aria2_gid?: string | null
   task_type?: string
   source: string
   name?: string | null
   status: string
+  save_dir?: string
+  category?: string | null
   total_length: number
   completed_length: number
   download_speed: number
@@ -72,6 +82,8 @@ type DownloadRule = {
   matcher: MatcherType
   pattern: string
   save_dir: string
+  subdir_by_date?: boolean
+  subdir_by_domain?: boolean
 }
 
 type GlobalSettings = {
@@ -88,6 +100,7 @@ type GlobalSettings = {
   browser_bridge_enabled?: boolean | null
   browser_bridge_port?: number | null
   browser_bridge_token?: string | null
+  clipboard_watch_enabled?: boolean | null
   download_dir_rules?: DownloadRule[]
   retry_max_attempts?: number | null
   retry_backoff_secs?: number | null
@@ -95,6 +108,7 @@ type GlobalSettings = {
   metadata_timeout_secs?: number | null
   speed_plan?: string | null
   first_run_done?: boolean | null
+  start_minimized?: boolean | null
   minimize_to_tray?: boolean | null
   notify_on_complete?: boolean | null
 }
@@ -118,6 +132,17 @@ type StartupNotice = {
   message: string
 }
 
+type StartupSelfCheck = {
+  aria2_bin_path: string
+  aria2_bin_exists: boolean
+  aria2_bin_executable: boolean
+  download_dir: string
+  download_dir_exists: boolean
+  download_dir_writable: boolean
+  rpc_ready: boolean
+  rpc_endpoint?: string | null
+}
+
 type ImportTaskListResult = {
   imported_tasks: number
   imported_files: number
@@ -130,9 +155,52 @@ type TaskFile = {
   selected: boolean
 }
 
+type OperationLog = {
+  ts: number
+  action: string
+  message: string
+}
+
+type SaveDirSuggestion = {
+  save_dir: string
+  matched_rule?: DownloadRule | null
+}
+
 type TaskSortKey = 'updated_desc' | 'speed_desc' | 'progress_desc' | 'name_asc'
+type TableDensity = 'small' | 'middle' | 'large'
+type TableLayout = {
+  columnWidths: Record<string, number>
+  columnOrder: string[]
+  hiddenColumns: string[]
+  density: TableDensity
+}
+type TableLayoutStore = Record<SectionKey, TableLayout>
 
 const LOCALE_KEY = 'flamingo.locale'
+const TABLE_LAYOUT_KEY = 'flamingo.table_layout.v1'
+const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
+  progress: 180,
+  speed: 105,
+  eta: 88,
+  status: 180,
+  actions: 180,
+  size: 120,
+  completed_at: 180,
+}
+const DEFAULT_TABLE_LAYOUT: TableLayoutStore = {
+  downloading: {
+    columnWidths: { ...DEFAULT_COLUMN_WIDTHS },
+    columnOrder: ['name', 'progress', 'speed', 'eta', 'status', 'actions'],
+    hiddenColumns: [],
+    density: 'small',
+  },
+  downloaded: {
+    columnWidths: { ...DEFAULT_COLUMN_WIDTHS },
+    columnOrder: ['name', 'size', 'completed_at', 'actions'],
+    hiddenColumns: [],
+    density: 'small',
+  },
+}
 
 const I18N: Record<Locale, Record<string, string>> = {
   'en-US': {
@@ -152,10 +220,31 @@ const I18N: Record<Locale, Record<string, string>> = {
     colCompletedAt: 'Completed At',
     colStatus: 'Status',
     colActions: 'Actions',
+    details: 'Details',
+    taskDetails: 'Task Details',
+    overview: 'Overview',
+    runtimeStatus: 'Runtime Status',
+    retryLogs: 'Retry Logs',
+    noRuntimeStatus: 'No runtime status',
+    noRetryLogs: 'No retry-related logs',
+    dropHint: 'Drop URL or .torrent file here',
     search: 'Search',
     searchPlaceholder: 'Search by name / source / task id',
     statusFilter: 'Status',
+    categoryFilter: 'Category',
+    uncategorized: 'Uncategorized',
+    setCategory: 'Set Category',
+    clearCategory: 'Clear Category',
     sortBy: 'Sort',
+    layoutSettings: 'Layout',
+    density: 'Density',
+    densityCompact: 'Compact',
+    densityDefault: 'Default',
+    densityComfortable: 'Comfortable',
+    columns: 'Columns',
+    moveUp: 'Up',
+    moveDown: 'Down',
+    showColumn: 'Show',
     filterAll: 'All',
     filterActive: 'Active',
     filterPaused: 'Paused',
@@ -194,6 +283,8 @@ const I18N: Record<Locale, Record<string, string>> = {
     torrentFile: 'Torrent File',
     selectFile: 'Select File',
     saveDirOptional: 'Save Directory (optional)',
+    matchedRule: 'Matched Rule',
+    noMatchedRule: 'No matched rule (fallback to default)',
     addAdvanced: 'Advanced Options',
     outName: 'Filename (optional)',
     maxDownloadLimit: 'Per-task Max Download Limit',
@@ -214,6 +305,7 @@ const I18N: Record<Locale, Record<string, string>> = {
     save: 'Save',
     tabBasic: 'Basic',
     tabDiagnostics: 'Diagnostics',
+    startupSelfCheck: 'Startup Self-check',
     tabUpdates: 'Updates',
     grpAppearance: 'Appearance',
     themeMode: 'Theme Mode',
@@ -230,6 +322,7 @@ const I18N: Record<Locale, Record<string, string>> = {
     grpAria2: 'aria2',
     aria2Path: 'aria2 Binary Path',
     detectAria2: 'Detect aria2 Path',
+    browse: 'Browse',
     reload: 'Reload',
     enableUpnp: 'Enable UPnP',
     grpIntegration: 'Integration',
@@ -240,8 +333,12 @@ const I18N: Record<Locale, Record<string, string>> = {
     metadataTimeout: 'Metadata Timeout (seconds)',
     speedPlan: 'Speed Plan (JSON)',
     trayPrefs: 'Tray / Notification',
+    startMinimized: 'Start minimized',
     minimizeToTray: 'Minimize to tray on close',
     notifyOnComplete: 'Notify when download completes',
+    resetSettingsDefaults: 'Reset Settings',
+    resetUiLayout: 'Reset UI Layout',
+    resetSettingsConfirm: 'Reset settings to defaults? This keeps your aria2 path.',
     saveAndFinish: 'Save and Finish',
     setupTitle: 'First Run Setup',
     setupHint: 'Complete basic settings before using Flamingo Downloader.',
@@ -250,6 +347,9 @@ const I18N: Record<Locale, Record<string, string>> = {
     bridgeEnabled: 'Browser Bridge Enabled',
     bridgePort: 'Browser Bridge Port',
     bridgeToken: 'Browser Bridge Token',
+    clipboardWatchEnabled: 'Clipboard Watcher',
+    clipboardDetectedTitle: 'Clipboard download link detected',
+    clipboardDetectedUse: 'Use this link to create a new task?',
     rulesTitle: 'Download Directory Rules',
     importExport: 'Import / Export',
     exportTasks: 'Export Task List',
@@ -267,10 +367,14 @@ const I18N: Record<Locale, Record<string, string>> = {
     saveDir: 'Save Directory',
     removeRule: 'Remove Rule',
     addRule: 'Add Rule',
+    subdirByDate: 'Subdir by Date',
+    subdirByDomain: 'Subdir by Domain',
     rpcPing: 'RPC Ping',
     restartAria2: 'Restart aria2',
     startupCheck: 'Startup Check',
     saveSession: 'Save Session',
+    statusOk: 'OK',
+    statusFail: 'Fail',
     exportDebug: 'Export Debug Bundle',
     checkUpdate: 'Check aria2 Update',
     updateNow: 'Update aria2 Now',
@@ -303,10 +407,31 @@ const I18N: Record<Locale, Record<string, string>> = {
     colCompletedAt: '完成时间',
     colStatus: '状态',
     colActions: '操作',
+    details: '详情',
+    taskDetails: '任务详情',
+    overview: '概览',
+    runtimeStatus: '运行状态',
+    retryLogs: '重试日志',
+    noRuntimeStatus: '暂无运行状态',
+    noRetryLogs: '暂无重试相关日志',
+    dropHint: '拖拽 URL 或 .torrent 文件到这里',
     search: '搜索',
     searchPlaceholder: '按名称 / 来源 / 任务ID 搜索',
     statusFilter: '状态',
+    categoryFilter: '分类',
+    uncategorized: '未分类',
+    setCategory: '设置分类',
+    clearCategory: '清除分类',
     sortBy: '排序',
+    layoutSettings: '布局',
+    density: '密度',
+    densityCompact: '紧凑',
+    densityDefault: '默认',
+    densityComfortable: '宽松',
+    columns: '列',
+    moveUp: '上移',
+    moveDown: '下移',
+    showColumn: '显示',
     filterAll: '全部',
     filterActive: '进行中',
     filterPaused: '已暂停',
@@ -345,6 +470,8 @@ const I18N: Record<Locale, Record<string, string>> = {
     torrentFile: '种子文件',
     selectFile: '选择文件',
     saveDirOptional: '本次下载目录（可选）',
+    matchedRule: '命中规则',
+    noMatchedRule: '未命中规则（使用默认目录）',
     addAdvanced: '高级选项',
     outName: '文件名（可选）',
     maxDownloadLimit: '单任务下载限速',
@@ -365,6 +492,7 @@ const I18N: Record<Locale, Record<string, string>> = {
     save: '保存',
     tabBasic: '基础',
     tabDiagnostics: '诊断',
+    startupSelfCheck: '启动自检',
     tabUpdates: '更新',
     grpAppearance: '外观',
     themeMode: '主题模式',
@@ -381,6 +509,7 @@ const I18N: Record<Locale, Record<string, string>> = {
     grpAria2: 'aria2',
     aria2Path: 'aria2 可执行文件路径',
     detectAria2: '检测 aria2 路径',
+    browse: '浏览',
     reload: '重新加载',
     enableUpnp: '启用 UPnP',
     grpIntegration: '集成',
@@ -391,8 +520,12 @@ const I18N: Record<Locale, Record<string, string>> = {
     metadataTimeout: '元数据超时（秒）',
     speedPlan: '速度计划（JSON）',
     trayPrefs: '托盘 / 通知',
+    startMinimized: '启动时最小化',
     minimizeToTray: '关闭时最小化到托盘',
     notifyOnComplete: '下载完成时通知',
+    resetSettingsDefaults: '重置设置',
+    resetUiLayout: '重置界面布局',
+    resetSettingsConfirm: '确认恢复默认设置？会保留 aria2 路径。',
     saveAndFinish: '保存并完成',
     setupTitle: '首次启动设置',
     setupHint: '请先完成基础设置后再开始使用。',
@@ -401,6 +534,9 @@ const I18N: Record<Locale, Record<string, string>> = {
     bridgeEnabled: '浏览器桥接启用',
     bridgePort: '浏览器桥接端口',
     bridgeToken: '浏览器桥接令牌',
+    clipboardWatchEnabled: '剪贴板监听',
+    clipboardDetectedTitle: '检测到下载链接',
+    clipboardDetectedUse: '是否使用该链接创建新任务？',
     rulesTitle: '下载目录规则',
     importExport: '导入 / 导出',
     exportTasks: '导出任务列表',
@@ -418,10 +554,14 @@ const I18N: Record<Locale, Record<string, string>> = {
     saveDir: '保存目录',
     removeRule: '删除规则',
     addRule: '添加规则',
+    subdirByDate: '按日期子目录',
+    subdirByDomain: '按域名子目录',
     rpcPing: 'RPC 探测',
     restartAria2: '重启 aria2',
     startupCheck: '启动检查',
     saveSession: '保存会话',
+    statusOk: '正常',
+    statusFail: '异常',
     exportDebug: '导出调试包',
     checkUpdate: '检查 aria2 更新',
     updateNow: '立即更新 aria2',
@@ -494,6 +634,13 @@ function fmtDateTime(ts?: number): string {
   return d.toLocaleString()
 }
 
+function fmtTime(ts?: number): string {
+  if (!ts || ts <= 0) return '-'
+  const d = new Date(ts * 1000)
+  if (Number.isNaN(d.getTime())) return '-'
+  return d.toLocaleTimeString()
+}
+
 function i18nFormat(template: string, vars: Record<string, string | number>): string {
   let out = template
   for (const [k, v] of Object.entries(vars)) {
@@ -530,6 +677,63 @@ function statusColor(status: string): string {
 
 function parseErr(err: unknown): string {
   return String((err as Error)?.message || err)
+}
+
+function defaultLayoutFor(section: SectionKey): TableLayout {
+  const d = DEFAULT_TABLE_LAYOUT[section]
+  return {
+    columnWidths: { ...d.columnWidths },
+    columnOrder: [...d.columnOrder],
+    hiddenColumns: [...d.hiddenColumns],
+    density: d.density,
+  }
+}
+
+function sanitizeLayout(section: SectionKey, raw: unknown): TableLayout {
+  const base = defaultLayoutFor(section)
+  if (!raw || typeof raw !== 'object') return base
+  const obj = raw as Partial<TableLayout>
+  const widths = { ...base.columnWidths, ...(obj.columnWidths || {}) }
+  const allowed = new Set(base.columnOrder)
+  const order = Array.isArray(obj.columnOrder)
+    ? obj.columnOrder.filter((k): k is string => typeof k === 'string' && allowed.has(k))
+    : []
+  const mergedOrder = [...order, ...base.columnOrder.filter((k) => !order.includes(k))]
+  const hiddenColumns = Array.isArray(obj.hiddenColumns)
+    ? obj.hiddenColumns.filter((k): k is string => typeof k === 'string' && allowed.has(k))
+    : []
+  const density: TableDensity =
+    obj.density === 'middle' || obj.density === 'large' || obj.density === 'small'
+      ? obj.density
+      : base.density
+  return {
+    columnWidths: widths,
+    columnOrder: mergedOrder,
+    hiddenColumns,
+    density,
+  }
+}
+
+function loadTableLayoutStore(): TableLayoutStore {
+  try {
+    const raw = localStorage.getItem(TABLE_LAYOUT_KEY)
+    if (!raw) {
+      return {
+        downloading: defaultLayoutFor('downloading'),
+        downloaded: defaultLayoutFor('downloaded'),
+      }
+    }
+    const parsed = JSON.parse(raw) as Partial<TableLayoutStore>
+    return {
+      downloading: sanitizeLayout('downloading', parsed?.downloading),
+      downloaded: sanitizeLayout('downloaded', parsed?.downloaded),
+    }
+  } catch {
+    return {
+      downloading: defaultLayoutFor('downloading'),
+      downloaded: defaultLayoutFor('downloaded'),
+    }
+  }
 }
 
 type ResizeableHeaderProps = React.HTMLAttributes<HTMLElement> & {
@@ -575,17 +779,11 @@ export default function App() {
   const [section, setSection] = useState<SectionKey>('downloading')
   const [searchText, setSearchText] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [categoryFilter, setCategoryFilter] = useState('all')
   const [sortBy, setSortBy] = useState<TaskSortKey>('updated_desc')
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([])
-  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({
-    progress: 180,
-    speed: 105,
-    eta: 88,
-    status: 180,
-    actions: 180,
-    size: 120,
-    completed_at: 180,
-  })
+  const [tableLayouts, setTableLayouts] = useState<TableLayoutStore>(() => loadTableLayoutStore())
+  const [layoutOpen, setLayoutOpen] = useState(false)
   const tableWrapRef = useRef<HTMLDivElement | null>(null)
   const [tableWrapWidth, setTableWrapWidth] = useState(0)
   const [themeMode, setThemeMode] = useState<ThemeMode>('system')
@@ -599,14 +797,29 @@ export default function App() {
   const [addOpen, setAddOpen] = useState(false)
   const [addType, setAddType] = useState<'url' | 'magnet' | 'torrent'>('url')
   const [addTorrentFile, setAddTorrentFile] = useState<File | null>(null)
+  const [addMatchedRule, setAddMatchedRule] = useState<DownloadRule | null>(null)
   const [addSubmitting, setAddSubmitting] = useState(false)
   const [diagnosticsText, setDiagnosticsText] = useState('')
+  const [startupSummary, setStartupSummary] = useState<StartupSelfCheck | null>(null)
   const [updateText, setUpdateText] = useState('')
   const [appUpdateStrategyText, setAppUpdateStrategyText] = useState('')
   const [ioOpen, setIoOpen] = useState(false)
   const [exportJsonText, setExportJsonText] = useState('')
   const [importJsonText, setImportJsonText] = useState('')
   const [importing, setImporting] = useState(false)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailTask, setDetailTask] = useState<Task | null>(null)
+  const [detailCategoryInput, setDetailCategoryInput] = useState('')
+  const [detailFiles, setDetailFiles] = useState<TaskFile[]>([])
+  const [detailRuntimeText, setDetailRuntimeText] = useState('')
+  const [detailRetryLogs, setDetailRetryLogs] = useState<OperationLog[]>([])
+  const [dragHover, setDragHover] = useState(false)
+  const [clipboardWatchEnabled, setClipboardWatchEnabled] = useState(false)
+  const [notifyOnCompleteEnabled, setNotifyOnCompleteEnabled] = useState(true)
+  const lastClipboardRef = useRef('')
+  const clipboardPromptingRef = useRef(false)
+  const prevTaskStatusRef = useRef<Record<string, string>>({})
   const [firstRunOpen, setFirstRunOpen] = useState(false)
   const [fileSelectOpen, setFileSelectOpen] = useState(false)
   const [fileSelectTaskId, setFileSelectTaskId] = useState<string | null>(null)
@@ -616,6 +829,12 @@ export default function App() {
 
   const [settingsForm] = Form.useForm<GlobalSettings>()
   const [addForm] = Form.useForm<AddFormValues>()
+  const currentLayout = tableLayouts[section] || defaultLayoutFor(section)
+  const columnWidths = currentLayout.columnWidths
+
+  useEffect(() => {
+    localStorage.setItem(TABLE_LAYOUT_KEY, JSON.stringify(tableLayouts))
+  }, [tableLayouts])
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -649,6 +868,7 @@ export default function App() {
         browser_bridge_enabled: s?.browser_bridge_enabled ?? undefined,
         browser_bridge_port: s?.browser_bridge_port ?? undefined,
         browser_bridge_token: s?.browser_bridge_token || undefined,
+        clipboard_watch_enabled: s?.clipboard_watch_enabled ?? undefined,
         download_dir_rules: Array.isArray(s?.download_dir_rules) ? s.download_dir_rules : [],
         retry_max_attempts: s?.retry_max_attempts ?? undefined,
         retry_backoff_secs: s?.retry_backoff_secs ?? undefined,
@@ -656,12 +876,15 @@ export default function App() {
         metadata_timeout_secs: s?.metadata_timeout_secs ?? undefined,
         speed_plan: s?.speed_plan || undefined,
         first_run_done: s?.first_run_done ?? undefined,
+        start_minimized: s?.start_minimized ?? undefined,
         minimize_to_tray: s?.minimize_to_tray ?? undefined,
         notify_on_complete: s?.notify_on_complete ?? undefined,
       })
       if (s?.first_run_done !== true) {
         setFirstRunOpen(true)
       }
+      setClipboardWatchEnabled(Boolean(s?.clipboard_watch_enabled))
+      setNotifyOnCompleteEnabled(s?.notify_on_complete !== false)
     } catch (err) {
       msg.error(parseErr(err))
     }
@@ -671,8 +894,11 @@ export default function App() {
     try {
       const d = await invoke('get_diagnostics')
       setDiagnosticsText(JSON.stringify(d, null, 2))
+      const summary = await invoke<StartupSelfCheck>('startup_self_check_summary')
+      setStartupSummary(summary)
     } catch (err) {
       setDiagnosticsText(parseErr(err))
+      setStartupSummary(null)
     }
   }, [])
 
@@ -711,6 +937,45 @@ export default function App() {
   }, [msg])
 
   useEffect(() => {
+    if (!clipboardWatchEnabled) return
+    let cancelled = false
+    const checkClipboard = async () => {
+      if (cancelled || document.hidden || clipboardPromptingRef.current) return
+      try {
+        const text = String((await readClipboardText()) || '').trim()
+        if (!text || text === lastClipboardRef.current) return
+        lastClipboardRef.current = text
+        const inferred = detectAddSource(text)
+        if (!inferred) return
+        clipboardPromptingRef.current = true
+        Modal.confirm({
+          title: t('clipboardDetectedTitle'),
+          content: `${inferred.value}\n\n${t('clipboardDetectedUse')}`,
+          onOk: async () => {
+            try {
+              await openAddFromDetected(inferred)
+            } finally {
+              clipboardPromptingRef.current = false
+            }
+          },
+          onCancel: () => {
+            clipboardPromptingRef.current = false
+          },
+        })
+      } catch {
+        // ignore clipboard read errors
+      }
+    }
+    const timer = setInterval(checkClipboard, 2500)
+    void checkClipboard()
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+      clipboardPromptingRef.current = false
+    }
+  }, [clipboardWatchEnabled, t])
+
+  useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     const onChange = () => {
       if (themeMode === 'system') setThemeMode('system')
@@ -718,6 +983,66 @@ export default function App() {
     media.addEventListener?.('change', onChange)
     return () => media.removeEventListener?.('change', onChange)
   }, [themeMode])
+
+  useEffect(() => {
+    const prev = prevTaskStatusRef.current
+    const next: Record<string, string> = {}
+    for (const task of tasks) {
+      const status = String(task.status || '').toLowerCase()
+      next[task.id] = status
+      const prevStatus = prev[task.id]
+      if (!notifyOnCompleteEnabled || !prevStatus || prevStatus === status) continue
+      if (status === 'completed') {
+        notification.success({
+          message: `${t('taskDetails')}: ${task.name || task.id}`,
+          description: t('filterCompleted'),
+          btn: (
+            <Space>
+              <Button
+                size="small"
+                onClick={() => {
+                  void invoke('open_task_dir', { taskId: task.id })
+                }}
+              >
+                {t('openDir')}
+              </Button>
+              <Button
+                size="small"
+                type="primary"
+                onClick={() => {
+                  void invoke('open_task_file', { taskId: task.id })
+                }}
+              >
+                {t('openFile')}
+              </Button>
+            </Space>
+          ),
+          duration: 6,
+        })
+      } else if (status === 'error') {
+        notification.error({
+          message: `${t('taskDetails')}: ${task.name || task.id}`,
+          description: task.error_message || t('filterError'),
+          duration: 8,
+        })
+      }
+    }
+    prevTaskStatusRef.current = next
+  }, [notifyOnCompleteEnabled, t, tasks])
+
+  useEffect(() => {
+    const active = tasks.filter((task) => {
+      const s = String(task.status || '').toLowerCase()
+      return s !== 'completed' && s !== 'error'
+    }).length
+    const completed = tasks.filter((task) => String(task.status || '').toLowerCase() === 'completed').length
+    const error = tasks.filter((task) => String(task.status || '').toLowerCase() === 'error').length
+    const badge = active + error
+    const win = getCurrentWindow()
+    void win.setBadgeCount(badge > 0 ? badge : undefined).catch(() => {})
+    void win.setBadgeLabel(error > 0 ? `E${error}` : undefined).catch(() => {})
+    document.title = `Flamingo Downloader (${active}/${completed}/${error})`
+  }, [tasks])
 
   useEffect(() => {
     const el = tableWrapRef.current
@@ -739,6 +1064,14 @@ export default function App() {
   }, [settingsOpen])
 
   const effectiveTheme = resolveTheme(themeMode)
+  const categoryOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const task of tasks) {
+      const c = String(task.category || '').trim()
+      if (c) set.add(c)
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [tasks])
 
   const list = useMemo(
     () => {
@@ -748,6 +1081,10 @@ export default function App() {
       const filtered = bySection.filter((task) => {
         const status = String(task.status || '').toLowerCase()
         if (statusFilter !== 'all' && status !== statusFilter) return false
+        const category = String(task.category || '').trim()
+        if (categoryFilter === '__uncategorized__' && category) return false
+        if (categoryFilter !== 'all' && categoryFilter !== '__uncategorized__' && category !== categoryFilter)
+          return false
         const query = searchText.trim().toLowerCase()
         if (!query) return true
         const text = `${task.name || ''} ${task.source || ''} ${task.id || ''}`.toLowerCase()
@@ -769,7 +1106,7 @@ export default function App() {
       })
       return filtered
     },
-    [tasks, section, statusFilter, searchText, sortBy],
+    [categoryFilter, searchText, section, sortBy, statusFilter, tasks],
   )
 
   useEffect(() => {
@@ -898,6 +1235,61 @@ export default function App() {
     }
   }
 
+  const onOpenTaskDetail = async (task: Task) => {
+    setDetailOpen(true)
+    setDetailLoading(true)
+    setDetailTask(task)
+    setDetailCategoryInput(String(task.category || ''))
+    setDetailFiles([])
+    setDetailRuntimeText('')
+    setDetailRetryLogs([])
+    try {
+      const detail = await invoke<{ task: Task; files: TaskFile[] }>('get_task_detail', {
+        taskId: task.id,
+      })
+      setDetailTask(detail?.task || task)
+      setDetailCategoryInput(String((detail?.task || task)?.category || ''))
+      setDetailFiles(Array.isArray(detail?.files) ? detail.files : [])
+      try {
+        const runtime = await invoke<unknown>('get_task_runtime_status', { taskId: task.id })
+        setDetailRuntimeText(JSON.stringify(runtime ?? {}, null, 2))
+      } catch {
+        setDetailRuntimeText('')
+      }
+      const logs = await invoke<OperationLog[]>('list_operation_logs', { limit: 500 })
+      const gid = detail?.task?.aria2_gid || task.aria2_gid || ''
+      const related = (Array.isArray(logs) ? logs : []).filter((log) => {
+        const text = `${log.action || ''} ${log.message || ''}`
+        return (
+          text.includes(task.id) ||
+          (!!gid && text.includes(gid)) ||
+          String(log.action || '').includes('retry')
+        )
+      })
+      setDetailRetryLogs(related)
+    } catch (err) {
+      msg.error(parseErr(err))
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  const onSaveTaskCategory = async () => {
+    if (!detailTask?.id) return
+    try {
+      const value = String(detailCategoryInput || '').trim()
+      await invoke('set_task_category', {
+        taskId: detailTask.id,
+        category: value || null,
+      })
+      setDetailTask((prev) => (prev ? { ...prev, category: value || null } : prev))
+      await refresh()
+      msg.success(t('settingsSaved'))
+    } catch (err) {
+      msg.error(parseErr(err))
+    }
+  }
+
   const onApplyFileSelection = async () => {
     if (!fileSelectTaskId) return
     try {
@@ -916,6 +1308,7 @@ export default function App() {
     setAddOpen(true)
     setAddType('url')
     setAddTorrentFile(null)
+    setAddMatchedRule(null)
     addForm.setFieldsValue({
       url: '',
       magnet: '',
@@ -930,12 +1323,48 @@ export default function App() {
       headers_text: '',
     })
     try {
-      const dir = await invoke<string>('suggest_save_dir', {
-        taskType: 'http',
-        source: null,
-      })
-      addForm.setFieldValue('save_dir', dir)
+      await suggestAndSetSaveDir('http', null)
     } catch {}
+  }
+
+  const openAddFromDetected = async (inferred: { kind: 'url' | 'magnet'; value: string }) => {
+    await onOpenAdd()
+    if (inferred.kind === 'magnet') {
+      setAddType('magnet')
+      addForm.setFieldValue('magnet', inferred.value)
+      try {
+        await suggestAndSetSaveDir('magnet', inferred.value)
+      } catch {}
+    } else {
+      setAddType('url')
+      addForm.setFieldValue('url', inferred.value)
+      try {
+        await suggestAndSetSaveDir('http', inferred.value)
+      } catch {}
+    }
+  }
+
+  const onDropToAdd = async (e: React.DragEvent<HTMLElement>) => {
+    e.preventDefault()
+    setDragHover(false)
+    const files = Array.from(e.dataTransfer?.files || [])
+    if (files.length > 0) {
+      const file = files[0]
+      if (String(file.name || '').toLowerCase().endsWith('.torrent')) {
+        await onOpenAdd()
+        setAddType('torrent')
+        setAddTorrentFile(file)
+        try {
+          await suggestAndSetSaveDir('torrent', file.name)
+        } catch {}
+      }
+      return
+    }
+
+    const plain = String(e.dataTransfer?.getData('text/plain') || '').trim()
+    const inferred = detectAddSource(plain)
+    if (!inferred) return
+    await openAddFromDetected(inferred)
   }
 
   const onAddUrl = async () => {
@@ -1019,12 +1448,14 @@ export default function App() {
         browser_bridge_enabled: values.browser_bridge_enabled ?? null,
         browser_bridge_port: values.browser_bridge_port ?? null,
         browser_bridge_token: values.browser_bridge_token || null,
+        clipboard_watch_enabled: values.clipboard_watch_enabled ?? null,
         retry_max_attempts: values.retry_max_attempts ?? null,
         retry_backoff_secs: values.retry_backoff_secs ?? null,
         retry_fallback_mirrors: values.retry_fallback_mirrors || null,
         metadata_timeout_secs: values.metadata_timeout_secs ?? null,
         speed_plan: values.speed_plan || null,
         first_run_done: values.first_run_done ?? null,
+        start_minimized: values.start_minimized ?? null,
         minimize_to_tray: values.minimize_to_tray ?? null,
         notify_on_complete: values.notify_on_complete ?? null,
         download_dir_rules: (values.download_dir_rules || []).filter(
@@ -1073,6 +1504,51 @@ export default function App() {
     } catch (err) {
       msg.error(parseErr(err))
     }
+  }
+
+  const browseAria2Path = async () => {
+    try {
+      const selected = await openDialog({
+        multiple: false,
+        directory: false,
+      })
+      if (!selected || Array.isArray(selected)) {
+        return
+      }
+      settingsForm.setFieldValue('aria2_bin_path', selected)
+    } catch (err) {
+      msg.error(parseErr(err))
+    }
+  }
+
+  const resetSettingsToDefaults = () => {
+    Modal.confirm({
+      title: t('resetSettingsDefaults'),
+      content: t('resetSettingsConfirm'),
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await invoke('reset_global_settings_to_defaults')
+          await Promise.all([loadSettings(), loadDiagnostics(), loadUpdateInfo()])
+          msg.success(t('settingsSaved'))
+        } catch (err) {
+          msg.error(parseErr(err))
+        }
+      },
+    })
+  }
+
+  const resetUiLayout = () => {
+    setTableLayouts({
+      downloading: defaultLayoutFor('downloading'),
+      downloaded: defaultLayoutFor('downloaded'),
+    })
+    setSearchText('')
+    setStatusFilter('all')
+    setCategoryFilter('all')
+    setSortBy('updated_desc')
+    setSelectedTaskIds([])
+    msg.success(t('settingsSaved'))
   }
 
   const doRpcPing = async () => {
@@ -1179,6 +1655,19 @@ export default function App() {
     await Promise.all([loadSettings(), loadDiagnostics(), loadUpdateInfo()])
   }
 
+  const suggestAndSetSaveDir = async (taskType: 'http' | 'magnet' | 'torrent', source: string | null) => {
+    try {
+      const suggestion = await invoke<SaveDirSuggestion>('suggest_save_dir_detail', {
+        taskType,
+        source,
+      })
+      addForm.setFieldValue('save_dir', suggestion?.save_dir || '')
+      setAddMatchedRule((suggestion?.matched_rule as DownloadRule) || null)
+    } catch {
+      setAddMatchedRule(null)
+    }
+  }
+
   const onChangeAddType = async (key: string) => {
     const next = key as 'url' | 'magnet' | 'torrent'
     setAddType(next)
@@ -1189,11 +1678,7 @@ export default function App() {
           : next === 'magnet'
             ? addForm.getFieldValue('magnet')
             : addTorrentFile?.name || null
-      const dir = await invoke<string>('suggest_save_dir', {
-        taskType: next === 'url' ? 'http' : next,
-        source,
-      })
-      addForm.setFieldValue('save_dir', dir)
+      await suggestAndSetSaveDir(next === 'url' ? 'http' : next, source)
     } catch {
       // no-op
     }
@@ -1203,10 +1688,65 @@ export default function App() {
     (key: string) =>
       (_e: unknown, data: { size: { width: number; height: number } }) => {
         const next = Math.max(90, Math.floor(data.size.width))
-        setColumnWidths((prev) => ({ ...prev, [key]: next }))
+        setTableLayouts((prev) => ({
+          ...prev,
+          [section]: {
+            ...(prev[section] || defaultLayoutFor(section)),
+            columnWidths: {
+              ...(prev[section]?.columnWidths || defaultLayoutFor(section).columnWidths),
+              [key]: next,
+            },
+          },
+        }))
       },
-    [],
+    [section],
   )
+
+  const setLayoutDensity = (density: TableDensity) => {
+    setTableLayouts((prev) => ({
+      ...prev,
+      [section]: {
+        ...(prev[section] || defaultLayoutFor(section)),
+        density,
+      },
+    }))
+  }
+
+  const toggleColumnVisible = (key: string, checked: boolean) => {
+    if (key === 'name' || key === 'actions') return
+    setTableLayouts((prev) => {
+      const current = prev[section] || defaultLayoutFor(section)
+      const hidden = new Set(current.hiddenColumns)
+      if (checked) hidden.delete(key)
+      else hidden.add(key)
+      return {
+        ...prev,
+        [section]: {
+          ...current,
+          hiddenColumns: Array.from(hidden),
+        },
+      }
+    })
+  }
+
+  const moveColumn = (key: string, direction: 'up' | 'down') => {
+    setTableLayouts((prev) => {
+      const current = prev[section] || defaultLayoutFor(section)
+      const order = [...current.columnOrder]
+      const idx = order.indexOf(key)
+      if (idx < 0) return prev
+      const swapWith = direction === 'up' ? idx - 1 : idx + 1
+      if (swapWith < 0 || swapWith >= order.length) return prev
+      ;[order[idx], order[swapWith]] = [order[swapWith], order[idx]]
+      return {
+        ...prev,
+        [section]: {
+          ...current,
+          columnOrder: order,
+        },
+      }
+    })
+  }
 
   const tableColumns = useMemo<ColumnsType<Task>>(
     () => {
@@ -1233,7 +1773,12 @@ export default function App() {
         width: nameWidth,
         fixed: 'left' as const,
         ellipsis: true,
-        render: (_: unknown, row: Task) => row.name || row.source || row.id,
+        render: (_: unknown, row: Task) => (
+          <Space size={6}>
+            <span>{row.name || row.source || row.id}</span>
+            {!!String(row.category || '').trim() && <Tag>{String(row.category)}</Tag>}
+          </Space>
+        ),
       }
       const actionsCol = {
         key: 'actions',
@@ -1242,6 +1787,9 @@ export default function App() {
         fixed: 'right' as const,
         render: (_: unknown, row: Task) => (
           <Space wrap>
+            <Button size="small" onClick={() => onOpenTaskDetail(row)}>
+              {t('details')}
+            </Button>
             {row.status !== 'completed' && (
               <Button size="small" onClick={() => onPauseResume(row)}>
                 {String(row.status).toLowerCase() === 'paused' ? t('resume') : t('pause')}
@@ -1269,83 +1817,109 @@ export default function App() {
         ),
       }
 
-      if (section === 'downloaded') {
-        return [
-          nameCol,
-          {
-            key: 'size',
-            title: t('colSize'),
-            width: columnWidths.size,
-            render: (_: unknown, row: Task) => <Typography.Text>{fmtBytes(row.total_length)}</Typography.Text>,
-          },
-          {
-            key: 'completed_at',
-            title: t('colCompletedAt'),
-            width: columnWidths.completed_at,
-            render: (_: unknown, row: Task) => <Typography.Text>{fmtDateTime(row.updated_at)}</Typography.Text>,
-          },
-          actionsCol,
-        ]
-      }
+      const sectionColumns =
+        section === 'downloaded'
+          ? ([
+              nameCol,
+              {
+                key: 'size',
+                title: t('colSize'),
+                width: columnWidths.size,
+                render: (_: unknown, row: Task) => <Typography.Text>{fmtBytes(row.total_length)}</Typography.Text>,
+              },
+              {
+                key: 'completed_at',
+                title: t('colCompletedAt'),
+                width: columnWidths.completed_at,
+                render: (_: unknown, row: Task) => <Typography.Text>{fmtDateTime(row.updated_at)}</Typography.Text>,
+              },
+              actionsCol,
+            ] as ColumnsType<Task>)
+          : ([
+              nameCol,
+              {
+                key: 'progress',
+                title: t('colProgress'),
+                width: columnWidths.progress,
+                render: (_: unknown, row: Task) => {
+                  const percent = row.total_length > 0 ? Math.min(100, (row.completed_length / row.total_length) * 100) : 0
+                  return (
+                    <Space direction="vertical" size={2} style={{ width: '100%' }}>
+                      <Progress percent={Number(percent.toFixed(1))} size="small" />
+                      <Typography.Text type="secondary">
+                        {fmtBytes(row.completed_length)} / {fmtBytes(row.total_length)}
+                      </Typography.Text>
+                    </Space>
+                  )
+                },
+              },
+              {
+                key: 'speed',
+                title: t('colSpeed'),
+                width: columnWidths.speed,
+                render: (_: unknown, row: Task) => <Typography.Text>{fmtBytes(row.download_speed)}/s</Typography.Text>,
+              },
+              {
+                key: 'eta',
+                title: t('colEta'),
+                width: columnWidths.eta,
+                render: (_: unknown, row: Task) => {
+                  const done = Number(row.completed_length || 0)
+                  const total = Number(row.total_length || 0)
+                  const speed = Number(row.download_speed || 0)
+                  const remaining = Math.max(total - done, 0)
+                  if (String(row.status).toLowerCase() === 'completed') return '0s'
+                  return fmtEta(remaining, speed, t('noEta'))
+                },
+              },
+              {
+                key: 'status',
+                title: t('colStatus'),
+                dataIndex: 'status',
+                width: columnWidths.status,
+                render: (v: string, row: Task) => (
+                  <Space size={4}>
+                    <Tag color={statusColor(String(v))}>{String(v).toUpperCase()}</Tag>
+                    {(row.error_message || row.error_code) && String(v).toLowerCase() === 'error' && (
+                      <Typography.Text type="danger" className="error-inline">
+                        {row.error_code ? `[${row.error_code}] ` : ''}
+                        {row.error_message || ''}
+                      </Typography.Text>
+                    )}
+                  </Space>
+                ),
+              },
+              actionsCol,
+            ] as ColumnsType<Task>)
 
-      return [
-        nameCol,
-        {
-          key: 'progress',
-          title: t('colProgress'),
-          width: columnWidths.progress,
-          render: (_: unknown, row: Task) => {
-            const percent = row.total_length > 0 ? Math.min(100, (row.completed_length / row.total_length) * 100) : 0
-            return (
-              <Space direction="vertical" size={2} style={{ width: '100%' }}>
-                <Progress percent={Number(percent.toFixed(1))} size="small" />
-                <Typography.Text type="secondary">
-                  {fmtBytes(row.completed_length)} / {fmtBytes(row.total_length)}
-                </Typography.Text>
-              </Space>
-            )
-          },
-        },
-        {
-          key: 'speed',
-          title: t('colSpeed'),
-          width: columnWidths.speed,
-          render: (_: unknown, row: Task) => <Typography.Text>{fmtBytes(row.download_speed)}/s</Typography.Text>,
-        },
-        {
-          key: 'eta',
-          title: t('colEta'),
-          width: columnWidths.eta,
-          render: (_: unknown, row: Task) => {
-            const done = Number(row.completed_length || 0)
-            const total = Number(row.total_length || 0)
-            const speed = Number(row.download_speed || 0)
-            const remaining = Math.max(total - done, 0)
-            if (String(row.status).toLowerCase() === 'completed') return '0s'
-            return fmtEta(remaining, speed, t('noEta'))
-          },
-        },
-        {
-          key: 'status',
-          title: t('colStatus'),
-          dataIndex: 'status',
-          width: columnWidths.status,
-          render: (v: string, row: Task) => (
-            <Space size={4}>
-              <Tag color={statusColor(String(v))}>{String(v).toUpperCase()}</Tag>
-              {(row.error_message || row.error_code) && String(v).toLowerCase() === 'error' && (
-                <Typography.Text type="danger" className="error-inline">
-                  {row.error_code ? `[${row.error_code}] ` : ''}
-                  {row.error_message || ''}
-                </Typography.Text>
-              )}
-            </Space>
-          ),
-        },
-        actionsCol,
+      const byKey = new Map<string, ColumnsType<Task>[number]>()
+      for (const col of sectionColumns) {
+        const key = String(col.key || ('dataIndex' in col ? (col.dataIndex as string) : 'col'))
+        byKey.set(key, col)
+      }
+      const orderedKeys = [
+        ...currentLayout.columnOrder.filter((k) => byKey.has(k)),
+        ...Array.from(byKey.keys()).filter((k) => !currentLayout.columnOrder.includes(k)),
       ]
+      const visibleKeys = orderedKeys.filter(
+        (k) => !currentLayout.hiddenColumns.includes(k) || k === 'name' || k === 'actions',
+      )
+      return visibleKeys.map((k) => byKey.get(k)).filter(Boolean) as ColumnsType<Task>
     },
-    [columnWidths, fileSelectLoading, onOpenDir, onOpenFile, onOpenFileSelection, onPauseResume, section, t, tableWrapWidth],
+    [
+      columnWidths,
+      currentLayout.columnOrder,
+      currentLayout.hiddenColumns,
+      fileSelectLoading,
+      onOpenDir,
+      onOpenFile,
+      onOpenTaskDetail,
+      onOpenFileSelection,
+      onPauseResume,
+      section,
+      t,
+      tableWrapWidth,
+    ],
   )
 
   const mergedColumns = useMemo<ColumnsType<Task>>(
@@ -1365,6 +1939,25 @@ export default function App() {
       })),
     [onResizeColumn, tableColumns],
   )
+
+  const layoutEditableColumns = useMemo(() => {
+    if (section === 'downloaded') {
+      return [
+        { key: 'name', label: t('colName'), lock: true },
+        { key: 'size', label: t('colSize') },
+        { key: 'completed_at', label: t('colCompletedAt') },
+        { key: 'actions', label: t('colActions'), lock: true },
+      ]
+    }
+    return [
+      { key: 'name', label: t('colName'), lock: true },
+      { key: 'progress', label: t('colProgress') },
+      { key: 'speed', label: t('colSpeed') },
+      { key: 'eta', label: t('colEta') },
+      { key: 'status', label: t('colStatus') },
+      { key: 'actions', label: t('colActions'), lock: true },
+    ]
+  }, [section, t])
 
   return (
     <ConfigProvider
@@ -1388,8 +1981,16 @@ export default function App() {
               selectedKeys={[section]}
               onClick={(e) => setSection(e.key as SectionKey)}
               items={[
-                { key: 'downloading', icon: <DownloadOutlined />, label: t('navDownloading') },
-                { key: 'downloaded', icon: <FileDoneOutlined />, label: t('navDownloaded') },
+                {
+                  key: 'downloading',
+                  icon: <DownloadOutlined />,
+                  label: `${t('navDownloading')} (${tasks.filter((x) => x.status !== 'completed').length})`,
+                },
+                {
+                  key: 'downloaded',
+                  icon: <FileDoneOutlined />,
+                  label: `${t('navDownloaded')} (${tasks.filter((x) => x.status === 'completed').length})`,
+                },
               ]}
             />
           </Layout.Sider>
@@ -1426,7 +2027,19 @@ export default function App() {
               </Space>
             </Layout.Header>
 
-            <Layout.Content className="content">
+            <Layout.Content
+              className="content"
+              onDragOver={(e) => {
+                e.preventDefault()
+                setDragHover(true)
+              }}
+              onDragLeave={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget as Node)) return
+                setDragHover(false)
+              }}
+              onDrop={onDropToAdd}
+            >
+              {dragHover && <div className="drop-hint">{t('dropHint')}</div>}
               <Card
                 className="main-card"
                 title={section === 'downloaded' ? t('downloadedList') : t('currentDownloads')}
@@ -1455,6 +2068,16 @@ export default function App() {
                     ]}
                   />
                   <Select
+                    style={{ width: 200 }}
+                    value={categoryFilter}
+                    onChange={setCategoryFilter}
+                    options={[
+                      { value: 'all', label: `${t('categoryFilter')}: ${t('filterAll')}` },
+                      { value: '__uncategorized__', label: `${t('categoryFilter')}: ${t('uncategorized')}` },
+                      ...categoryOptions.map((c) => ({ value: c, label: `${t('categoryFilter')}: ${c}` })),
+                    ]}
+                  />
+                  <Select
                     style={{ width: 220 }}
                     value={sortBy}
                     onChange={(v) => setSortBy(v as TaskSortKey)}
@@ -1465,6 +2088,9 @@ export default function App() {
                       { value: 'name_asc', label: `${t('sortBy')}: ${t('sortName')}` },
                     ]}
                   />
+                  <Button icon={<SlidersOutlined />} onClick={() => setLayoutOpen(true)}>
+                    {t('layoutSettings')}
+                  </Button>
                   <Tag>{`${t('selectedCount')}: ${selectedTaskIds.length}`}</Tag>
                   <Button size="small" onClick={onBatchPause} disabled={selectedTaskIds.length === 0 || section === 'downloaded'}>
                     {t('batchPause')}
@@ -1484,7 +2110,7 @@ export default function App() {
                   ) : (
                     <Table<Task>
                     className="task-table"
-                    size="small"
+                    size={currentLayout.density}
                     rowKey="id"
                     loading={loading}
                     pagination={{ pageSize: 12 }}
@@ -1599,11 +2225,7 @@ export default function App() {
                     }}
                     onChange={async (e) => {
                       try {
-                        const dir = await invoke<string>('suggest_save_dir', {
-                          taskType: 'http',
-                          source: e.target.value || null,
-                        })
-                        addForm.setFieldValue('save_dir', dir)
+                        await suggestAndSetSaveDir('http', e.target.value || null)
                       } catch {}
                     }}
                   />
@@ -1629,11 +2251,7 @@ export default function App() {
                     }}
                     onChange={async (e) => {
                       try {
-                        const dir = await invoke<string>('suggest_save_dir', {
-                          taskType: 'magnet',
-                          source: e.target.value || null,
-                        })
-                        addForm.setFieldValue('save_dir', dir)
+                        await suggestAndSetSaveDir('magnet', e.target.value || null)
                       } catch {}
                     }}
                   />
@@ -1645,11 +2263,7 @@ export default function App() {
                     maxCount={1}
                     beforeUpload={(file) => {
                       setAddTorrentFile(file as File)
-                      invoke<string>('suggest_save_dir', {
-                        taskType: 'torrent',
-                        source: file.name,
-                      })
-                        .then((dir) => addForm.setFieldValue('save_dir', dir))
+                      suggestAndSetSaveDir('torrent', file.name)
                         .catch(() => {})
                       return false
                     }}
@@ -1664,6 +2278,12 @@ export default function App() {
               <Form.Item name="save_dir" label={t('saveDirOptional')}>
                 <Input placeholder="/path/to/downloads" />
               </Form.Item>
+              <Typography.Text type="secondary" style={{ marginTop: -8, display: 'block', marginBottom: 8 }}>
+                {t('matchedRule')}:{' '}
+                {addMatchedRule
+                  ? `${addMatchedRule.matcher}=${addMatchedRule.pattern} -> ${addMatchedRule.save_dir}`
+                  : t('noMatchedRule')}
+              </Typography.Text>
               <Collapse
                 size="small"
                 items={[
@@ -1706,6 +2326,161 @@ export default function App() {
             </Form>
           </div>
         </Modal>
+
+        <Modal
+          title={t('layoutSettings')}
+          open={layoutOpen}
+          onCancel={() => setLayoutOpen(false)}
+          footer={null}
+          width={620}
+        >
+          <Space direction="vertical" style={{ width: '100%' }} size={14}>
+            <div className="grid-2">
+              <Form layout="vertical" style={{ width: '100%' }}>
+                <Form.Item label={t('density')} style={{ marginBottom: 0 }}>
+                  <Select
+                    value={currentLayout.density}
+                    onChange={(v) => setLayoutDensity(v as TableDensity)}
+                    options={[
+                      { value: 'small', label: t('densityCompact') },
+                      { value: 'middle', label: t('densityDefault') },
+                      { value: 'large', label: t('densityComfortable') },
+                    ]}
+                  />
+                </Form.Item>
+              </Form>
+            </div>
+            <Divider style={{ margin: '2px 0 8px' }} />
+            <Typography.Text strong>{t('columns')}</Typography.Text>
+            <Space direction="vertical" style={{ width: '100%' }}>
+              {currentLayout.columnOrder
+                .filter((k) => layoutEditableColumns.some((c) => c.key === k))
+                .map((key, idx, arr) => {
+                  const meta = layoutEditableColumns.find((c) => c.key === key)
+                  if (!meta) return null
+                  const visible = !currentLayout.hiddenColumns.includes(key)
+                  return (
+                    <Card key={key} size="small">
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                        <Typography.Text>{meta.label}</Typography.Text>
+                        <Space>
+                          <Switch
+                            size="small"
+                            checked={visible}
+                            disabled={meta.lock}
+                            onChange={(checked) => toggleColumnVisible(key, checked)}
+                          />
+                          <Typography.Text type="secondary">{t('showColumn')}</Typography.Text>
+                          <Button size="small" disabled={idx === 0} onClick={() => moveColumn(key, 'up')}>
+                            {t('moveUp')}
+                          </Button>
+                          <Button size="small" disabled={idx === arr.length - 1} onClick={() => moveColumn(key, 'down')}>
+                            {t('moveDown')}
+                          </Button>
+                        </Space>
+                      </div>
+                    </Card>
+                  )
+                })}
+            </Space>
+          </Space>
+        </Modal>
+
+        <Drawer
+          title={t('taskDetails')}
+          placement="right"
+          width={620}
+          open={detailOpen}
+          onClose={() => setDetailOpen(false)}
+        >
+          <Space direction="vertical" style={{ width: '100%' }} size={16}>
+            <Card size="small" title={t('overview')} loading={detailLoading}>
+              <Descriptions size="small" column={1}>
+                <Descriptions.Item label={t('colName')}>
+                  {detailTask?.name || detailTask?.source || detailTask?.id || '-'}
+                </Descriptions.Item>
+                <Descriptions.Item label={t('taskIdLabel')}>{detailTask?.id || '-'}</Descriptions.Item>
+                <Descriptions.Item label={t('colStatus')}>
+                  <Tag color={statusColor(String(detailTask?.status || ''))}>
+                    {String(detailTask?.status || '').toUpperCase()}
+                  </Tag>
+                </Descriptions.Item>
+                <Descriptions.Item label={t('colSize')}>
+                  {fmtBytes(Number(detailTask?.completed_length || 0))} / {fmtBytes(Number(detailTask?.total_length || 0))}
+                </Descriptions.Item>
+                <Descriptions.Item label={t('saveDir')}>
+                  {detailTask?.save_dir || '-'}
+                </Descriptions.Item>
+                <Descriptions.Item label={t('categoryFilter')}>
+                  <Space.Compact style={{ width: '100%' }}>
+                    <Input
+                      value={detailCategoryInput}
+                      onChange={(e) => setDetailCategoryInput(e.target.value)}
+                      placeholder={t('setCategory')}
+                    />
+                    <Button onClick={onSaveTaskCategory}>{t('setCategory')}</Button>
+                    <Button
+                      onClick={async () => {
+                        if (!detailTask?.id) return
+                        try {
+                          setDetailCategoryInput('')
+                          await invoke('set_task_category', {
+                            taskId: detailTask.id,
+                            category: null,
+                          })
+                          setDetailTask((prev) => (prev ? { ...prev, category: null } : prev))
+                          await refresh()
+                        } catch (err) {
+                          msg.error(parseErr(err))
+                        }
+                      }}
+                    >
+                      {t('clearCategory')}
+                    </Button>
+                  </Space.Compact>
+                </Descriptions.Item>
+                <Descriptions.Item label={t('sourceLabel')}>
+                  <Typography.Text copyable={{ text: detailTask?.source || '' }}>
+                    {detailTask?.source || '-'}
+                  </Typography.Text>
+                </Descriptions.Item>
+              </Descriptions>
+            </Card>
+            <Card size="small" title={t('fileSelect')} loading={detailLoading}>
+              <Space direction="vertical" style={{ width: '100%' }}>
+                {detailFiles.length === 0 ? (
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                ) : (
+                  detailFiles.map((f, idx) => (
+                    <Typography.Text key={`${idx}-${f.path}`}>
+                      {f.path} ({fmtBytes(f.completed_length)} / {fmtBytes(f.length)})
+                    </Typography.Text>
+                  ))
+                )}
+              </Space>
+            </Card>
+            <Card size="small" title={t('runtimeStatus')} loading={detailLoading}>
+              <Input.TextArea
+                value={detailRuntimeText || t('noRuntimeStatus')}
+                autoSize={{ minRows: 6, maxRows: 14 }}
+                readOnly
+              />
+            </Card>
+            <Card size="small" title={t('retryLogs')} loading={detailLoading}>
+              <Space direction="vertical" style={{ width: '100%' }}>
+                {detailRetryLogs.length === 0 ? (
+                  <Typography.Text type="secondary">{t('noRetryLogs')}</Typography.Text>
+                ) : (
+                  detailRetryLogs.map((log, idx) => (
+                    <Typography.Text key={`${log.ts}-${idx}`}>
+                      [{fmtTime(log.ts)}] {log.action}: {log.message}
+                    </Typography.Text>
+                  ))
+                )}
+              </Space>
+            </Card>
+          </Space>
+        </Drawer>
 
         <Modal
           title={t('settingsTitle')}
@@ -1803,6 +2578,7 @@ export default function App() {
                       <Input />
                     </Form.Item>
                     <Space style={{ marginBottom: 12 }}>
+                      <Button onClick={browseAria2Path}>{t('browse')}</Button>
                       <Button onClick={detectAria2Path}>{t('detectAria2')}</Button>
                       <Button onClick={loadSettings}>{t('reload')}</Button>
                       <Button onClick={openImportExport}>{t('importExport')}</Button>
@@ -1829,6 +2605,9 @@ export default function App() {
                     </div>
                     <Form.Item name="browser_bridge_token" label={t('bridgeToken')}>
                       <Input />
+                    </Form.Item>
+                    <Form.Item name="clipboard_watch_enabled" label={t('clipboardWatchEnabled')} valuePropName="checked">
+                      <Switch />
                     </Form.Item>
 
                     <Divider />
@@ -1857,6 +2636,9 @@ export default function App() {
                     <Divider />
                     <Typography.Title level={5}>{t('trayPrefs')}</Typography.Title>
                     <div className="grid-2">
+                      <Form.Item name="start_minimized" label={t('startMinimized')} valuePropName="checked">
+                        <Switch />
+                      </Form.Item>
                       <Form.Item name="minimize_to_tray" label={t('minimizeToTray')} valuePropName="checked">
                         <Switch />
                       </Form.Item>
@@ -1864,6 +2646,10 @@ export default function App() {
                         <Switch />
                       </Form.Item>
                     </div>
+                    <Space style={{ marginBottom: 8 }}>
+                      <Button onClick={resetUiLayout}>{t('resetUiLayout')}</Button>
+                      <Button danger onClick={resetSettingsToDefaults}>{t('resetSettingsDefaults')}</Button>
+                    </Space>
 
                     <Divider />
                     <Typography.Title level={5}>{t('rulesTitle')}</Typography.Title>
@@ -1891,13 +2677,37 @@ export default function App() {
                                 <Form.Item name={[field.name, 'save_dir']} label={t('saveDir')}>
                                   <Input placeholder="/path/to/save" />
                                 </Form.Item>
+                                <Form.Item
+                                  name={[field.name, 'subdir_by_domain']}
+                                  label={t('subdirByDomain')}
+                                  valuePropName="checked"
+                                >
+                                  <Switch />
+                                </Form.Item>
+                                <Form.Item
+                                  name={[field.name, 'subdir_by_date']}
+                                  label={t('subdirByDate')}
+                                  valuePropName="checked"
+                                >
+                                  <Switch />
+                                </Form.Item>
                               </div>
                               <Button danger onClick={() => remove(field.name)}>
                                 {t('removeRule')}
                               </Button>
                             </Card>
                           ))}
-                          <Button icon={<PlusOutlined />} onClick={() => add({ enabled: true, matcher: 'ext' })}>
+                          <Button
+                            icon={<PlusOutlined />}
+                            onClick={() =>
+                              add({
+                                enabled: true,
+                                matcher: 'ext',
+                                subdir_by_domain: false,
+                                subdir_by_date: false,
+                              })
+                            }
+                          >
                             {t('addRule')}
                           </Button>
                         </Space>
@@ -1911,6 +2721,38 @@ export default function App() {
                 label: t('tabDiagnostics'),
                 children: (
                   <Space direction="vertical" style={{ width: '100%' }}>
+                    <Card size="small" title={t('startupSelfCheck')}>
+                      <Space direction="vertical" style={{ width: '100%' }}>
+                        <Typography.Text>
+                          aria2: <Typography.Text code>{startupSummary?.aria2_bin_path || '-'}</Typography.Text>
+                        </Typography.Text>
+                        <Space wrap>
+                          <Tag color={startupSummary?.aria2_bin_exists ? 'green' : 'red'}>
+                            bin {startupSummary?.aria2_bin_exists ? t('statusOk') : t('statusFail')}
+                          </Tag>
+                          <Tag color={startupSummary?.aria2_bin_executable ? 'green' : 'red'}>
+                            exec {startupSummary?.aria2_bin_executable ? t('statusOk') : t('statusFail')}
+                          </Tag>
+                          <Tag color={startupSummary?.download_dir_exists ? 'green' : 'red'}>
+                            dir {startupSummary?.download_dir_exists ? t('statusOk') : t('statusFail')}
+                          </Tag>
+                          <Tag color={startupSummary?.download_dir_writable ? 'green' : 'red'}>
+                            writable {startupSummary?.download_dir_writable ? t('statusOk') : t('statusFail')}
+                          </Tag>
+                          <Tag color={startupSummary?.rpc_ready ? 'green' : 'orange'}>
+                            rpc {startupSummary?.rpc_ready ? t('statusOk') : t('statusFail')}
+                          </Tag>
+                        </Space>
+                        <Typography.Text>
+                          download dir:{' '}
+                          <Typography.Text code>{startupSummary?.download_dir || '-'}</Typography.Text>
+                        </Typography.Text>
+                        <Typography.Text>
+                          rpc endpoint:{' '}
+                          <Typography.Text code>{startupSummary?.rpc_endpoint || '-'}</Typography.Text>
+                        </Typography.Text>
+                      </Space>
+                    </Card>
                     <Space wrap>
                       <Button onClick={doRpcPing}>{t('rpcPing')}</Button>
                       <Button onClick={doRestart}>{t('restartAria2')}</Button>
@@ -2040,6 +2882,10 @@ export default function App() {
               <Form.Item name="aria2_bin_path" label={t('aria2Path')}>
                 <Input />
               </Form.Item>
+              <Space style={{ marginBottom: 8 }}>
+                <Button onClick={browseAria2Path}>{t('browse')}</Button>
+                <Button onClick={detectAria2Path}>{t('detectAria2')}</Button>
+              </Space>
               <div className="grid-2">
                 <Form.Item name="max_concurrent_downloads" label={t('maxConcurrent')}>
                   <InputNumber min={1} style={{ width: '100%' }} />

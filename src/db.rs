@@ -14,7 +14,7 @@ pub struct Database {
     conn: Arc<Mutex<Connection>>,
 }
 
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 impl Database {
     pub fn new(path: impl AsRef<Path>) -> Result<Self> {
@@ -39,6 +39,7 @@ impl Database {
               source TEXT NOT NULL,
               status TEXT NOT NULL,
               name TEXT,
+              category TEXT,
               save_dir TEXT NOT NULL,
               total_length INTEGER DEFAULT 0,
               completed_length INTEGER DEFAULT 0,
@@ -78,6 +79,13 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_operation_logs_ts ON operation_logs(ts);
             "#,
         )?;
+        if !table_has_column(&conn, "tasks", "category")? {
+            conn.execute("ALTER TABLE tasks ADD COLUMN category TEXT", [])?;
+        }
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tasks_category ON tasks(category)",
+            [],
+        )?;
         conn.execute(&format!("PRAGMA user_version = {SCHEMA_VERSION}"), [])?;
         Ok(())
     }
@@ -88,15 +96,17 @@ impl Database {
             r#"
             INSERT INTO tasks (
                 id, aria2_gid, type, source, status, name, save_dir,
+                category,
                 total_length, completed_length, download_speed, upload_speed,
                 connections, error_code, error_message, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
             ON CONFLICT(id) DO UPDATE SET
               aria2_gid=excluded.aria2_gid,
               type=excluded.type,
               source=excluded.source,
               status=excluded.status,
               name=excluded.name,
+              category=excluded.category,
               save_dir=excluded.save_dir,
               total_length=excluded.total_length,
               completed_length=excluded.completed_length,
@@ -115,6 +125,7 @@ impl Database {
                 task.status.as_str(),
                 task.name,
                 task.save_dir,
+                task.category,
                 task.total_length,
                 task.completed_length,
                 task.download_speed,
@@ -138,7 +149,7 @@ impl Database {
         let conn = self.conn.lock().expect("db mutex poisoned");
         let mut rows = if let Some(status) = status {
             let mut stmt = conn.prepare(
-                r#"SELECT id, aria2_gid, type, source, status, name, save_dir, total_length,
+                r#"SELECT id, aria2_gid, type, source, status, name, save_dir, category, total_length,
                    completed_length, download_speed, upload_speed, connections, error_code,
                    error_message, created_at, updated_at
                    FROM tasks WHERE status = ?1 ORDER BY created_at DESC LIMIT ?2 OFFSET ?3"#,
@@ -147,7 +158,7 @@ impl Database {
                 .collect::<rusqlite::Result<Vec<_>>>()?
         } else {
             let mut stmt = conn.prepare(
-                r#"SELECT id, aria2_gid, type, source, status, name, save_dir, total_length,
+                r#"SELECT id, aria2_gid, type, source, status, name, save_dir, category, total_length,
                    completed_length, download_speed, upload_speed, connections, error_code,
                    error_message, created_at, updated_at
                    FROM tasks ORDER BY created_at DESC LIMIT ?1 OFFSET ?2"#,
@@ -162,7 +173,7 @@ impl Database {
     pub fn get_task(&self, task_id: &str) -> Result<Option<Task>> {
         let conn = self.conn.lock().expect("db mutex poisoned");
         conn.query_row(
-            r#"SELECT id, aria2_gid, type, source, status, name, save_dir, total_length,
+            r#"SELECT id, aria2_gid, type, source, status, name, save_dir, category, total_length,
                completed_length, download_speed, upload_speed, connections, error_code,
                error_message, created_at, updated_at
                FROM tasks WHERE id = ?1"#,
@@ -176,7 +187,7 @@ impl Database {
     pub fn get_task_by_gid(&self, gid: &str) -> Result<Option<Task>> {
         let conn = self.conn.lock().expect("db mutex poisoned");
         conn.query_row(
-            r#"SELECT id, aria2_gid, type, source, status, name, save_dir, total_length,
+            r#"SELECT id, aria2_gid, type, source, status, name, save_dir, category, total_length,
                completed_length, download_speed, upload_speed, connections, error_code,
                error_message, created_at, updated_at
                FROM tasks WHERE aria2_gid = ?1"#,
@@ -371,6 +382,9 @@ impl Database {
         if let Some(v) = &settings.browser_bridge_token {
             self.set_setting("browser_bridge_token", v)?;
         }
+        if let Some(v) = settings.clipboard_watch_enabled {
+            self.set_setting("clipboard_watch_enabled", if v { "true" } else { "false" })?;
+        }
         if let Some(v) = &settings.ui_theme {
             self.set_setting("ui_theme", v)?;
         }
@@ -391,6 +405,9 @@ impl Database {
         }
         if let Some(v) = settings.first_run_done {
             self.set_setting("first_run_done", if v { "true" } else { "false" })?;
+        }
+        if let Some(v) = settings.start_minimized {
+            self.set_setting("start_minimized", if v { "true" } else { "false" })?;
         }
         if let Some(v) = settings.minimize_to_tray {
             self.set_setting("minimize_to_tray", if v { "true" } else { "false" })?;
@@ -441,6 +458,13 @@ impl Database {
                 .get_setting("browser_bridge_port")?
                 .and_then(|v| v.parse::<u16>().ok()),
             browser_bridge_token: self.get_setting("browser_bridge_token")?,
+            clipboard_watch_enabled: self
+                .get_setting("clipboard_watch_enabled")?
+                .and_then(|v| match v.as_str() {
+                    "true" => Some(true),
+                    "false" => Some(false),
+                    _ => None,
+                }),
             ui_theme: self.get_setting("ui_theme")?,
             retry_max_attempts: self
                 .get_setting("retry_max_attempts")?
@@ -455,6 +479,13 @@ impl Database {
             speed_plan: self.get_setting("speed_plan")?,
             first_run_done: self
                 .get_setting("first_run_done")?
+                .and_then(|v| match v.as_str() {
+                    "true" => Some(true),
+                    "false" => Some(false),
+                    _ => None,
+                }),
+            start_minimized: self
+                .get_setting("start_minimized")?
                 .and_then(|v| match v.as_str() {
                     "true" => Some(true),
                     "false" => Some(false),
@@ -532,6 +563,16 @@ impl Database {
         conn.execute("DELETE FROM operation_logs", [])?;
         Ok(())
     }
+
+    pub fn set_task_category(&self, task_id: &str, category: Option<&str>) -> Result<()> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        conn.execute(
+            "UPDATE tasks SET category = ?2, updated_at = strftime('%s','now') WHERE id = ?1",
+            params![task_id, category],
+        )?;
+        Ok(())
+    }
+
 }
 
 fn row_to_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
@@ -545,16 +586,28 @@ fn row_to_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         status: parse_task_status(status_raw.as_str())?,
         name: row.get(5)?,
         save_dir: row.get(6)?,
-        total_length: row.get(7)?,
-        completed_length: row.get(8)?,
-        download_speed: row.get(9)?,
-        upload_speed: row.get(10)?,
-        connections: row.get(11)?,
-        error_code: row.get(12)?,
-        error_message: row.get(13)?,
-        created_at: row.get(14)?,
-        updated_at: row.get(15)?,
+        category: row.get(7)?,
+        total_length: row.get(8)?,
+        completed_length: row.get(9)?,
+        download_speed: row.get(10)?,
+        upload_speed: row.get(11)?,
+        connections: row.get(12)?,
+        error_code: row.get(13)?,
+        error_message: row.get(14)?,
+        created_at: row.get(15)?,
+        updated_at: row.get(16)?,
     })
+}
+
+fn table_has_column(conn: &Connection, table: &str, column: &str) -> Result<bool> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
+    for name in rows {
+        if name? == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn parse_task_type(value: &str) -> rusqlite::Result<TaskType> {
@@ -628,11 +681,23 @@ mod tests {
                 matcher: "ext".to_string(),
                 pattern: "mp4,mkv".to_string(),
                 save_dir: "/tmp/video".to_string(),
+                subdir_by_date: false,
+                subdir_by_domain: false,
             }],
             browser_bridge_enabled: Some(true),
             browser_bridge_port: Some(16789),
             browser_bridge_token: Some("bridge-token-1".to_string()),
+            clipboard_watch_enabled: Some(false),
             ui_theme: Some("dark".to_string()),
+            retry_max_attempts: None,
+            retry_backoff_secs: None,
+            retry_fallback_mirrors: None,
+            metadata_timeout_secs: None,
+            speed_plan: None,
+            first_run_done: None,
+            start_minimized: None,
+            minimize_to_tray: None,
+            notify_on_complete: None,
         };
 
         db.save_global_settings(&settings).expect("save settings");

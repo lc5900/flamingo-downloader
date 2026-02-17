@@ -44,6 +44,7 @@ pub trait Aria2Api: Send + Sync {
     async fn change_option(&self, gid: &str, options: Value) -> Result<String>;
     async fn change_global_option(&self, options: Value) -> Result<String>;
     async fn get_global_stat(&self) -> Result<Value>;
+    async fn get_global_option(&self) -> Result<Value>;
     async fn get_version(&self) -> Result<Value>;
     async fn save_session(&self) -> Result<String>;
     fn stderr_tail(&self) -> Option<String>;
@@ -169,6 +170,7 @@ pub struct Aria2Endpoint {
     pub endpoint: String,
     pub secret: String,
     pub port: u16,
+    pub compat_mode: bool,
 }
 
 #[derive(Clone)]
@@ -252,74 +254,109 @@ impl Aria2Manager {
         let port = find_free_port()?;
         let secret = Uuid::new_v4().to_string().replace('-', "");
         let endpoint = format!("http://127.0.0.1:{port}/jsonrpc");
-
-        let mut command = Command::new(&self.cfg.aria2_bin);
         let stderr_log_path = self.cfg.work_dir.join("aria2.stderr.log");
-        let stderr_file = fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(&stderr_log_path)
-            .with_context(|| format!("open stderr log file: {}", stderr_log_path.display()))?;
-        command
-            .arg("--enable-rpc=true")
-            .arg("--rpc-listen-all=false")
-            .arg(format!("--rpc-listen-port={port}"))
-            .arg(format!("--rpc-secret={secret}"))
-            .arg("--rpc-allow-origin-all=false")
-            .arg(format!("--dir={}", self.cfg.default_download_dir.display()))
-            .arg(format!("--input-file={}", self.cfg.session_file.display()))
-            .arg(format!(
-                "--save-session={}",
-                self.cfg.session_file.display()
-            ))
-            .arg("--save-session-interval=30")
-            .arg("--check-certificate=true")
-            .arg("--continue=true")
-            .arg(format!(
-                "--max-concurrent-downloads={}",
-                self.cfg.max_concurrent_downloads
-            ))
-            .arg(format!("--split={}", self.cfg.split))
-            .arg(format!(
-                "--max-connection-per-server={}",
-                self.cfg.max_connection_per_server
-            ))
-            .arg("--enable-dht=true")
-            .arg("--enable-peer-exchange=true")
-            .arg("--bt-enable-lpd=true")
-            .arg("--follow-torrent=true")
-            .arg("--listen-port=46800-46850")
-            .arg("--bt-save-metadata=true")
-            .arg("--bt-metadata-only=false")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::from(stderr_file));
+        let spawn_with_profile = |compat_mode: bool| -> Result<Child> {
+            let stderr_file = fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(&stderr_log_path)
+                .with_context(|| format!("open stderr log file: {}", stderr_log_path.display()))?;
+            let mut command = Command::new(&self.cfg.aria2_bin);
+            command
+                .arg("--enable-rpc=true")
+                .arg("--rpc-listen-all=false")
+                .arg(format!("--rpc-listen-port={port}"))
+                .arg(format!("--rpc-secret={secret}"))
+                .arg("--rpc-allow-origin-all=false")
+                .arg(format!("--dir={}", self.cfg.default_download_dir.display()))
+                .arg(format!("--input-file={}", self.cfg.session_file.display()))
+                .arg(format!(
+                    "--save-session={}",
+                    self.cfg.session_file.display()
+                ))
+                .arg("--save-session-interval=30")
+                .arg("--check-certificate=true")
+                .arg("--continue=true")
+                .arg(format!(
+                    "--max-concurrent-downloads={}",
+                    self.cfg.max_concurrent_downloads
+                ))
+                .arg(format!("--split={}", self.cfg.split))
+                .arg(format!(
+                    "--max-connection-per-server={}",
+                    self.cfg.max_connection_per_server
+                ));
 
-        if let Some(trackers) = &self.cfg.bt_tracker {
-            command.arg(format!("--bt-tracker={trackers}"));
-        }
+            if !compat_mode {
+                command
+                    .arg("--enable-dht=true")
+                    .arg("--enable-peer-exchange=true")
+                    .arg("--bt-enable-lpd=true")
+                    .arg("--follow-torrent=true")
+                    .arg("--listen-port=46800-46850")
+                    .arg("--bt-save-metadata=true")
+                    .arg("--bt-metadata-only=false");
+                if let Some(trackers) = &self.cfg.bt_tracker {
+                    command.arg(format!("--bt-tracker={trackers}"));
+                }
+            }
 
-        let child = command.spawn().with_context(|| {
-            format!(
-                "failed to spawn aria2c at {}",
-                self.cfg.aria2_bin.to_string_lossy()
-            )
-        })?;
+            command
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::from(stderr_file));
+            command.spawn().with_context(|| {
+                format!(
+                    "failed to spawn aria2c at {}",
+                    self.cfg.aria2_bin.to_string_lossy()
+                )
+            })
+        };
 
+        let mut compat_mode = false;
         {
+            let child = spawn_with_profile(false)?;
             let mut child_guard = self.child.lock().await;
             *child_guard = Some(child);
         }
 
         let client = Aria2Client::new(endpoint.clone(), secret.clone());
         if let Err(e) = wait_for_rpc_ready(self, &client).await {
-            let mut child_guard = self.child.lock().await;
-            if let Some(mut child) = child_guard.take() {
-                let _ = child.kill().await;
+            let detail = read_aria2_stderr_tail(&self.cfg.work_dir).unwrap_or_default();
+            let unsupported_option = detail.to_lowercase().contains("unrecognized option");
+            if unsupported_option {
+                {
+                    let mut child_guard = self.child.lock().await;
+                    if let Some(mut child) = child_guard.take() {
+                        let _ = child.kill().await;
+                    }
+                }
+                let child = spawn_with_profile(true)?;
+                {
+                    let mut child_guard = self.child.lock().await;
+                    *child_guard = Some(child);
+                }
+                compat_mode = true;
+                if let Err(e2) = wait_for_rpc_ready(self, &client).await {
+                    let mut child_guard = self.child.lock().await;
+                    if let Some(mut child) = child_guard.take() {
+                        let _ = child.kill().await;
+                    }
+                    *self.client.write().await = None;
+                    *self.endpoint.write().await = None;
+                    return Err(anyhow!(
+                        "aria2 start failed after compatibility fallback: {e2}"
+                    ));
+                }
+            } else {
+                let mut child_guard = self.child.lock().await;
+                if let Some(mut child) = child_guard.take() {
+                    let _ = child.kill().await;
+                }
+                *self.client.write().await = None;
+                *self.endpoint.write().await = None;
+                return Err(e);
             }
-            *self.client.write().await = None;
-            *self.endpoint.write().await = None;
-            return Err(e);
         }
 
         {
@@ -328,6 +365,7 @@ impl Aria2Manager {
                 endpoint: endpoint.clone(),
                 secret: secret.clone(),
                 port,
+                compat_mode,
             });
             let mut client_guard = self.client.write().await;
             *client_guard = Some(client);
@@ -337,6 +375,7 @@ impl Aria2Manager {
             endpoint,
             secret,
             port,
+            compat_mode,
         })
     }
 
@@ -598,6 +637,13 @@ impl Aria2Manager {
             .await
     }
 
+    pub async fn get_global_option(&self) -> Result<Value> {
+        self.client()
+            .await?
+            .call("aria2.getGlobalOption", vec![])
+            .await
+    }
+
     pub async fn get_version(&self) -> Result<Value> {
         self.client().await?.call("aria2.getVersion", vec![]).await
     }
@@ -676,6 +722,10 @@ impl Aria2Api for Aria2Manager {
 
     async fn get_global_stat(&self) -> Result<Value> {
         Aria2Manager::get_global_stat(self).await
+    }
+
+    async fn get_global_option(&self) -> Result<Value> {
+        Aria2Manager::get_global_option(self).await
     }
 
     async fn get_version(&self) -> Result<Value> {
