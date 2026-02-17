@@ -21,7 +21,7 @@ This project focuses on building a reliable **download product**, not a custom p
 - SQLite persistence for tasks and settings
 - Manual aria2 binary path configuration with path detection
 - Local browser bridge (`127.0.0.1` + token) for browser takeover
-- Browser extension template in `browser-extension/` (auto takeover + context menu send)
+- Browser extension template in `browser-extension/` (Chromium + Firefox, auto takeover + context menu send)
 
 ## Architecture
 
@@ -78,7 +78,8 @@ Optional browser takeover setup:
 1. In Settings, keep `Browser Bridge Enabled` on
 2. Check bridge port/token
 3. Load `browser-extension/` as unpacked extension in Chrome/Edge
-4. Fill endpoint/token in extension options
+4. For Firefox testing, use `browser-extension/manifest.firefox.json` (see `browser-extension/README.md`)
+5. Fill endpoint/token in extension options
 
 ## Build (Optional)
 

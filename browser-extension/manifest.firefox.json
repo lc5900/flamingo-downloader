@@ -1,0 +1,28 @@
+{
+  "manifest_version": 2,
+  "name": "Flamingo Downloader Bridge",
+  "version": "0.1.0",
+  "description": "Send browser downloads to Flamingo Downloader",
+  "permissions": [
+    "downloads",
+    "storage",
+    "contextMenus",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "browser_action": {
+    "default_title": "Flamingo Bridge"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "flamingo-downloader-bridge@lc5900.github.io",
+      "strict_min_version": "109.0"
+    }
+  }
+}

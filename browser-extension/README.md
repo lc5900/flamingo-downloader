@@ -16,6 +16,17 @@ Run Flamingo first. In Settings, check:
 3. Click **Load unpacked**
 4. Select this folder: `browser-extension`
 
+## 2.1) Load extension (Firefox)
+
+1. In `browser-extension/`, temporarily replace manifest:
+   - backup `manifest.json`
+   - copy `manifest.firefox.json` to `manifest.json`
+2. Open `about:debugging#/runtime/this-firefox`
+3. Click **Load Temporary Add-on...**
+4. Select `browser-extension/manifest.json`
+5. (Optional) restore Chromium manifest after testing:
+   - move backup file back to `manifest.json`
+
 ## 3) Configure extension
 
 Open extension options and set:
@@ -27,6 +38,12 @@ Open extension options and set:
 
 - Auto takeover: new browser downloads are sent to Flamingo and canceled in browser.
 - Context menu: right click a link -> `Download with Flamingo`.
+
+## Build notes
+
+- Chromium uses `manifest.json` (MV3 service worker).
+- Firefox uses `manifest.firefox.json` (MV2 background script).
+- Keep both files in repo and select the target manifest before packaging.
 
 ## Request format
 

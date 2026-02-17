@@ -21,7 +21,7 @@ English README: [`README.md`](README.md)
 - SQLite 持久化任务和设置
 - 支持手动指定 aria2 路径并检测可用路径
 - 提供本地浏览器桥接（`127.0.0.1` + token）
-- 提供浏览器扩展模板：`browser-extension/`（自动接管 + 右键发送）
+- 提供浏览器扩展模板：`browser-extension/`（Chromium + Firefox，自动接管 + 右键发送）
 
 ## 架构概览
 
@@ -78,7 +78,8 @@ cp -R dist/* ../dist/
 1. 设置中保持 `Browser Bridge Enabled` 开启
 2. 查看桥接端口与 token
 3. 在 Chrome/Edge 以开发者模式加载 `browser-extension/`
-4. 在扩展选项中填入 endpoint 与 token
+4. Firefox 测试请使用 `browser-extension/manifest.firefox.json`（见 `browser-extension/README.md`）
+5. 在扩展选项中填入 endpoint 与 token
 
 ## 打包（可选）
 

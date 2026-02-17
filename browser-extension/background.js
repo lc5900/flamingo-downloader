@@ -4,8 +4,10 @@ const DEFAULTS = {
   token: "",
 };
 
+const ext = typeof browser !== "undefined" ? browser : chrome;
+
 async function getConfig() {
-  const saved = await chrome.storage.sync.get(["enabled", "endpoint", "token"]);
+  const saved = await ext.storage.sync.get(["enabled", "endpoint", "token"]);
   return {
     enabled: typeof saved.enabled === "boolean" ? saved.enabled : DEFAULTS.enabled,
     endpoint: String(saved.endpoint || DEFAULTS.endpoint),
@@ -52,16 +54,16 @@ async function maybeTakeOver(downloadItem) {
   }
 }
 
-chrome.runtime.onInstalled.addListener(async () => {
-  await chrome.storage.sync.set(DEFAULTS);
-  chrome.contextMenus.create({
+ext.runtime.onInstalled.addListener(async () => {
+  await ext.storage.sync.set(DEFAULTS);
+  ext.contextMenus.create({
     id: "flamingo-download-link",
     title: "Download with Flamingo",
     contexts: ["link"],
   });
 });
 
-chrome.contextMenus.onClicked.addListener(async (info) => {
+ext.contextMenus.onClicked.addListener(async (info) => {
   if (info.menuItemId !== "flamingo-download-link" || !info.linkUrl) return;
   try {
     await sendToFlamingo(info.linkUrl, null);
@@ -70,6 +72,6 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
   }
 });
 
-chrome.downloads.onCreated.addListener((downloadItem) => {
+ext.downloads.onCreated.addListener((downloadItem) => {
   maybeTakeOver(downloadItem);
 });
