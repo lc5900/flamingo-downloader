@@ -1,5 +1,6 @@
 const DEFAULTS = {
   enabled: false,
+  autoIntercept: true,
   endpoint: "http://127.0.0.1:16789/add",
   token: "",
 };
@@ -7,9 +8,11 @@ const DEFAULTS = {
 const ext = typeof browser !== "undefined" ? browser : chrome;
 
 async function getConfig() {
-  const saved = await ext.storage.sync.get(["enabled", "endpoint", "token"]);
+  const saved = await ext.storage.sync.get(["enabled", "autoIntercept", "endpoint", "token"]);
   return {
     enabled: typeof saved.enabled === "boolean" ? saved.enabled : DEFAULTS.enabled,
+    autoIntercept:
+      typeof saved.autoIntercept === "boolean" ? saved.autoIntercept : DEFAULTS.autoIntercept,
     endpoint: String(saved.endpoint || DEFAULTS.endpoint),
     token: String(saved.token || DEFAULTS.token),
   };
@@ -39,6 +42,8 @@ async function sendToFlamingo(url, saveDir = null) {
 
 async function maybeTakeOver(downloadItem) {
   try {
+    const cfg = await getConfig();
+    if (!cfg.enabled || !cfg.autoIntercept) return;
     if (!downloadItem || !downloadItem.url) return;
     const url = String(downloadItem.url);
     if (!(url.startsWith("http://") || url.startsWith("https://") || url.startsWith("magnet:?"))) {
@@ -46,8 +51,8 @@ async function maybeTakeOver(downloadItem) {
     }
     const result = await sendToFlamingo(url, null);
     if (result && result.ok) {
-      await chrome.downloads.cancel(downloadItem.id).catch(() => {});
-      await chrome.downloads.erase({ id: downloadItem.id }).catch(() => {});
+      await ext.downloads.cancel(downloadItem.id).catch(() => {});
+      await ext.downloads.erase({ id: downloadItem.id }).catch(() => {});
     }
   } catch (e) {
     console.error("Flamingo bridge takeover failed", e);
@@ -55,7 +60,14 @@ async function maybeTakeOver(downloadItem) {
 }
 
 ext.runtime.onInstalled.addListener(async () => {
-  await ext.storage.sync.set(DEFAULTS);
+  const saved = await ext.storage.sync.get(["enabled", "autoIntercept", "endpoint", "token"]);
+  await ext.storage.sync.set({
+    enabled: typeof saved.enabled === "boolean" ? saved.enabled : DEFAULTS.enabled,
+    autoIntercept:
+      typeof saved.autoIntercept === "boolean" ? saved.autoIntercept : DEFAULTS.autoIntercept,
+    endpoint: String(saved.endpoint || DEFAULTS.endpoint),
+    token: String(saved.token || DEFAULTS.token),
+  });
   ext.contextMenus.create({
     id: "flamingo-download-link",
     title: "Download with Flamingo",

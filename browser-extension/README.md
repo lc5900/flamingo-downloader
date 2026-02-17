@@ -32,11 +32,12 @@ Run Flamingo first. In Settings, check:
 Open extension options and set:
 - Endpoint: `http://127.0.0.1:16789/add`
 - Token: paste from Flamingo settings
-- Enable takeover: on
+- Enable Flamingo bridge: on
+- Auto-intercept downloads: on/off (optional)
 
 ## 4) Behavior
 
-- Auto takeover: new browser downloads are sent to Flamingo and canceled in browser.
+- Auto takeover (optional): new browser downloads are sent to Flamingo and canceled in browser.
 - Context menu: right click a link -> `Download with Flamingo`.
 
 ## Build notes
