@@ -235,7 +235,10 @@ jobs:
           {
             echo ""
             echo "## Artifacts"
-            find release-assets-flat -maxdepth 1 -type f -printf -- "- %f\n" | sort
+            find release-assets-flat -maxdepth 1 -type f \
+              | sed 's#^.*/##' \
+              | sort \
+              | sed 's/^/- /'
           } >> release-notes.md
 
       - name: Publish GitHub release
