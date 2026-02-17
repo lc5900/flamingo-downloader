@@ -36,14 +36,37 @@
   height: 100%;
 }
 
+.settings-modal .ant-modal {
+  top: 24px;
+  padding-bottom: 0;
+}
+
+.settings-modal .ant-modal-content {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 48px);
+}
+
+.settings-modal .ant-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding-right: 8px;
+}
+
 .settings-tabs .ant-tabs-content-holder {
-  max-height: calc(72vh - 52px);
+  height: 100%;
   overflow: auto;
   padding-right: 6px;
 }
 
 .settings-tabs .ant-tabs-nav {
   margin-bottom: 10px;
+}
+
+.settings-tabs .ant-tabs-content,
+.settings-tabs .ant-tabs-tabpane {
+  height: 100%;
 }
 
 .grid-2 {

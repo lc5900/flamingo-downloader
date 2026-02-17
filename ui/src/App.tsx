@@ -842,13 +842,6 @@ export default function App() {
           onOk={saveSettings}
           confirmLoading={settingsSaving}
           className="settings-modal"
-          styles={{
-            body: {
-              maxHeight: '72vh',
-              overflow: 'hidden',
-              paddingRight: 8,
-            },
-          }}
         >
           <Tabs
             className="settings-tabs"
