@@ -635,16 +635,23 @@ fn main() {
             #[cfg(target_os = "macos")]
             let _ = app.set_activation_policy(ActivationPolicy::Regular);
 
-            let cwd = std::env::current_dir()?;
             if let Ok(resource_dir) = app.path().resource_dir() {
                 // Rust 2024 marks environment mutation as unsafe.
                 unsafe { std::env::set_var("FLAMINGO_RESOURCE_DIR", resource_dir) };
             }
-            let runtime_dir = cwd.join("runtime");
+
+            // Packaged apps may launch with a non-writable current dir (e.g. "/").
+            // Always keep runtime/db under user-writable app data dir.
+            let base_dir = match app.path().app_data_dir() {
+                Ok(dir) => dir,
+                Err(_) => std::env::temp_dir().join("flamingo-downloader"),
+            };
+            std::fs::create_dir_all(&base_dir)?;
+            let runtime_dir = base_dir.join("runtime");
             std::fs::create_dir_all(&runtime_dir)?;
 
             let handles = tauri::async_runtime::block_on(init_backend(
-                &cwd,
+                &base_dir,
                 &runtime_dir.join("app.db"),
                 emitter_for_setup.clone(),
             ))
@@ -656,6 +663,14 @@ fn main() {
             app.state::<AppState>()
                 .service
                 .append_operation_log("setup_started", "setup initialized, app state managed");
+            app.state::<AppState>().service.append_operation_log(
+                "runtime_paths",
+                format!(
+                    "base_dir={}, runtime_dir={}",
+                    base_dir.to_string_lossy(),
+                    runtime_dir.to_string_lossy()
+                ),
+            );
 
             for arg in std::env::args().skip(1) {
                 if let Some(target) = parse_external_open_arg(&arg) {
