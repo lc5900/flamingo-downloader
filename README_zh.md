@@ -84,8 +84,12 @@ cp -R dist/* ../dist/
 ## 打包（可选）
 
 ```bash
-# 需要 tauri-cli
-cargo tauri build --manifest-path src-tauri/Cargo.toml
+# 1) 先构建前端产物（frontendDist=../ui/dist）
+npm --prefix ui run build
+
+# 2) 再构建 Tauri 安装包
+cd src-tauri
+cargo tauri build
 ```
 
 ## GitHub Actions（全平台构建）

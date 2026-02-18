@@ -84,8 +84,12 @@ Optional browser takeover setup:
 ## Build (Optional)
 
 ```bash
-# tauri-cli required
-cargo tauri build --manifest-path src-tauri/Cargo.toml
+# 1) build frontend assets for frontendDist=../ui/dist
+npm --prefix ui run build
+
+# 2) build tauri bundle
+cd src-tauri
+cargo tauri build
 ```
 
 ## GitHub Actions (Build All Platforms)

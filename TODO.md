@@ -104,3 +104,43 @@
 
 - [x] CI: verify bundled aria2 binary runs (`aria2c --version`) on each OS and fail fast if missing
 - [x] Add unit tests for retry scheduling, speed plan evaluation, and download-dir rules
+
+## Next Iteration (Proposed)
+
+### P0 - Release/CI and Packaging
+
+- [x] README: fix `cargo tauri build` usage (`--manifest-path` passthrough) and align with current `frontendDist`
+- [ ] Tauri config: add `beforeBuildCommand` to build UI automatically for local `cargo tauri build`
+- [ ] CI: publish only user-facing bundles (dmg/msi/AppImage/deb/rpm) instead of entire `bundle/**` directory
+- [ ] CI: add `workflow_run`/preflight step to validate `ui/dist` and fail with clear hint when missing
+- [ ] macOS: document codesign/notarization options clearly; label unsigned artifacts explicitly
+
+### P0 - Data and Stability
+
+- [ ] Add SQLite schema migrations with `PRAGMA user_version` to avoid startup panics on schema changes
+- [ ] Add DB auto-backup + integrity check, and include DB + logs in debug bundle (redacted)
+- [ ] Add startup error boundary: never `panic` in setup; surface failures via startup notice + logs window
+
+### P1 - Download UX and Capability
+
+- [ ] Task queue ordering + priority controls (aria2 `changePosition`), including "top/bottom" actions
+- [ ] “New Download” dialog: presets per task type (HTTP/BT), and import/export of per-task option presets
+- [ ] Post-download actions: auto-open folder, auto-reveal file, and “copy final path” action
+- [ ] Completion rules: auto-delete `.aria2` control files; optional auto-clear completed records after N days
+
+### P1 - BT Improvements
+
+- [ ] Seeding controls: stop after ratio/time, per-task upload limit, and “stop seeding” quick action
+- [ ] Better BT diagnostics: show peers/seeders if available, and tracker status parsing into UI
+
+### P1 - Browser Takeover Hardening
+
+- [ ] Bridge security: restrict allowed origins, rotate token, and show recent browser-client activity
+- [ ] Extension: improve error reporting (why takeover failed) and add “Send to Flamingo” from link context menu on more pages
+
+### P2 - UI Maintainability and Polish
+
+- [ ] Split `ui/src/App.tsx` into pages/components/hooks; isolate API layer and state stores
+- [ ] Extract i18n dictionaries into dedicated files (`ui/src/i18n/*.json`) and add key coverage checks
+- [ ] Large list performance: virtualize tables and reduce re-render churn (memoization + stable row keys)
+- [ ] Accessibility: keyboard shortcuts, focus management, and improved contrast audit for light/dark themes
