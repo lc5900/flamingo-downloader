@@ -1056,26 +1056,32 @@ impl DownloadService {
     pub async fn export_debug_bundle(&self) -> Result<String> {
         let diagnostics = self.get_diagnostics().await?;
         let logs = self.list_operation_logs(1000)?;
+        let redacted_logs = redact_operation_logs(&logs);
         let tasks = self.db.list_tasks(None, u32::MAX, 0)?;
         let mut files = Vec::<TaskFile>::new();
         for task in &tasks {
             let mut task_files = self.db.list_task_files(&task.id)?;
             files.append(&mut task_files);
         }
+        let integrity = self.db.run_integrity_check()?;
 
         let ts = now_ts();
         let base_dir = std::env::temp_dir().join(format!("flamingo-debug-{ts}"));
         fs::create_dir_all(&base_dir)?;
 
         let diagnostics_path = base_dir.join("diagnostics.json");
-        let logs_path = base_dir.join("operation_logs.json");
+        let logs_path = base_dir.join("operation_logs.redacted.json");
         let tasks_path = base_dir.join("tasks.json");
         let files_path = base_dir.join("task_files.json");
+        let integrity_path = base_dir.join("db_integrity_check.txt");
+        let db_snapshot_path = base_dir.join("app.db.snapshot");
 
         fs::write(&diagnostics_path, serde_json::to_vec_pretty(&diagnostics)?)?;
-        fs::write(&logs_path, serde_json::to_vec_pretty(&logs)?)?;
+        fs::write(&logs_path, serde_json::to_vec_pretty(&redacted_logs)?)?;
         fs::write(&tasks_path, serde_json::to_vec_pretty(&tasks)?)?;
         fs::write(&files_path, serde_json::to_vec_pretty(&files)?)?;
+        fs::write(&integrity_path, format!("{integrity}\n"))?;
+        let _ = self.db.copy_db_snapshot(&db_snapshot_path)?;
 
         let zip_path = std::env::temp_dir().join(format!("flamingo-debug-{ts}.zip"));
         let zip_file = File::create(&zip_path)?;
@@ -1084,9 +1090,11 @@ impl DownloadService {
 
         for (name, path) in [
             ("diagnostics.json", diagnostics_path),
-            ("operation_logs.json", logs_path),
+            ("operation_logs.redacted.json", logs_path),
             ("tasks.json", tasks_path),
             ("task_files.json", files_path),
+            ("db_integrity_check.txt", integrity_path),
+            ("app.db.snapshot", db_snapshot_path),
         ] {
             let content = fs::read(path)?;
             zip.start_file(name, opts)?;
@@ -1953,6 +1961,54 @@ impl DownloadService {
 fn with_resolved_save_dir(mut options: AddTaskOptions, save_dir: String) -> AddTaskOptions {
     options.save_dir = Some(save_dir);
     options
+}
+
+fn redact_operation_logs(logs: &[OperationLog]) -> Vec<OperationLog> {
+    logs.iter()
+        .map(|log| OperationLog {
+            ts: log.ts,
+            action: log.action.clone(),
+            message: redact_sensitive_text(&log.message),
+        })
+        .collect()
+}
+
+fn redact_sensitive_text(input: &str) -> String {
+    let mut value = input.to_string();
+    let markers = [
+        "token:",
+        "token=",
+        "rpc-secret",
+        "github_token",
+        "authorization:",
+        "Authorization:",
+        "browser_bridge_token",
+    ];
+    for marker in markers {
+        value = redact_marker_value(&value, marker);
+    }
+    value
+}
+
+fn redact_marker_value(input: &str, marker: &str) -> String {
+    let mut output = String::with_capacity(input.len());
+    let mut remaining = input;
+    while let Some(pos) = remaining.find(marker) {
+        let (head, tail) = remaining.split_at(pos + marker.len());
+        output.push_str(head);
+        let token_len = tail
+            .chars()
+            .take_while(|c| !c.is_whitespace() && *c != '&' && *c != '|' && *c != ',' && *c != ';')
+            .count();
+        if token_len == 0 {
+            remaining = tail;
+            continue;
+        }
+        output.push_str("***");
+        remaining = &tail[token_len..];
+    }
+    output.push_str(remaining);
+    output
 }
 
 fn rule_matches(

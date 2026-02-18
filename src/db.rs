@@ -1,9 +1,10 @@
 use std::{
     path::Path,
+    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::models::{
@@ -12,6 +13,7 @@ use crate::models::{
 
 pub struct Database {
     conn: Arc<Mutex<Connection>>,
+    db_path: PathBuf,
 }
 
 const SCHEMA_VERSION: i64 = 4;
@@ -23,6 +25,7 @@ impl Database {
             .with_context(|| format!("open sqlite db: {}", path_ref.display()))?;
         let db = Self {
             conn: Arc::new(Mutex::new(conn)),
+            db_path: path_ref.to_path_buf(),
         };
         db.init_schema()?;
         Ok(db)
@@ -543,6 +546,23 @@ impl Database {
         let conn = self.conn.lock().expect("db mutex poisoned");
         conn.execute("DELETE FROM operation_logs", [])?;
         Ok(())
+    }
+
+    pub fn run_integrity_check(&self) -> Result<String> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        let result = conn.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
+        Ok(result)
+    }
+
+    pub fn copy_db_snapshot(&self, target: &Path) -> Result<u64> {
+        let parent = target
+            .parent()
+            .ok_or_else(|| anyhow!("invalid snapshot target path"))?;
+        std::fs::create_dir_all(parent)?;
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        let _ = conn.execute("PRAGMA wal_checkpoint(FULL)", []);
+        let copied = std::fs::copy(&self.db_path, target)?;
+        Ok(copied)
     }
 
     pub fn set_task_category(&self, task_id: &str, category: Option<&str>) -> Result<()> {

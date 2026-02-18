@@ -118,7 +118,7 @@
 ### P0 - Data and Stability
 
 - [x] Add SQLite schema migrations with `PRAGMA user_version` to avoid startup panics on schema changes
-- [ ] Add DB auto-backup + integrity check, and include DB + logs in debug bundle (redacted)
+- [x] Add DB auto-backup + integrity check, and include DB + logs in debug bundle (redacted)
 - [ ] Add startup error boundary: never `panic` in setup; surface failures via startup notice + logs window
 
 ### P1 - Download UX and Capability
