@@ -13,6 +13,13 @@ permissions:
 
 jobs:
   build:
+    env:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     strategy:
       fail-fast: false
       matrix:
@@ -86,10 +93,7 @@ jobs:
           choco install aria2 -y --no-progress
 
       - name: Prepare macOS signing keychain
-        if: runner.os == 'macOS' && secrets.APPLE_CERTIFICATE != ''
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
         shell: bash
         run: |
           set -euo pipefail
@@ -157,17 +161,12 @@ jobs:
         run: cargo tauri build
 
       - name: Build app bundle (macOS signed/notarized)
-        if: runner.os == 'macOS' && secrets.APPLE_CERTIFICATE != ''
+        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
         working-directory: src-tauri
-        env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: cargo tauri build
 
       - name: Build app bundle (macOS unsigned fallback)
-        if: runner.os == 'macOS' && secrets.APPLE_CERTIFICATE == ''
+        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE == ''
         working-directory: src-tauri
         run: |
           echo "WARNING: Missing APPLE_CERTIFICATE secrets. DMG will be unsigned/unnotarized and macOS may report it as damaged."
