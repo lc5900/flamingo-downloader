@@ -99,6 +99,7 @@ What it does:
 - builds Tauri bundles
 - uploads build artifacts for each platform
 - creates a GitHub Release automatically when you push a tag like `v0.1.0`
+- supports macOS signing/notarization when Apple secrets are configured
 
 Note:
 - The default workflow currently targets `macos-14` (Apple Silicon).
@@ -110,6 +111,24 @@ How to use:
    - `git tag -a v0.1.0 -m "v0.1.0"`
    - `git push origin v0.1.0`
 3. Open Actions/Release page and download platform bundles.
+
+### macOS note (`"app is damaged"` warning)
+
+Unsigned/unnotarized DMG builds may be blocked by Gatekeeper and show a damaged warning.
+For proper public distribution, configure these repository secrets so the macOS job signs + notarizes:
+
+- `APPLE_CERTIFICATE` (base64-encoded `.p12`)
+- `APPLE_CERTIFICATE_PASSWORD`
+- `APPLE_SIGNING_IDENTITY`
+- `APPLE_ID`
+- `APPLE_PASSWORD` (app-specific password)
+- `APPLE_TEAM_ID`
+
+For local testing only, you can remove quarantine manually after install:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Flamingo Downloader.app"
+```
 
 ## Suggested GitHub Metadata
 

@@ -99,6 +99,7 @@ cargo tauri build --manifest-path src-tauri/Cargo.toml
 - 构建 Tauri 安装包
 - 上传各平台构建产物
 - 推送 `v*` 标签（如 `v0.1.0`）时自动创建 GitHub Release
+- 配置 Apple 证书后可在 macOS 任务中自动签名与公证
 
 说明：
 - 当前默认使用 `macos-14`（Apple Silicon）Runner。
@@ -110,6 +111,24 @@ cargo tauri build --manifest-path src-tauri/Cargo.toml
    - `git tag -a v0.1.0 -m "v0.1.0"`
    - `git push origin v0.1.0`
 3. 到 GitHub 的 Actions / Releases 页面下载各平台产物。
+
+### macOS 提示（“应用已损坏”）
+
+如果 DMG 未签名/未公证，Gatekeeper 可能拦截并提示“已损坏，无法打开”。
+要用于正式分发，请在仓库 Secrets 中配置以下参数，让 macOS 流水线自动签名+公证：
+
+- `APPLE_CERTIFICATE`（base64 编码的 `.p12`）
+- `APPLE_CERTIFICATE_PASSWORD`
+- `APPLE_SIGNING_IDENTITY`
+- `APPLE_ID`
+- `APPLE_PASSWORD`（app-specific password）
+- `APPLE_TEAM_ID`
+
+仅本地测试时，可手动移除隔离属性：
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Flamingo Downloader.app"
+```
 
 ## GitHub 建议信息
 

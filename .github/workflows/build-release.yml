@@ -85,6 +85,24 @@ jobs:
         run: |
           choco install aria2 -y --no-progress
 
+      - name: Prepare macOS signing keychain
+        if: runner.os == 'macOS' && secrets.APPLE_CERTIFICATE != ''
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CERT_PATH="$RUNNER_TEMP/build_certificate.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          echo -n "$APPLE_CERTIFICATE" | base64 --decode -o "$CERT_PATH"
+          security create-keychain -p "" "$KEYCHAIN_PATH"
+          security set-keychain-settings "$KEYCHAIN_PATH"
+          security unlock-keychain -p "" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/[ \"]//g')
+          security set-key-partition-list -S apple-tool:,apple: -k "" "$KEYCHAIN_PATH"
+
       - name: Stage aria2 binary (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
@@ -133,9 +151,27 @@ jobs:
       - name: Install tauri-cli
         run: cargo install tauri-cli --version "^2.0" --locked
 
-      - name: Build app bundle
+      - name: Build app bundle (non-macOS)
+        if: runner.os != 'macOS'
         working-directory: src-tauri
         run: cargo tauri build
+
+      - name: Build app bundle (macOS signed/notarized)
+        if: runner.os == 'macOS' && secrets.APPLE_CERTIFICATE != ''
+        working-directory: src-tauri
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: cargo tauri build
+
+      - name: Build app bundle (macOS unsigned fallback)
+        if: runner.os == 'macOS' && secrets.APPLE_CERTIFICATE == ''
+        working-directory: src-tauri
+        run: |
+          echo "WARNING: Missing APPLE_CERTIFICATE secrets. DMG will be unsigned/unnotarized and macOS may report it as damaged."
+          cargo tauri build
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
