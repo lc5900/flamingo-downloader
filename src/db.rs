@@ -14,7 +14,7 @@ pub struct Database {
     conn: Arc<Mutex<Connection>>,
 }
 
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 
 impl Database {
     pub fn new(path: impl AsRef<Path>) -> Result<Self> {
@@ -52,9 +52,6 @@ impl Database {
               updated_at INTEGER NOT NULL
             );
 
-            CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-            CREATE INDEX IF NOT EXISTS idx_tasks_gid ON tasks(aria2_gid);
-
             CREATE TABLE IF NOT EXISTS task_files (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               task_id TEXT NOT NULL,
@@ -69,27 +66,11 @@ impl Database {
               key TEXT PRIMARY KEY,
               value TEXT NOT NULL
             );
-
-            CREATE TABLE IF NOT EXISTS operation_logs (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              ts INTEGER NOT NULL,
-              action TEXT NOT NULL,
-              message TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_operation_logs_ts ON operation_logs(ts);
             "#,
         )?;
-        if !table_has_column(&conn, "tasks", "category")? {
-            conn.execute("ALTER TABLE tasks ADD COLUMN category TEXT", [])?;
-        }
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_tasks_category ON tasks(category)",
-            [],
-        )?;
-        conn.execute(&format!("PRAGMA user_version = {SCHEMA_VERSION}"), [])?;
+        run_schema_migrations(&conn)?;
         Ok(())
     }
-
     pub fn upsert_task(&self, task: &Task) -> Result<()> {
         let conn = self.conn.lock().expect("db mutex poisoned");
         conn.execute(
@@ -608,6 +589,114 @@ fn table_has_column(conn: &Connection, table: &str, column: &str) -> Result<bool
         }
     }
     Ok(false)
+}
+
+fn run_schema_migrations(conn: &Connection) -> Result<()> {
+    let mut current = get_schema_user_version(conn)?;
+    while current < SCHEMA_VERSION {
+        let next = current + 1;
+        apply_migration(conn, next)?;
+        set_schema_user_version(conn, next)?;
+        current = next;
+    }
+    Ok(())
+}
+
+fn apply_migration(conn: &Connection, version: i64) -> Result<()> {
+    match version {
+        1 => {
+            conn.execute_batch(
+                r#"
+                CREATE TABLE IF NOT EXISTS tasks (
+                  id TEXT PRIMARY KEY,
+                  aria2_gid TEXT,
+                  type TEXT NOT NULL,
+                  source TEXT NOT NULL,
+                  status TEXT NOT NULL,
+                  name TEXT,
+                  save_dir TEXT NOT NULL,
+                  total_length INTEGER DEFAULT 0,
+                  completed_length INTEGER DEFAULT 0,
+                  download_speed INTEGER DEFAULT 0,
+                  upload_speed INTEGER DEFAULT 0,
+                  connections INTEGER DEFAULT 0,
+                  error_code TEXT,
+                  error_message TEXT,
+                  created_at INTEGER NOT NULL,
+                  updated_at INTEGER NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS task_files (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  task_id TEXT NOT NULL,
+                  path TEXT NOT NULL,
+                  length INTEGER DEFAULT 0,
+                  completed_length INTEGER DEFAULT 0,
+                  selected INTEGER DEFAULT 1,
+                  FOREIGN KEY(task_id) REFERENCES tasks(id)
+                );
+                CREATE TABLE IF NOT EXISTS settings (
+                  key TEXT PRIMARY KEY,
+                  value TEXT NOT NULL
+                );
+                "#,
+            )?;
+        }
+        2 => {
+            conn.execute_batch(
+                r#"
+                CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+                CREATE INDEX IF NOT EXISTS idx_tasks_gid ON tasks(aria2_gid);
+                CREATE TABLE IF NOT EXISTS operation_logs (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  ts INTEGER NOT NULL,
+                  action TEXT NOT NULL,
+                  message TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_operation_logs_ts ON operation_logs(ts);
+                "#,
+            )?;
+        }
+        3 => {
+            if !table_has_column(conn, "tasks", "category")? {
+                conn.execute("ALTER TABLE tasks ADD COLUMN category TEXT", [])?;
+            }
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_tasks_category ON tasks(category)",
+                [],
+            )?;
+        }
+        4 => {
+            // Idempotent guard migration for schema/index consistency.
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_tasks_category ON tasks(category)",
+                [],
+            )?;
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)",
+                [],
+            )?;
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_tasks_gid ON tasks(aria2_gid)",
+                [],
+            )?;
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_operation_logs_ts ON operation_logs(ts)",
+                [],
+            )?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn get_schema_user_version(conn: &Connection) -> Result<i64> {
+    let version = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    Ok(version)
+}
+
+fn set_schema_user_version(conn: &Connection, version: i64) -> Result<()> {
+    conn.execute(&format!("PRAGMA user_version = {version}"), [])?;
+    Ok(())
 }
 
 fn parse_task_type(value: &str) -> rusqlite::Result<TaskType> {
