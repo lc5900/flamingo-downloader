@@ -57,6 +57,16 @@ jobs:
         working-directory: ui
         run: npm ci
 
+      - name: Preflight frontend workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f "ui/package.json" ]; then
+            echo "Missing ui/package.json"
+            echo "Hint: this workflow expects frontendDist=../ui/dist and a React workspace at ui/."
+            exit 1
+          fi
+
       - name: Build frontend assets
         working-directory: ui
         run: npm run build
@@ -65,8 +75,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -d "ui/dist"
-          test -f "ui/dist/index.html"
+          if [ ! -d "ui/dist" ] || [ ! -f "ui/dist/index.html" ]; then
+            echo "Missing ui/dist build output."
+            echo "Hint: ensure 'npm --prefix ui run build' succeeds and tauri.conf frontendDist points to ../ui/dist."
+            exit 1
+          fi
           echo "frontendDist is ready: ui/dist"
 
       - name: Install Linux dependencies
@@ -171,12 +184,25 @@ jobs:
         run: |
           echo "WARNING: Missing APPLE_CERTIFICATE secrets. DMG will be unsigned/unnotarized and macOS may report it as damaged."
           cargo tauri build
+          mkdir -p target/release/bundle/metadata
+          cat > target/release/bundle/metadata/UNSIGNED-MACOS-BUILD.txt << 'EOF'
+          This macOS artifact is unsigned and not notarized.
+          Configure APPLE_CERTIFICATE/APPLE_SIGNING_IDENTITY/APPLE_ID/APPLE_PASSWORD/APPLE_TEAM_ID for signed releases.
+          EOF
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: flamingo-${{ matrix.artifact_suffix }}
-          path: src-tauri/target/release/bundle/**
+          path: |
+            src-tauri/target/release/bundle/**/*.dmg
+            src-tauri/target/release/bundle/**/*.msi
+            src-tauri/target/release/bundle/**/*.exe
+            src-tauri/target/release/bundle/**/*.AppImage
+            src-tauri/target/release/bundle/**/*.deb
+            src-tauri/target/release/bundle/**/*.rpm
+            src-tauri/target/release/bundle/**/*.app.tar.gz
+            src-tauri/target/release/bundle/metadata/*.txt
           if-no-files-found: error
 
   release:

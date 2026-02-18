@@ -128,6 +128,8 @@ For proper public distribution, configure these repository secrets so the macOS 
 - `APPLE_PASSWORD` (app-specific password)
 - `APPLE_TEAM_ID`
 
+When signing is not configured, CI now emits `UNSIGNED-MACOS-BUILD.txt` in release artifacts as an explicit label that the macOS package is unsigned.
+
 For local testing only, you can remove quarantine manually after install:
 
 ```bash

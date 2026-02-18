@@ -128,6 +128,8 @@ cargo tauri build
 - `APPLE_PASSWORD`（app-specific password）
 - `APPLE_TEAM_ID`
 
+若未配置签名参数，CI 现在会在产物中额外输出 `UNSIGNED-MACOS-BUILD.txt`，用于明确标识该 macOS 包未签名/未公证。
+
 仅本地测试时，可手动移除隔离属性：
 
 ```bash
