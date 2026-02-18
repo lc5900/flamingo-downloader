@@ -650,12 +650,42 @@ fn main() {
             let runtime_dir = base_dir.join("runtime");
             std::fs::create_dir_all(&runtime_dir)?;
 
-            let handles = tauri::async_runtime::block_on(init_backend(
-                &base_dir,
-                &runtime_dir.join("app.db"),
-                emitter_for_setup.clone(),
-            ))
-            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+            let (handles, startup_fallback_notice) = match tauri::async_runtime::block_on(
+                init_backend(
+                    &base_dir,
+                    &runtime_dir.join("app.db"),
+                    emitter_for_setup.clone(),
+                ),
+            ) {
+                Ok(handles) => (handles, None),
+                Err(primary_err) => {
+                    let fallback_base_dir = std::env::temp_dir().join("flamingo-downloader");
+                    let fallback_runtime_dir = fallback_base_dir.join("runtime");
+                    std::fs::create_dir_all(&fallback_runtime_dir)?;
+                    match tauri::async_runtime::block_on(init_backend(
+                        &fallback_base_dir,
+                        &fallback_runtime_dir.join("app.db"),
+                        emitter_for_setup.clone(),
+                    )) {
+                        Ok(handles) => {
+                            let notice = format!(
+                                "Primary runtime init failed at {} ({}). Switched to fallback path {}.",
+                                runtime_dir.display(),
+                                primary_err,
+                                fallback_runtime_dir.display()
+                            );
+                            (handles, Some(notice))
+                        }
+                        Err(fallback_err) => {
+                            return Err(format!(
+                                "backend init failed: primary={} ; fallback={}",
+                                primary_err, fallback_err
+                            )
+                            .into());
+                        }
+                    }
+                }
+            };
 
             app.manage(AppState {
                 service: handles.service,
@@ -671,6 +701,15 @@ fn main() {
                     runtime_dir.to_string_lossy()
                 ),
             );
+            if let Some(notice) = startup_fallback_notice {
+                let _ = app
+                    .state::<AppState>()
+                    .service
+                    .set_startup_notice("warning", &notice);
+                app.state::<AppState>()
+                    .service
+                    .append_operation_log("setup_fallback", notice);
+            }
 
             for arg in std::env::args().skip(1) {
                 if let Some(target) = parse_external_open_arg(&arg) {
@@ -821,8 +860,15 @@ fn main() {
             close_logs_window,
             debug_restore_main_window
         ])
-        .build(tauri::generate_context!())
-        .expect("error while building tauri application");
+        .build(tauri::generate_context!());
+
+    let app = match app {
+        Ok(app) => app,
+        Err(e) => {
+            eprintln!("Failed to build app: {e}");
+            return;
+        }
+    };
 
     app.run(|app_handle, event| {
         #[cfg(target_os = "macos")]
