@@ -5,7 +5,7 @@
   "identifier": "com.lc5900.flamingo.downloader",
   "build": {
     "beforeDevCommand": "",
-    "beforeBuildCommand": "",
+    "beforeBuildCommand": "npm --prefix ../ui run build",
     "frontendDist": "../ui/dist"
   },
   "app": {

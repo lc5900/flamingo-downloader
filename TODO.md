@@ -110,7 +110,7 @@
 ### P0 - Release/CI and Packaging
 
 - [x] README: fix `cargo tauri build` usage (`--manifest-path` passthrough) and align with current `frontendDist`
-- [ ] Tauri config: add `beforeBuildCommand` to build UI automatically for local `cargo tauri build`
+- [x] Tauri config: add `beforeBuildCommand` to build UI automatically for local `cargo tauri build`
 - [ ] CI: publish only user-facing bundles (dmg/msi/AppImage/deb/rpm) instead of entire `bundle/**` directory
 - [ ] CI: add `workflow_run`/preflight step to validate `ui/dist` and fail with clear hint when missing
 - [ ] macOS: document codesign/notarization options clearly; label unsigned artifacts explicitly
