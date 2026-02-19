@@ -393,6 +393,12 @@ impl Database {
         if let Some(v) = &settings.post_complete_action {
             self.set_setting("post_complete_action", v)?;
         }
+        if let Some(v) = settings.auto_delete_control_files {
+            self.set_setting("auto_delete_control_files", if v { "true" } else { "false" })?;
+        }
+        if let Some(v) = settings.auto_clear_completed_days {
+            self.set_setting("auto_clear_completed_days", &v.to_string())?;
+        }
         if let Some(v) = settings.first_run_done {
             self.set_setting("first_run_done", if v { "true" } else { "false" })?;
         }
@@ -469,6 +475,16 @@ impl Database {
             speed_plan: self.get_setting("speed_plan")?,
             task_option_presets: self.get_setting("task_option_presets")?,
             post_complete_action: self.get_setting("post_complete_action")?,
+            auto_delete_control_files: self
+                .get_setting("auto_delete_control_files")?
+                .and_then(|v| match v.as_str() {
+                    "true" => Some(true),
+                    "false" => Some(false),
+                    _ => None,
+                }),
+            auto_clear_completed_days: self
+                .get_setting("auto_clear_completed_days")?
+                .and_then(|v| v.parse::<u32>().ok()),
             first_run_done: self
                 .get_setting("first_run_done")?
                 .and_then(|v| match v.as_str() {
@@ -508,6 +524,21 @@ impl Database {
         )?;
         conn.execute("DELETE FROM tasks WHERE id = ?1", params![task_id])?;
         Ok(())
+    }
+
+    pub fn remove_completed_tasks_before(&self, cutoff_ts: i64) -> Result<usize> {
+        let mut conn = self.conn.lock().expect("db mutex poisoned");
+        let tx = conn.transaction()?;
+        tx.execute(
+            "DELETE FROM task_files WHERE task_id IN (SELECT id FROM tasks WHERE status='completed' AND updated_at < ?1)",
+            params![cutoff_ts],
+        )?;
+        let deleted = tx.execute(
+            "DELETE FROM tasks WHERE status='completed' AND updated_at < ?1",
+            params![cutoff_ts],
+        )?;
+        tx.commit()?;
+        Ok(deleted)
     }
 
     pub fn append_operation_logs(&self, logs: &[crate::models::OperationLog]) -> Result<()> {
@@ -816,6 +847,8 @@ mod tests {
                     .to_string(),
             ),
             post_complete_action: Some("open_dir".to_string()),
+            auto_delete_control_files: Some(true),
+            auto_clear_completed_days: Some(14),
             first_run_done: None,
             start_minimized: None,
             minimize_to_tray: None,
@@ -845,6 +878,8 @@ mod tests {
             .unwrap_or_default()
             .contains("Video Standard"));
         assert_eq!(loaded.post_complete_action.as_deref(), Some("open_dir"));
+        assert_eq!(loaded.auto_delete_control_files, Some(true));
+        assert_eq!(loaded.auto_clear_completed_days, Some(14));
         assert_eq!(loaded.browser_bridge_enabled, Some(true));
         assert_eq!(loaded.browser_bridge_port, Some(16789));
         assert_eq!(

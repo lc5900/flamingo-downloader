@@ -114,6 +114,8 @@ type GlobalSettings = {
   speed_plan?: string | null
   task_option_presets?: string | null
   post_complete_action?: string | null
+  auto_delete_control_files?: boolean | null
+  auto_clear_completed_days?: number | null
   first_run_done?: boolean | null
   start_minimized?: boolean | null
   minimize_to_tray?: boolean | null
@@ -397,6 +399,8 @@ const I18N: Record<Locale, Record<string, string>> = {
     postCompleteOpenDir: 'Auto Open Folder',
     postCompleteOpenFile: 'Auto Reveal File',
     copyPath: 'Copy Path',
+    autoDeleteControlFiles: 'Auto Delete .aria2 Control Files',
+    autoClearCompletedDays: 'Auto Clear Completed Records (days, 0=off)',
     resetSettingsDefaults: 'Reset Settings',
     resetUiLayout: 'Reset UI Layout',
     resetSettingsConfirm: 'Reset settings to defaults? This keeps your aria2 path.',
@@ -617,6 +621,8 @@ const I18N: Record<Locale, Record<string, string>> = {
     postCompleteOpenDir: '自动打开目录',
     postCompleteOpenFile: '自动定位文件',
     copyPath: '复制路径',
+    autoDeleteControlFiles: '自动删除 .aria2 控制文件',
+    autoClearCompletedDays: '自动清理已完成记录（天，0=关闭）',
     resetSettingsDefaults: '重置设置',
     resetUiLayout: '重置界面布局',
     resetSettingsConfirm: '确认恢复默认设置？会保留 aria2 路径。',
@@ -992,6 +998,8 @@ export default function App() {
         metadata_timeout_secs: s?.metadata_timeout_secs ?? undefined,
         speed_plan: s?.speed_plan || undefined,
         post_complete_action: s?.post_complete_action || 'none',
+        auto_delete_control_files: s?.auto_delete_control_files ?? undefined,
+        auto_clear_completed_days: s?.auto_clear_completed_days ?? undefined,
         first_run_done: s?.first_run_done ?? undefined,
         start_minimized: s?.start_minimized ?? undefined,
         minimize_to_tray: s?.minimize_to_tray ?? undefined,
@@ -1752,6 +1760,8 @@ export default function App() {
         speed_plan: values.speed_plan || null,
         task_option_presets: JSON.stringify(taskOptionPresets),
         post_complete_action: values.post_complete_action || 'none',
+        auto_delete_control_files: values.auto_delete_control_files ?? true,
+        auto_clear_completed_days: values.auto_clear_completed_days ?? 0,
         first_run_done: values.first_run_done ?? null,
         start_minimized: values.start_minimized ?? null,
         minimize_to_tray: values.minimize_to_tray ?? null,
@@ -3046,6 +3056,16 @@ export default function App() {
                         rows={3}
                         placeholder={'[{"days":"1,2,3,4,5","start":"09:00","end":"18:00","limit":"2M"}]'}
                       />
+                    </Form.Item>
+                    <Form.Item
+                      name="auto_delete_control_files"
+                      label={t('autoDeleteControlFiles')}
+                      valuePropName="checked"
+                    >
+                      <Switch />
+                    </Form.Item>
+                    <Form.Item name="auto_clear_completed_days" label={t('autoClearCompletedDays')}>
+                      <InputNumber min={0} max={3650} style={{ width: '100%' }} />
                     </Form.Item>
 
                     <Divider />

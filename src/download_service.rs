@@ -377,6 +377,50 @@ impl DownloadService {
         Ok(())
     }
 
+    fn apply_completion_rules(&self, changed_tasks: &[Task], tick: u64) -> Result<()> {
+        let settings = self.db.load_global_settings()?;
+
+        if settings.auto_delete_control_files.unwrap_or(true) {
+            for task in changed_tasks {
+                if task.status != TaskStatus::Completed {
+                    continue;
+                }
+                let _ = self.remove_task_control_file(task);
+            }
+        }
+
+        let days = settings.auto_clear_completed_days.unwrap_or(0);
+        if days > 0 && tick.is_multiple_of(300) {
+            let cutoff_ts = now_ts() - (days as i64 * 86_400);
+            let removed = self.db.remove_completed_tasks_before(cutoff_ts)?;
+            if removed > 0 {
+                self.push_log(
+                    "auto_clear_completed",
+                    format!("removed {removed} completed record(s) older than {days} day(s)"),
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    fn remove_task_control_file(&self, task: &Task) -> Result<()> {
+        let files = self.db.list_task_files(&task.id)?;
+        let Some(path) = self.resolve_primary_task_path(task, &files) else {
+            return Ok(());
+        };
+        let control_path = PathBuf::from(format!("{}.aria2", path.to_string_lossy()));
+        if !control_path.exists() {
+            return Ok(());
+        }
+        fs::remove_file(&control_path)?;
+        self.push_log(
+            "auto_delete_control_file",
+            format!("removed {}", control_path.display()),
+        );
+        Ok(())
+    }
+
     fn resolve_primary_task_path(&self, task: &Task, files: &[TaskFile]) -> Option<PathBuf> {
         if let Some(file) = files.iter().find(|f| f.selected).or_else(|| files.first()) {
             let p = PathBuf::from(&file.path);
@@ -656,6 +700,8 @@ impl DownloadService {
             speed_plan: Some("[]".to_string()),
             task_option_presets: Some("[]".to_string()),
             post_complete_action: Some("none".to_string()),
+            auto_delete_control_files: Some(true),
+            auto_clear_completed_days: Some(0),
             first_run_done: Some(true),
             start_minimized: Some(false),
             minimize_to_tray: Some(false),
@@ -1486,6 +1532,8 @@ impl DownloadService {
                         .collect::<Vec<_>>();
                     let _ = self.db.replace_task_files(&task.id, &files);
                 }
+
+                let _ = self.apply_completion_rules(&changed_tasks, tick);
 
                 if self.emitter.emit_task_update(&changed_tasks).is_err() {
                     continue;
