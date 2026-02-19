@@ -148,6 +148,20 @@ function buildSpeedPlanPreset(mode: SpeedPlanMode): SpeedPlanRuleInput[] {
   return []
 }
 
+function inferSpeedPlanMode(rules: SpeedPlanRuleInput[]): SpeedPlanMode {
+  const normalized = JSON.stringify(normalizeSpeedPlanRules(rules))
+  if (normalized === JSON.stringify(normalizeSpeedPlanRules(buildSpeedPlanPreset('off')))) {
+    return 'off'
+  }
+  if (normalized === JSON.stringify(normalizeSpeedPlanRules(buildSpeedPlanPreset('workday_limited')))) {
+    return 'workday_limited'
+  }
+  if (normalized === JSON.stringify(normalizeSpeedPlanRules(buildSpeedPlanPreset('night_boost')))) {
+    return 'night_boost'
+  }
+  return 'manual'
+}
+
 function validateSpeedPlanRules(rules: SpeedPlanRuleInput[]): string | null {
   const timeRe = /^\d{2}:\d{2}$/
   const validDay = (value: string) => {
@@ -336,7 +350,7 @@ export default function App() {
           ? s.post_complete_action
           : 'none',
       )
-      setSpeedPlanMode('manual')
+      setSpeedPlanMode(inferSpeedPlanMode(speedPlanRules))
       const presets = (() => {
         try {
           const raw = String(s?.task_option_presets || '[]')
