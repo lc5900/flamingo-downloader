@@ -206,7 +206,29 @@ jobs:
           & "src-tauri/resources/aria2/bin/aria2c.exe" --version | Select-Object -First 1
 
       - name: Install tauri-cli
-        run: cargo install tauri-cli --version "^2.0" --locked
+        if: runner.os != 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-tauri
+          key: ${{ runner.os }}-cargo-tauri-v2
+
+      - name: Cache tauri-cli (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: ~\.cargo\bin\cargo-tauri.exe
+          key: ${{ runner.os }}-cargo-tauri-v2
+
+      - name: Install tauri-cli (if missing)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v cargo-tauri >/dev/null 2>&1; then
+            cargo-tauri --version
+          else
+            cargo install tauri-cli --version "^2.0" --locked
+            cargo-tauri --version
+          fi
 
       - name: Build app bundle (non-macOS)
         if: runner.os != 'macOS'
