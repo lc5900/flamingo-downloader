@@ -121,12 +121,24 @@ How to use:
 Unsigned/unnotarized DMG builds may be blocked by Gatekeeper and show a damaged warning.
 For proper public distribution, configure these repository secrets so the macOS job signs + notarizes:
 
-- `APPLE_CERTIFICATE` (base64-encoded `.p12`)
+- `APPLE_CERTIFICATE` (`.p12` payload, supports either base64 text or raw PEM/PKCS12 text in GitHub Secret)
 - `APPLE_CERTIFICATE_PASSWORD`
 - `APPLE_SIGNING_IDENTITY`
 - `APPLE_ID`
 - `APPLE_PASSWORD` (app-specific password)
 - `APPLE_TEAM_ID`
+
+Helpful setup commands:
+
+```bash
+# export certificate from Keychain Access first, then encode:
+base64 -i certificate.p12 | pbcopy
+```
+
+```bash
+# check identity name to use for APPLE_SIGNING_IDENTITY
+security find-identity -v -p codesigning
+```
 
 When signing is not configured, CI now emits `UNSIGNED-MACOS-BUILD.txt` in release artifacts as an explicit label that the macOS package is unsigned.
 

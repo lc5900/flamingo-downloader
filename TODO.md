@@ -144,3 +144,36 @@
 - [x] Extract i18n dictionaries into dedicated files (`ui/src/i18n/*.json`) and add key coverage checks
 - [x] Large list performance: virtualize tables and reduce re-render churn (memoization + stable row keys)
 - [x] Accessibility: keyboard shortcuts, focus management, and improved contrast audit for light/dark themes
+
+## Next Iteration (New)
+
+### P0 - Release/CI and Packaging
+
+- [x] macOS signing: document secrets format (`APPLE_CERTIFICATE` base64 vs raw), add better debug output on import failure, and support notarization when secrets present
+- [ ] CI: add macOS x64 build (macos-13) alongside arm64, and normalize artifact naming for both
+- [ ] CI: cache `tauri-cli` install (or switch to `tauri-apps/tauri-action`) to speed up builds
+- [ ] CI: add a fast validation job (`cargo fmt --check`, `cargo clippy`, `npm --prefix ui run lint`, `npm --prefix ui run build`)
+- [ ] Repo hygiene: decide on npm vs pnpm and either commit/remove lockfiles or ignore `ui/pnpm-lock.yaml`
+
+### P0 - UX and Productivity
+
+- [ ] Toolbar: add global actions (pause all / resume all / retry failed / clear completed)
+- [ ] New Download: support multi-line paste (create multiple tasks) with per-line validation/errors
+- [ ] Downloaded list: tailor columns for completed tasks (hide irrelevant columns) and add a compact “details” popover
+- [ ] Logs window: add search/filter, copy selected, export logs to file, and “follow tail” toggle
+
+### P1 - Rules and Automation
+
+- [ ] Add category auto-tag rules (domain/ext/type -> category) and show category chips in list
+- [ ] Replace speed-plan raw JSON with a small UI editor (time ranges + limits), and keep JSON as the storage format
+- [ ] Add “schedule” mode (e.g. night-time full speed, day-time throttled) built on speed plan
+
+### P1 - Browser Integration
+
+- [ ] CI: build and attach browser extension zip(s) to GitHub Releases
+- [ ] Extension: optional native-messaging mode (no open port) as an alternative to HTTP bridge
+
+### P2 - Codebase Maintainability
+
+- [ ] Continue splitting UI into `pages/` + `stores/` (Downloading/Downloaded/Settings/AddDownload/TaskDetail), keep `App.tsx` as shell only
+- [ ] i18n: add placeholder coverage checks (e.g. `{tasks}` appears in both locales) and optional key typing generation

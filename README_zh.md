@@ -121,12 +121,24 @@ cargo tauri build
 如果 DMG 未签名/未公证，Gatekeeper 可能拦截并提示“已损坏，无法打开”。
 要用于正式分发，请在仓库 Secrets 中配置以下参数，让 macOS 流水线自动签名+公证：
 
-- `APPLE_CERTIFICATE`（base64 编码的 `.p12`）
+- `APPLE_CERTIFICATE`（`.p12` 内容，支持 base64 文本或原始 PKCS12 文本）
 - `APPLE_CERTIFICATE_PASSWORD`
 - `APPLE_SIGNING_IDENTITY`
 - `APPLE_ID`
 - `APPLE_PASSWORD`（app-specific password）
 - `APPLE_TEAM_ID`
+
+建议准备命令：
+
+```bash
+# 先从 Keychain Access 导出 p12，再转成 base64 放进 GitHub Secrets
+base64 -i certificate.p12 | pbcopy
+```
+
+```bash
+# 查看可用签名身份，填到 APPLE_SIGNING_IDENTITY
+security find-identity -v -p codesigning
+```
 
 若未配置签名参数，CI 现在会在产物中额外输出 `UNSIGNED-MACOS-BUILD.txt`，用于明确标识该 macOS 包未签名/未公证。
 

@@ -120,6 +120,15 @@ jobs:
             printf '%s' "$APPLE_CERTIFICATE" > "$CERT_PATH"
             echo "APPLE_CERTIFICATE treated as raw payload"
           fi
+          if [ ! -s "$CERT_PATH" ]; then
+            echo "Certificate payload is empty after decode/import preparation."
+            exit 1
+          fi
+          echo "Prepared certificate payload size: $(wc -c < "$CERT_PATH") bytes"
+          file "$CERT_PATH" || true
+          openssl pkcs12 -in "$CERT_PATH" -nokeys -passin "pass:$APPLE_CERTIFICATE_PASSWORD" -info >/dev/null 2>&1 \
+            && echo "PKCS12 precheck: ok" \
+            || (echo "PKCS12 precheck failed (password/format mismatch)"; exit 1)
 
           security create-keychain -p "" "$KEYCHAIN_PATH"
           security set-keychain-settings "$KEYCHAIN_PATH"
@@ -128,6 +137,21 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple: -k "" "$KEYCHAIN_PATH"
           security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      - name: Print macOS signing mode
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${APPLE_CERTIFICATE}" ] && [ -n "${APPLE_CERTIFICATE_PASSWORD}" ] && [ -n "${APPLE_SIGNING_IDENTITY}" ]; then
+            if [ -n "${APPLE_ID}" ] && [ -n "${APPLE_PASSWORD}" ] && [ -n "${APPLE_TEAM_ID}" ]; then
+              echo "macOS mode: signed + notarized (all Apple secrets present)"
+            else
+              echo "macOS mode: signed only (notarization secrets missing)"
+            fi
+          else
+            echo "macOS mode: unsigned fallback (signing secrets missing)"
+          fi
 
       - name: Stage aria2 binary (Linux/macOS)
         if: runner.os != 'Windows'
