@@ -148,6 +148,33 @@ function buildSpeedPlanPreset(mode: SpeedPlanMode): SpeedPlanRuleInput[] {
   return []
 }
 
+function validateSpeedPlanRules(rules: SpeedPlanRuleInput[]): string | null {
+  const timeRe = /^\d{2}:\d{2}$/
+  const validDay = (value: string) => {
+    const parts = value
+      .split(',')
+      .map((v) => v.trim())
+      .filter(Boolean)
+    if (parts.length === 0) return true
+    return parts.every((p) => {
+      const n = Number(p)
+      return Number.isInteger(n) && n >= 1 && n <= 7
+    })
+  }
+  for (const row of rules) {
+    const start = String(row.start || '').trim()
+    const end = String(row.end || '').trim()
+    const days = String(row.days || '').trim()
+    const limit = String(row.limit || '').trim()
+    if (!limit) return 'limit'
+    if (start && !timeRe.test(start)) return 'start'
+    if (end && !timeRe.test(end)) return 'end'
+    if (start && end && start >= end) return 'range'
+    if (days && !validDay(days)) return 'days'
+  }
+  return null
+}
+
 export default function App() {
   const [msg, msgCtx] = message.useMessage({
     top: 72,
@@ -1188,6 +1215,11 @@ export default function App() {
   const saveSettings = async () => {
     const values = await settingsForm.validateFields()
     const speedPlanRules = normalizeSpeedPlanRules(settingsForm.getFieldValue('speed_plan_rules'))
+    const speedPlanError = validateSpeedPlanRules(speedPlanRules)
+    if (speedPlanError) {
+      msg.error(t('speedPlanInvalid'))
+      return
+    }
     const speedPlanJson = JSON.stringify(speedPlanRules)
     setSettingsSaving(true)
     try {
