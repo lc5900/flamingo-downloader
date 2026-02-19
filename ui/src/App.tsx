@@ -1322,6 +1322,10 @@ export default function App() {
     },
     [categoryFilter, searchText, section, sortBy, statusFilter, tasks],
   )
+  const useVirtualTable = list.length > 150
+  const onRowSelectionChange = useCallback((keys: React.Key[]) => {
+    setSelectedTaskIds(keys.map((k) => String(k)))
+  }, [])
 
   useEffect(() => {
     const visibleIds = new Set(list.map((task) => task.id))
@@ -2589,7 +2593,8 @@ export default function App() {
                     size={currentLayout.density}
                     rowKey="id"
                     loading={loading}
-                    pagination={{ pageSize: 12 }}
+                    virtual={useVirtualTable}
+                    pagination={useVirtualTable ? false : { pageSize: 12 }}
                     dataSource={list}
                     components={{
                       header: {
@@ -2599,7 +2604,7 @@ export default function App() {
                     scroll={{ x: 980, y: 'calc(100vh - 360px)' }}
                     rowSelection={{
                       selectedRowKeys: selectedTaskIds,
-                      onChange: (keys) => setSelectedTaskIds(keys.map((k) => String(k))),
+                      onChange: onRowSelectionChange,
                     }}
                     expandable={{
                       rowExpandable: (row) => !!row.error_message || !!row.error_code || !!row.source,
