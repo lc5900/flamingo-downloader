@@ -150,7 +150,7 @@
 ### P0 - Release/CI and Packaging
 
 - [x] macOS signing: document secrets format (`APPLE_CERTIFICATE` base64 vs raw), add better debug output on import failure, and support notarization when secrets present
-- [ ] CI: add macOS x64 build (macos-13) alongside arm64, and normalize artifact naming for both
+- [x] CI: add macOS x64 build (macos-13) alongside arm64, and normalize artifact naming for both
 - [ ] CI: cache `tauri-cli` install (or switch to `tauri-apps/tauri-action`) to speed up builds
 - [ ] CI: add a fast validation job (`cargo fmt --check`, `cargo clippy`, `npm --prefix ui run lint`, `npm --prefix ui run build`)
 - [ ] Repo hygiene: decide on npm vs pnpm and either commit/remove lockfiles or ignore `ui/pnpm-lock.yaml`

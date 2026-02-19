@@ -99,6 +99,7 @@ This repository includes CI workflow:
 
 What it does:
 - builds on `Linux`, `Windows`, `macOS Apple Silicon`
+- attempts additional `macOS Intel (macos-13)` build when runner is available
 - installs/stages `aria2c` into `aria2/bin/...` before building
 - builds Tauri bundles
 - uploads build artifacts for each platform
@@ -106,8 +107,8 @@ What it does:
 - supports macOS signing/notarization when Apple secrets are configured
 
 Note:
-- The default workflow currently targets `macos-14` (Apple Silicon).
-- If your GitHub plan/region supports Intel macOS runners, you can add `macos-13` back.
+- `macos-14` (Apple Silicon) is required in CI.
+- `macos-13` (Intel) is configured as best-effort, because availability differs by GitHub plan/region.
 
 How to use:
 1. Push code to `main` to run build checks and produce artifacts.

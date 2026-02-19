@@ -26,11 +26,18 @@ jobs:
         include:
           - os: ubuntu-latest
             artifact_suffix: linux-x64
+            allow_failure: false
           - os: windows-latest
             artifact_suffix: windows-x64
+            allow_failure: false
+          - os: macos-13
+            artifact_suffix: macos-x64
+            allow_failure: true
           - os: macos-14
             artifact_suffix: macos-arm64
+            allow_failure: false
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.allow_failure }}
 
     steps:
       - name: Checkout
@@ -282,7 +289,8 @@ jobs:
 
           linux_count=0
           windows_count=0
-          macos_count=0
+          macos_arm64_count=0
+          macos_x64_count=0
 
           for f in release-assets/**/*; do
             [ -f "$f" ] || continue
@@ -291,7 +299,8 @@ jobs:
             case "$f" in
               *flamingo-linux-x64/*) platform="linux-x64"; linux_count=$((linux_count + 1)) ;;
               *flamingo-windows-x64/*) platform="windows-x64"; windows_count=$((windows_count + 1)) ;;
-              *flamingo-macos-arm64/*) platform="macos-arm64"; macos_count=$((macos_count + 1)) ;;
+              *flamingo-macos-arm64/*) platform="macos-arm64"; macos_arm64_count=$((macos_arm64_count + 1)) ;;
+              *flamingo-macos-x64/*) platform="macos-x64"; macos_x64_count=$((macos_x64_count + 1)) ;;
             esac
 
             ext=""
@@ -312,9 +321,13 @@ jobs:
             cp "$f" "release-assets-flat/$out"
           done
 
-          if [ "$linux_count" -eq 0 ] || [ "$windows_count" -eq 0 ] || [ "$macos_count" -eq 0 ]; then
-            echo "Expected artifacts missing: linux=$linux_count windows=$windows_count macos=$macos_count"
+          if [ "$linux_count" -eq 0 ] || [ "$windows_count" -eq 0 ] || [ "$macos_arm64_count" -eq 0 ]; then
+            echo "Expected artifacts missing: linux=$linux_count windows=$windows_count macos-arm64=$macos_arm64_count"
             exit 1
+          fi
+
+          if [ "$macos_x64_count" -eq 0 ]; then
+            echo "NOTICE: no macos-x64 artifacts found (runner may be unavailable in this region/plan)"
           fi
 
           if ! find release-assets-flat -type f | grep -q .; then

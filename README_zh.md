@@ -99,6 +99,7 @@ cargo tauri build
 
 功能：
 - 在 `Linux`、`Windows`、`macOS Apple Silicon` 构建
+- 在 runner 可用时额外尝试 `macOS Intel (macos-13)` 构建
 - 构建前自动安装并注入 `aria2c` 到 `aria2/bin/...`
 - 构建 Tauri 安装包
 - 上传各平台构建产物
@@ -106,8 +107,8 @@ cargo tauri build
 - 配置 Apple 证书后可在 macOS 任务中自动签名与公证
 
 说明：
-- 当前默认使用 `macos-14`（Apple Silicon）Runner。
-- 如果你的 GitHub 计划/区域支持 Intel macOS Runner，可再补回 `macos-13`。
+- `macos-14`（Apple Silicon）为必跑项。
+- `macos-13`（Intel）已配置为 best-effort，是否可用取决于 GitHub 计划/区域。
 
 使用步骤：
 1. 推送到 `main`，触发常规构建与产物上传。
