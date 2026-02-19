@@ -141,6 +141,6 @@
 ### P2 - UI Maintainability and Polish
 
 - [x] Split `ui/src/App.tsx` into pages/components/hooks; isolate API layer and state stores
-- [ ] Extract i18n dictionaries into dedicated files (`ui/src/i18n/*.json`) and add key coverage checks
+- [x] Extract i18n dictionaries into dedicated files (`ui/src/i18n/*.json`) and add key coverage checks
 - [x] Large list performance: virtualize tables and reduce re-render churn (memoization + stable row keys)
 - [x] Accessibility: keyboard shortcuts, focus management, and improved contrast audit for light/dark themes
