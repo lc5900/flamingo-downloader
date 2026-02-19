@@ -157,7 +157,7 @@
 
 ### P0 - UX and Productivity
 
-- [ ] Toolbar: add global actions (pause all / resume all / retry failed / clear completed)
+- [x] Toolbar: add global actions (pause all / resume all / retry failed / clear completed)
 - [ ] New Download: support multi-line paste (create multiple tasks) with per-line validation/errors
 - [ ] Downloaded list: tailor columns for completed tasks (hide irrelevant columns) and add a compact “details” popover
 - [ ] Logs window: add search/filter, copy selected, export logs to file, and “follow tail” toggle

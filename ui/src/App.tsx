@@ -642,6 +642,100 @@ export default function App() {
     }
   }
 
+  const isRetriableTask = (task: Task): boolean => {
+    const source = String(task.source || '').trim()
+    if (!source) return false
+    if (task.task_type === 'http') return /^https?:\/\//i.test(source) || /^ftps?:\/\//i.test(source)
+    if (task.task_type === 'magnet') return source.startsWith('magnet:?')
+    if (task.task_type === 'torrent') return source.toLowerCase().endsWith('.torrent')
+    return false
+  }
+
+  const retrySingleTask = async (task: Task) => {
+    const options = {
+      saveDir: task.save_dir || null,
+      out: task.name || null,
+    }
+    if (task.task_type === 'http') {
+      await api.call('add_url', { url: task.source, options })
+      return
+    }
+    if (task.task_type === 'magnet') {
+      await api.call('add_magnet', { magnet: task.source, options })
+      return
+    }
+    if (task.task_type === 'torrent') {
+      await api.call('add_torrent', {
+        torrentFilePath: task.source,
+        torrentBase64: null,
+        options,
+      })
+      return
+    }
+    throw new Error(`unsupported retry task type: ${task.task_type}`)
+  }
+
+  const onGlobalPauseAll = async () => {
+    try {
+      await api.call('pause_all')
+      await refresh()
+    } catch (err) {
+      msg.error(parseErr(err))
+    }
+  }
+
+  const onGlobalResumeAll = async () => {
+    try {
+      await api.call('resume_all')
+      await refresh()
+    } catch (err) {
+      msg.error(parseErr(err))
+    }
+  }
+
+  const onGlobalRetryFailed = async () => {
+    try {
+      const failed = tasks.filter((task) => String(task.status).toLowerCase() === 'error' && isRetriableTask(task))
+      if (failed.length === 0) {
+        msg.warning(t('noRetryableFailed'))
+        return
+      }
+      let retried = 0
+      for (const task of failed) {
+        try {
+          await retrySingleTask(task)
+          retried += 1
+        } catch {
+          // keep going; a summary toast is shown below
+        }
+      }
+      msg.success(i18nFormat(t('retriedCount'), { count: retried }))
+      await refresh()
+    } catch (err) {
+      msg.error(parseErr(err))
+    }
+  }
+
+  const onGlobalClearCompleted = async () => {
+    Modal.confirm({
+      title: t('clearCompleted'),
+      content: t('clearCompletedConfirm'),
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          const completed = tasks.filter((task) => String(task.status).toLowerCase() === 'completed')
+          for (const task of completed) {
+            await api.call('remove_task', { taskId: task.id, deleteFiles: false })
+          }
+          await refresh()
+          msg.success(i18nFormat(t('clearedCount'), { count: completed.length }))
+        } catch (err) {
+          msg.error(parseErr(err))
+        }
+      },
+    })
+  }
+
   const onOpenFile = async (task: Task) => {
     try {
       await api.call('open_task_file', { taskId: task.id })
@@ -1697,6 +1791,12 @@ export default function App() {
                 </Button>
                 <Button icon={<ReloadOutlined />} onClick={refresh} loading={loading}>
                   {t('refresh')}
+                </Button>
+                <Button onClick={onGlobalPauseAll}>{t('pauseAll')}</Button>
+                <Button onClick={onGlobalResumeAll}>{t('resumeAll')}</Button>
+                <Button onClick={onGlobalRetryFailed}>{t('retryFailed')}</Button>
+                <Button danger onClick={onGlobalClearCompleted}>
+                  {t('clearCompleted')}
                 </Button>
                 <Dropdown
                   menu={{
