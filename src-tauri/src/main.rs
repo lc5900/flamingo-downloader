@@ -458,6 +458,14 @@ async fn check_browser_bridge_status(
 }
 
 #[tauri::command]
+async fn rotate_browser_bridge_token(state: State<'_, AppState>) -> Result<String, String> {
+    state
+        .service
+        .rotate_browser_bridge_token()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn export_debug_bundle(state: State<'_, AppState>) -> Result<String, String> {
     state
         .service
@@ -875,6 +883,7 @@ fn main() {
             detect_aria2_bin_paths,
             get_diagnostics,
             check_browser_bridge_status,
+            rotate_browser_bridge_token,
             export_debug_bundle,
             rpc_ping,
             restart_aria2,

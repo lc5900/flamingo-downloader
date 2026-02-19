@@ -135,8 +135,8 @@
 
 ### P1 - Browser Takeover Hardening
 
-- [ ] Bridge security: restrict allowed origins, rotate token, and show recent browser-client activity
-- [ ] Extension: improve error reporting (why takeover failed) and add “Send to Flamingo” from link context menu on more pages
+- [x] Bridge security: restrict allowed origins, rotate token, and show recent browser-client activity
+- [x] Extension: improve error reporting (why takeover failed) and add “Send to Flamingo” from link context menu on more pages
 
 ### P2 - UI Maintainability and Polish
 

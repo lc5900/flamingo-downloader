@@ -105,6 +105,7 @@ type GlobalSettings = {
   browser_bridge_enabled?: boolean | null
   browser_bridge_port?: number | null
   browser_bridge_token?: string | null
+  browser_bridge_allowed_origins?: string | null
   clipboard_watch_enabled?: boolean | null
   download_dir_rules?: DownloadRule[]
   retry_max_attempts?: number | null
@@ -426,6 +427,8 @@ const I18N: Record<Locale, Record<string, string>> = {
     bridgeEnabled: 'Browser Bridge Enabled',
     bridgePort: 'Browser Bridge Port',
     bridgeToken: 'Browser Bridge Token',
+    bridgeAllowedOrigins: 'Allowed Origins',
+    rotateBridgeToken: 'Rotate Token',
     bridgeStatus: 'Bridge Status',
     bridgeCheck: 'Check Bridge',
     bridgeReconnect: 'Reconnect',
@@ -656,6 +659,8 @@ const I18N: Record<Locale, Record<string, string>> = {
     bridgeEnabled: '浏览器桥接启用',
     bridgePort: '浏览器桥接端口',
     bridgeToken: '浏览器桥接令牌',
+    bridgeAllowedOrigins: '允许来源',
+    rotateBridgeToken: '轮换令牌',
     bridgeStatus: '桥接状态',
     bridgeCheck: '检查连接',
     bridgeReconnect: '重连',
@@ -1013,6 +1018,7 @@ export default function App() {
         browser_bridge_enabled: s?.browser_bridge_enabled ?? undefined,
         browser_bridge_port: s?.browser_bridge_port ?? undefined,
         browser_bridge_token: s?.browser_bridge_token || undefined,
+        browser_bridge_allowed_origins: s?.browser_bridge_allowed_origins || undefined,
         clipboard_watch_enabled: s?.clipboard_watch_enabled ?? undefined,
         download_dir_rules: Array.isArray(s?.download_dir_rules) ? s.download_dir_rules : [],
         retry_max_attempts: s?.retry_max_attempts ?? undefined,
@@ -1811,6 +1817,7 @@ export default function App() {
         browser_bridge_enabled: values.browser_bridge_enabled ?? null,
         browser_bridge_port: values.browser_bridge_port ?? null,
         browser_bridge_token: values.browser_bridge_token || null,
+        browser_bridge_allowed_origins: values.browser_bridge_allowed_origins || null,
         clipboard_watch_enabled: values.clipboard_watch_enabled ?? null,
         retry_max_attempts: values.retry_max_attempts ?? null,
         retry_backoff_secs: values.retry_backoff_secs ?? null,
@@ -3094,9 +3101,25 @@ export default function App() {
                     <Form.Item name="browser_bridge_token" label={t('bridgeToken')}>
                       <Input />
                     </Form.Item>
+                    <Form.Item name="browser_bridge_allowed_origins" label={t('bridgeAllowedOrigins')}>
+                      <Input placeholder="chrome-extension://,moz-extension://" />
+                    </Form.Item>
                     <Space wrap style={{ marginBottom: 8 }}>
                       <Button loading={bridgeChecking} onClick={checkBridgeStatus}>
                         {t('bridgeCheck')}
+                      </Button>
+                      <Button
+                        onClick={async () => {
+                          try {
+                            const token = await invoke<string>('rotate_browser_bridge_token')
+                            settingsForm.setFieldValue('browser_bridge_token', token)
+                            msg.success(t('settingsSaved'))
+                          } catch (err) {
+                            msg.error(parseErr(err))
+                          }
+                        }}
+                      >
+                        {t('rotateBridgeToken')}
                       </Button>
                       <Button
                         loading={bridgeChecking}

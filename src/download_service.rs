@@ -649,6 +649,13 @@ impl DownloadService {
         self.db.load_global_settings()
     }
 
+    pub fn rotate_browser_bridge_token(&self) -> Result<String> {
+        let new_token = Uuid::new_v4().to_string();
+        self.db.set_setting("browser_bridge_token", &new_token)?;
+        self.push_log("rotate_browser_bridge_token", "browser bridge token rotated".to_string());
+        Ok(new_token)
+    }
+
     pub async fn check_browser_bridge_status(&self) -> Result<BrowserBridgeStatus> {
         let settings = self.get_global_settings()?;
         let enabled = settings.browser_bridge_enabled.unwrap_or(true);
@@ -746,6 +753,7 @@ impl DownloadService {
             browser_bridge_enabled: Some(true),
             browser_bridge_port: Some(16789),
             browser_bridge_token: current.browser_bridge_token,
+            browser_bridge_allowed_origins: Some("chrome-extension://,moz-extension://".to_string()),
             clipboard_watch_enabled: Some(false),
             ui_theme: Some("system".to_string()),
             retry_max_attempts: Some(2),

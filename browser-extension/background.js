@@ -20,7 +20,7 @@ async function getConfig() {
 
 async function sendToFlamingo(url, saveDir = null) {
   const cfg = await getConfig();
-  if (!cfg.enabled || !cfg.token) return { ok: false, skipped: true };
+  if (!cfg.enabled || !cfg.token) return { ok: false, skipped: true, reason: "bridge_disabled_or_token_missing" };
 
   const body = { url };
   if (saveDir && typeof saveDir === "string") body.save_dir = saveDir;
@@ -35,9 +35,17 @@ async function sendToFlamingo(url, saveDir = null) {
   });
   if (!resp.ok) {
     const text = await resp.text();
-    throw new Error(`bridge request failed: ${resp.status} ${text}`);
+    throw new Error(`bridge request failed: ${resp.status} ${text}`.slice(0, 400));
   }
   return resp.json();
+}
+
+async function setBridgeActivity(entry) {
+  const payload = {
+    lastBridgeActivityAt: Date.now(),
+    ...entry,
+  };
+  await ext.storage.local.set(payload);
 }
 
 async function maybeTakeOver(downloadItem) {
@@ -53,9 +61,11 @@ async function maybeTakeOver(downloadItem) {
     if (result && result.ok) {
       await ext.downloads.cancel(downloadItem.id).catch(() => {});
       await ext.downloads.erase({ id: downloadItem.id }).catch(() => {});
+      await setBridgeActivity({ lastBridgeSuccess: `auto intercept ok: ${url}` });
     }
   } catch (e) {
     console.error("Flamingo bridge takeover failed", e);
+    await setBridgeActivity({ lastBridgeError: String(e?.message || e || "unknown error") });
   }
 }
 
@@ -73,14 +83,27 @@ ext.runtime.onInstalled.addListener(async () => {
     title: "Download with Flamingo",
     contexts: ["link"],
   });
+  ext.contextMenus.create({
+    id: "flamingo-download-page",
+    title: "Download Page URL with Flamingo",
+    contexts: ["page"],
+  });
 });
 
 ext.contextMenus.onClicked.addListener(async (info) => {
-  if (info.menuItemId !== "flamingo-download-link" || !info.linkUrl) return;
+  const targetUrl =
+    info.menuItemId === "flamingo-download-link"
+      ? info.linkUrl
+      : info.menuItemId === "flamingo-download-page"
+        ? info.pageUrl
+        : null;
+  if (!targetUrl) return;
   try {
-    await sendToFlamingo(info.linkUrl, null);
+    await sendToFlamingo(targetUrl, null);
+    await setBridgeActivity({ lastBridgeSuccess: `context menu ok: ${targetUrl}` });
   } catch (e) {
     console.error("Flamingo context menu send failed", e);
+    await setBridgeActivity({ lastBridgeError: String(e?.message || e || "unknown error") });
   }
 });
 

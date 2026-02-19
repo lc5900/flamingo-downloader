@@ -366,6 +366,9 @@ impl Database {
         if let Some(v) = &settings.browser_bridge_token {
             self.set_setting("browser_bridge_token", v)?;
         }
+        if let Some(v) = &settings.browser_bridge_allowed_origins {
+            self.set_setting("browser_bridge_allowed_origins", v)?;
+        }
         if let Some(v) = settings.clipboard_watch_enabled {
             self.set_setting("clipboard_watch_enabled", if v { "true" } else { "false" })?;
         }
@@ -454,6 +457,7 @@ impl Database {
                 .get_setting("browser_bridge_port")?
                 .and_then(|v| v.parse::<u16>().ok()),
             browser_bridge_token: self.get_setting("browser_bridge_token")?,
+            browser_bridge_allowed_origins: self.get_setting("browser_bridge_allowed_origins")?,
             clipboard_watch_enabled: self
                 .get_setting("clipboard_watch_enabled")?
                 .and_then(|v| match v.as_str() {
@@ -835,6 +839,9 @@ mod tests {
             browser_bridge_enabled: Some(true),
             browser_bridge_port: Some(16789),
             browser_bridge_token: Some("bridge-token-1".to_string()),
+            browser_bridge_allowed_origins: Some(
+                "chrome-extension://,moz-extension://".to_string(),
+            ),
             clipboard_watch_enabled: Some(false),
             ui_theme: Some("dark".to_string()),
             retry_max_attempts: None,
@@ -885,6 +892,10 @@ mod tests {
         assert_eq!(
             loaded.browser_bridge_token.as_deref(),
             Some("bridge-token-1")
+        );
+        assert_eq!(
+            loaded.browser_bridge_allowed_origins.as_deref(),
+            Some("chrome-extension://,moz-extension://")
         );
         assert_eq!(loaded.ui_theme.as_deref(), Some("dark"));
 

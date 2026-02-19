@@ -70,6 +70,7 @@ pub async fn init_backend(
     db.set_setting_if_absent("download_dir_rules", "[]")?;
     db.set_setting_if_absent("browser_bridge_enabled", "true")?;
     db.set_setting_if_absent("browser_bridge_port", "16789")?;
+    db.set_setting_if_absent("browser_bridge_allowed_origins", "chrome-extension://,moz-extension://")?;
     db.set_setting_if_absent("clipboard_watch_enabled", "false")?;
     db.set_setting_if_absent("ui_theme", "system")?;
     db.set_setting_if_absent("retry_max_attempts", "2")?;

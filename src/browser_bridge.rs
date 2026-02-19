@@ -49,7 +49,7 @@ async fn run_browser_bridge(service: Arc<DownloadService>, cfg: BrowserBridgeCon
 async fn handle_connection(
     mut stream: TcpStream,
     service: Arc<DownloadService>,
-    token: &str,
+    default_token: &str,
 ) -> Result<()> {
     let mut raw = Vec::with_capacity(4096);
     let mut tmp = [0_u8; 2048];
@@ -90,25 +90,58 @@ async fn handle_connection(
     let method = parts.next().unwrap_or_default();
     let path = parts.next().unwrap_or_default();
 
-    let mut token_ok = false;
+    let mut req_token = String::new();
+    let mut origin = String::new();
+    let mut user_agent = String::new();
     let mut content_length = 0usize;
     for line in lines {
         if let Some((k, v)) = line.split_once(':') {
-            if k.trim().eq_ignore_ascii_case("x-token") && v.trim() == token {
-                token_ok = true;
+            if k.trim().eq_ignore_ascii_case("x-token") {
+                req_token = v.trim().to_string();
             }
             if k.trim().eq_ignore_ascii_case("content-length")
                 && let Ok(v) = v.trim().parse::<usize>()
             {
                 content_length = v;
             }
+            if k.trim().eq_ignore_ascii_case("origin") {
+                origin = v.trim().to_string();
+            }
+            if k.trim().eq_ignore_ascii_case("user-agent") {
+                user_agent = v.trim().to_string();
+            }
         }
     }
-    if !token_ok {
+    let settings = service.get_global_settings().ok();
+    let effective_token = settings
+        .as_ref()
+        .and_then(|s| s.browser_bridge_token.clone())
+        .unwrap_or_else(|| default_token.to_string());
+    if req_token != effective_token {
+        service.append_operation_log(
+            "bridge_activity",
+            format!("unauthorized path={path} origin={origin} ua={user_agent}"),
+        );
         return write_json(
             &mut stream,
             401,
             &json!({"ok": false, "error": "unauthorized"}),
+        )
+        .await;
+    }
+    let allowed_origins = settings
+        .as_ref()
+        .and_then(|s| s.browser_bridge_allowed_origins.clone())
+        .unwrap_or_default();
+    if !origin_allowed(&origin, &allowed_origins) {
+        service.append_operation_log(
+            "bridge_activity",
+            format!("forbidden_origin path={path} origin={origin} ua={user_agent}"),
+        );
+        return write_json(
+            &mut stream,
+            401,
+            &json!({"ok": false, "error": "forbidden origin"}),
         )
         .await;
     }
@@ -124,6 +157,10 @@ async fn handle_connection(
     let body_raw = String::from_utf8_lossy(body_bytes);
 
     if method == "GET" && path == "/health" {
+        service.append_operation_log(
+            "bridge_activity",
+            format!("health_ok origin={origin} ua={user_agent}"),
+        );
         return write_json(&mut stream, 200, &json!({"ok": true})).await;
     }
 
@@ -141,15 +178,41 @@ async fn handle_connection(
         } else {
             service.add_url(&payload.url, opts).await?
         };
+        service.append_operation_log(
+            "bridge_activity",
+            format!("add_ok task_id={task_id} origin={origin} ua={user_agent}"),
+        );
         return write_json(&mut stream, 200, &json!({"ok": true, "task_id": task_id})).await;
     }
 
+    service.append_operation_log(
+        "bridge_activity",
+        format!("not_found method={method} path={path} origin={origin} ua={user_agent}"),
+    );
     write_json(
         &mut stream,
         404,
         &json!({"ok": false, "error": "not found"}),
     )
     .await
+}
+
+fn origin_allowed(origin: &str, allowlist_raw: &str) -> bool {
+    let rules = allowlist_raw
+        .split([',', '\n'])
+        .map(|v| v.trim())
+        .filter(|v| !v.is_empty())
+        .collect::<Vec<_>>();
+    if rules.is_empty() {
+        return true;
+    }
+    if origin.is_empty() {
+        return false;
+    }
+    if rules.iter().any(|r| *r == "*") {
+        return true;
+    }
+    rules.iter().any(|rule| origin.starts_with(rule))
 }
 
 fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
