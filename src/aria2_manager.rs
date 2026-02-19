@@ -40,6 +40,7 @@ pub trait Aria2Api: Send + Sync {
     async fn unpause_all(&self) -> Result<String>;
     async fn remove(&self, gid: &str, force: bool) -> Result<String>;
     async fn tell_status(&self, gid: &str) -> Result<Value>;
+    async fn get_peers(&self, gid: &str) -> Result<Vec<Value>>;
     async fn tell_all(&self) -> Result<Vec<Aria2TaskSnapshot>>;
     async fn change_position(&self, gid: &str, pos: i64, how: &str) -> Result<i64>;
     async fn change_option(&self, gid: &str, options: Value) -> Result<String>;
@@ -528,11 +529,19 @@ impl Aria2Manager {
                         "connections",
                         "errorCode",
                         "errorMessage",
+                        "numSeeders",
                         "files",
                         "bittorrent"
                     ]),
                 ],
             )
+            .await
+    }
+
+    pub async fn get_peers(&self, gid: &str) -> Result<Vec<Value>> {
+        self.client()
+            .await?
+            .call("aria2.getPeers", vec![json!(gid)])
             .await
     }
 
@@ -726,6 +735,10 @@ impl Aria2Api for Aria2Manager {
 
     async fn tell_status(&self, gid: &str) -> Result<Value> {
         Aria2Manager::tell_status(self, gid).await
+    }
+
+    async fn get_peers(&self, gid: &str) -> Result<Vec<Value>> {
+        Aria2Manager::get_peers(self, gid).await
     }
 
     async fn tell_all(&self) -> Result<Vec<Aria2TaskSnapshot>> {

@@ -513,7 +513,45 @@ impl DownloadService {
             .aria2_gid
             .ok_or_else(|| AppError::InvalidInput("task has no aria2 gid".to_string()))?;
         self.ensure_aria2_ready().await?;
-        self.aria2.tell_status(&gid).await
+        let status = self.aria2.tell_status(&gid).await?;
+
+        let trackers = status
+            .get("bittorrent")
+            .and_then(|v| v.get("announceList"))
+            .and_then(Value::as_array)
+            .map(|tiers| {
+                tiers
+                    .iter()
+                    .filter_map(Value::as_array)
+                    .flat_map(|tier| tier.iter())
+                    .filter_map(Value::as_str)
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        let peers = if task.task_type == TaskType::Torrent || task.task_type == TaskType::Magnet {
+            self.aria2.get_peers(&gid).await.unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        let num_seeders = status
+            .get("numSeeders")
+            .and_then(Value::as_str)
+            .and_then(|v| v.parse::<i64>().ok())
+            .or_else(|| status.get("numSeeders").and_then(Value::as_i64))
+            .unwrap_or_default();
+
+        Ok(json!({
+            "raw": status,
+            "summary": {
+                "peers_count": peers.len(),
+                "seeders_count": num_seeders,
+                "trackers_count": trackers.len(),
+                "trackers": trackers
+            },
+            "peers": peers
+        }))
     }
 
     pub async fn set_task_file_selection(
@@ -3045,6 +3083,11 @@ mod tests {
         async fn tell_status(&self, _gid: &str) -> Result<Value> {
             self.call("tell_status");
             Ok(json!({ "files": [] }))
+        }
+
+        async fn get_peers(&self, _gid: &str) -> Result<Vec<Value>> {
+            self.call("get_peers");
+            Ok(Vec::new())
         }
 
         async fn tell_all(&self) -> Result<Vec<Aria2TaskSnapshot>> {

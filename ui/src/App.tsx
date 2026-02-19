@@ -269,6 +269,10 @@ const I18N: Record<Locale, Record<string, string>> = {
     retryLogs: 'Retry Logs',
     noRuntimeStatus: 'No runtime status',
     noRetryLogs: 'No retry-related logs',
+    btDiagnostics: 'BT Diagnostics',
+    peers: 'Peers',
+    seeders: 'Seeders',
+    trackers: 'Trackers',
     dropHint: 'Drop URL or .torrent file here',
     search: 'Search',
     searchPlaceholder: 'Search by name / source / task id',
@@ -495,6 +499,10 @@ const I18N: Record<Locale, Record<string, string>> = {
     retryLogs: '重试日志',
     noRuntimeStatus: '暂无运行状态',
     noRetryLogs: '暂无重试相关日志',
+    btDiagnostics: 'BT 诊断',
+    peers: '节点',
+    seeders: '做种者',
+    trackers: 'Tracker',
     dropHint: '拖拽 URL 或 .torrent 文件到这里',
     search: '搜索',
     searchPlaceholder: '按名称 / 来源 / 任务ID 搜索',
@@ -948,6 +956,7 @@ export default function App() {
   const [detailCategoryInput, setDetailCategoryInput] = useState('')
   const [detailFiles, setDetailFiles] = useState<TaskFile[]>([])
   const [detailRuntimeText, setDetailRuntimeText] = useState('')
+  const [detailBtSummary, setDetailBtSummary] = useState('')
   const [detailRetryLogs, setDetailRetryLogs] = useState<OperationLog[]>([])
   const [dragHover, setDragHover] = useState(false)
   const [clipboardWatchEnabled, setClipboardWatchEnabled] = useState(false)
@@ -1469,6 +1478,7 @@ export default function App() {
     setDetailCategoryInput(String(task.category || ''))
     setDetailFiles([])
     setDetailRuntimeText('')
+    setDetailBtSummary('')
     setDetailRetryLogs([])
     try {
       const detail = await invoke<{ task: Task; files: TaskFile[] }>('get_task_detail', {
@@ -1480,8 +1490,22 @@ export default function App() {
       try {
         const runtime = await invoke<unknown>('get_task_runtime_status', { taskId: task.id })
         setDetailRuntimeText(JSON.stringify(runtime ?? {}, null, 2))
+        const asObj = runtime as {
+          summary?: { peers_count?: number; seeders_count?: number; trackers_count?: number }
+        }
+        const peers = Number(asObj?.summary?.peers_count || 0)
+        const seeders = Number(asObj?.summary?.seeders_count || 0)
+        const trackers = Number(asObj?.summary?.trackers_count || 0)
+        if (peers > 0 || seeders > 0 || trackers > 0) {
+          setDetailBtSummary(
+            `${t('btDiagnostics')}: ${t('peers')} ${peers} / ${t('seeders')} ${seeders} / ${t('trackers')} ${trackers}`,
+          )
+        } else {
+          setDetailBtSummary('')
+        }
       } catch {
         setDetailRuntimeText('')
+        setDetailBtSummary('')
       }
       const logs = await invoke<OperationLog[]>('list_operation_logs', { limit: 500 })
       const gid = detail?.task?.aria2_gid || task.aria2_gid || ''
@@ -2919,6 +2943,11 @@ export default function App() {
               </Space>
             </Card>
             <Card size="small" title={t('runtimeStatus')} loading={detailLoading}>
+              {detailBtSummary && (
+                <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+                  {detailBtSummary}
+                </Typography.Text>
+              )}
               <Input.TextArea
                 value={detailRuntimeText || t('noRuntimeStatus')}
                 autoSize={{ minRows: 6, maxRows: 14 }}

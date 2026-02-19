@@ -131,7 +131,7 @@
 ### P1 - BT Improvements
 
 - [x] Seeding controls: stop after ratio/time, per-task upload limit, and “stop seeding” quick action
-- [ ] Better BT diagnostics: show peers/seeders if available, and tracker status parsing into UI
+- [x] Better BT diagnostics: show peers/seeders if available, and tracker status parsing into UI
 
 ### P1 - Browser Takeover Hardening
 
