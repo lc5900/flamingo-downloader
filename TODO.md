@@ -164,7 +164,7 @@
 
 ### P1 - Rules and Automation
 
-- [ ] Add category auto-tag rules (domain/ext/type -> category) and show category chips in list
+- [x] Add category auto-tag rules (domain/ext/type -> category) and show category chips in list
 - [ ] Replace speed-plan raw JSON with a small UI editor (time ranges + limits), and keep JSON as the storage format
 - [ ] Add “schedule” mode (e.g. night-time full speed, day-time throttled) built on speed plan
 

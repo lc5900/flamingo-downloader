@@ -110,6 +110,14 @@ pub struct DownloadDirRule {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CategoryRule {
+    pub enabled: bool,
+    pub matcher: String, // ext | domain | type
+    pub pattern: String,
+    pub category: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GlobalSettings {
     pub aria2_bin_path: Option<String>,
     pub download_dir: Option<String>,
@@ -122,6 +130,8 @@ pub struct GlobalSettings {
     pub github_token: Option<String>,
     #[serde(default)]
     pub download_dir_rules: Vec<DownloadDirRule>,
+    #[serde(default)]
+    pub category_rules: Vec<CategoryRule>,
     pub browser_bridge_enabled: Option<bool>,
     pub browser_bridge_port: Option<u16>,
     pub browser_bridge_token: Option<String>,

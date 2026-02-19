@@ -30,6 +30,13 @@ export type DownloadRule = {
   subdir_by_domain?: boolean
 }
 
+export type CategoryRule = {
+  enabled: boolean
+  matcher: MatcherType
+  pattern: string
+  category: string
+}
+
 export type GlobalSettings = {
   aria2_bin_path?: string | null
   download_dir?: string | null
@@ -47,11 +54,18 @@ export type GlobalSettings = {
   browser_bridge_allowed_origins?: string | null
   clipboard_watch_enabled?: boolean | null
   download_dir_rules?: DownloadRule[]
+  category_rules?: CategoryRule[]
   retry_max_attempts?: number | null
   retry_backoff_secs?: number | null
   retry_fallback_mirrors?: string | null
   metadata_timeout_secs?: number | null
   speed_plan?: string | null
+  speed_plan_rules?: Array<{
+    days?: string
+    start?: string
+    end?: string
+    limit?: string
+  }> | null
   task_option_presets?: string | null
   post_complete_action?: string | null
   auto_delete_control_files?: boolean | null

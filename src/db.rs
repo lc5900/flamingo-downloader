@@ -8,7 +8,7 @@ use anyhow::{Context, Result, anyhow};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::models::{
-    Aria2TaskSnapshot, DownloadDirRule, GlobalSettings, Task, TaskFile, TaskStatus, TaskType,
+    Aria2TaskSnapshot, CategoryRule, DownloadDirRule, GlobalSettings, Task, TaskFile, TaskStatus, TaskType,
 };
 
 pub struct Database {
@@ -417,6 +417,9 @@ impl Database {
         let rules_json = serde_json::to_string(&settings.download_dir_rules)
             .context("serialize download_dir_rules")?;
         self.set_setting("download_dir_rules", &rules_json)?;
+        let category_rules_json = serde_json::to_string(&settings.category_rules)
+            .context("serialize category_rules")?;
+        self.set_setting("category_rules", &category_rules_json)?;
         Ok(())
     }
 
@@ -424,6 +427,10 @@ impl Database {
         let rules = self
             .get_setting("download_dir_rules")?
             .and_then(|v| serde_json::from_str::<Vec<DownloadDirRule>>(&v).ok())
+            .unwrap_or_default();
+        let category_rules = self
+            .get_setting("category_rules")?
+            .and_then(|v| serde_json::from_str::<Vec<CategoryRule>>(&v).ok())
             .unwrap_or_default();
         Ok(GlobalSettings {
             aria2_bin_path: self.get_setting("manual_aria2_bin_path")?,
@@ -446,6 +453,7 @@ impl Database {
             github_cdn: self.get_setting("github_cdn")?,
             github_token: self.get_setting("github_token")?,
             download_dir_rules: rules,
+            category_rules,
             browser_bridge_enabled: self
                 .get_setting("browser_bridge_enabled")?
                 .and_then(|v| match v.as_str() {
@@ -836,6 +844,12 @@ mod tests {
                 subdir_by_date: false,
                 subdir_by_domain: false,
             }],
+            category_rules: vec![CategoryRule {
+                enabled: true,
+                matcher: "domain".to_string(),
+                pattern: "example.com".to_string(),
+                category: "work".to_string(),
+            }],
             browser_bridge_enabled: Some(true),
             browser_bridge_port: Some(16789),
             browser_bridge_token: Some("bridge-token-1".to_string()),
@@ -879,6 +893,8 @@ mod tests {
         assert_eq!(loaded.github_token.as_deref(), Some("ghp_test_token"));
         assert_eq!(loaded.download_dir_rules.len(), 1);
         assert_eq!(loaded.download_dir_rules[0].matcher, "ext");
+        assert_eq!(loaded.category_rules.len(), 1);
+        assert_eq!(loaded.category_rules[0].category, "work");
         assert!(loaded
             .task_option_presets
             .as_deref()

@@ -63,6 +63,7 @@ import type {
   AddFormValues,
   AddPresetTaskType,
   BrowserBridgeStatus,
+  CategoryRule,
   DownloadRule,
   GlobalSettings,
   ImportTaskListResult,
@@ -103,6 +104,48 @@ function normalizeThemeMode(v: unknown): ThemeMode {
   const x = String(v || '').toLowerCase()
   if (x === 'light' || x === 'dark') return x
   return 'system'
+}
+
+type SpeedPlanRuleInput = {
+  days?: string
+  start?: string
+  end?: string
+  limit?: string
+}
+type SpeedPlanMode = 'manual' | 'off' | 'workday_limited' | 'night_boost'
+
+function normalizeSpeedPlanRules(input: unknown): SpeedPlanRuleInput[] {
+  if (!Array.isArray(input)) return []
+  return input
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => {
+      const row = item as SpeedPlanRuleInput
+      return {
+        days: String(row.days || '').trim(),
+        start: String(row.start || '').trim(),
+        end: String(row.end || '').trim(),
+        limit: String(row.limit || '').trim(),
+      }
+    })
+    .filter((row) => row.limit)
+}
+
+function buildSpeedPlanPreset(mode: SpeedPlanMode): SpeedPlanRuleInput[] {
+  if (mode === 'off') return [{ days: '', start: '', end: '', limit: '0' }]
+  if (mode === 'workday_limited') {
+    return [
+      { days: '1,2,3,4,5', start: '09:00', end: '18:00', limit: '2M' },
+      { days: '', start: '', end: '', limit: '0' },
+    ]
+  }
+  if (mode === 'night_boost') {
+    return [
+      { days: '1,2,3,4,5', start: '09:00', end: '23:00', limit: '1M' },
+      { days: '6,7', start: '10:00', end: '23:00', limit: '2M' },
+      { days: '', start: '', end: '', limit: '0' },
+    ]
+  }
+  return []
 }
 
 export default function App() {
@@ -181,6 +224,7 @@ export default function App() {
   const [clipboardWatchEnabled, setClipboardWatchEnabled] = useState(false)
   const [notifyOnCompleteEnabled, setNotifyOnCompleteEnabled] = useState(true)
   const [postCompleteAction, setPostCompleteAction] = useState<'none' | 'open_dir' | 'open_file'>('none')
+  const [speedPlanMode, setSpeedPlanMode] = useState<SpeedPlanMode>('manual')
   const lastClipboardRef = useRef('')
   const clipboardPromptingRef = useRef(false)
   const prevTaskStatusRef = useRef<Record<string, string>>({})
@@ -213,6 +257,15 @@ export default function App() {
     try {
       const s = await api.call<GlobalSettings>('get_global_settings')
       const mode = normalizeThemeMode(s?.ui_theme)
+      const speedPlanRules = normalizeSpeedPlanRules(
+        (() => {
+          try {
+            return JSON.parse(String(s?.speed_plan || '[]'))
+          } catch {
+            return []
+          }
+        })(),
+      )
       setThemeMode(mode)
       settingsForm.setFieldsValue({
         aria2_bin_path: s?.aria2_bin_path || undefined,
@@ -231,11 +284,13 @@ export default function App() {
         browser_bridge_allowed_origins: s?.browser_bridge_allowed_origins || undefined,
         clipboard_watch_enabled: s?.clipboard_watch_enabled ?? undefined,
         download_dir_rules: Array.isArray(s?.download_dir_rules) ? s.download_dir_rules : [],
+        category_rules: Array.isArray(s?.category_rules) ? (s.category_rules as CategoryRule[]) : [],
         retry_max_attempts: s?.retry_max_attempts ?? undefined,
         retry_backoff_secs: s?.retry_backoff_secs ?? undefined,
         retry_fallback_mirrors: s?.retry_fallback_mirrors || undefined,
         metadata_timeout_secs: s?.metadata_timeout_secs ?? undefined,
         speed_plan: s?.speed_plan || undefined,
+        speed_plan_rules: speedPlanRules,
         post_complete_action: s?.post_complete_action || 'none',
         auto_delete_control_files: s?.auto_delete_control_files ?? undefined,
         auto_clear_completed_days: s?.auto_clear_completed_days ?? undefined,
@@ -254,6 +309,7 @@ export default function App() {
           ? s.post_complete_action
           : 'none',
       )
+      setSpeedPlanMode('manual')
       const presets = (() => {
         try {
           const raw = String(s?.task_option_presets || '[]')
@@ -1131,6 +1187,8 @@ export default function App() {
 
   const saveSettings = async () => {
     const values = await settingsForm.validateFields()
+    const speedPlanRules = normalizeSpeedPlanRules(settingsForm.getFieldValue('speed_plan_rules'))
+    const speedPlanJson = JSON.stringify(speedPlanRules)
     setSettingsSaving(true)
     try {
       const payload: GlobalSettings = {
@@ -1153,7 +1211,7 @@ export default function App() {
         retry_backoff_secs: values.retry_backoff_secs ?? null,
         retry_fallback_mirrors: values.retry_fallback_mirrors || null,
         metadata_timeout_secs: values.metadata_timeout_secs ?? null,
-        speed_plan: values.speed_plan || null,
+        speed_plan: speedPlanJson,
         task_option_presets: JSON.stringify(taskOptionPresets),
         post_complete_action: values.post_complete_action || 'none',
         auto_delete_control_files: values.auto_delete_control_files ?? true,
@@ -1164,6 +1222,9 @@ export default function App() {
         notify_on_complete: values.notify_on_complete ?? null,
         download_dir_rules: (values.download_dir_rules || []).filter(
           (r) => r && String(r.pattern || '').trim() && String(r.save_dir || '').trim(),
+        ),
+        category_rules: (values.category_rules || []).filter(
+          (r) => r && String(r.pattern || '').trim() && String(r.category || '').trim(),
         ),
       }
       await api.call('set_global_settings', { settings: payload })
@@ -1258,6 +1319,12 @@ export default function App() {
     setSortBy('updated_desc')
     setSelectedTaskIds([])
     msg.success(t('settingsSaved'))
+  }
+
+  const onSpeedPlanModeChange = (mode: SpeedPlanMode) => {
+    setSpeedPlanMode(mode)
+    if (mode === 'manual') return
+    settingsForm.setFieldValue('speed_plan_rules', buildSpeedPlanPreset(mode))
   }
 
   const doRpcPing = async () => {
@@ -2555,11 +2622,65 @@ export default function App() {
                     <Form.Item name="retry_fallback_mirrors" label={t('retryMirrors')}>
                       <Input.TextArea rows={2} placeholder="https://mirror1.example.com\nhttps://mirror2.example.com" />
                     </Form.Item>
-                    <Form.Item name="speed_plan" label={t('speedPlan')}>
-                      <Input.TextArea
-                        rows={3}
-                        placeholder={'[{"days":"1,2,3,4,5","start":"09:00","end":"18:00","limit":"2M"}]'}
+                    <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+                      {t('speedPlan')}
+                    </Typography.Text>
+                    <Space wrap style={{ marginBottom: 10 }}>
+                      <Typography.Text type="secondary">{t('scheduleMode')}</Typography.Text>
+                      <Select
+                        style={{ width: 260 }}
+                        value={speedPlanMode}
+                        onChange={(v) => onSpeedPlanModeChange(v as SpeedPlanMode)}
+                        options={[
+                          { label: t('scheduleManual'), value: 'manual' },
+                          { label: t('scheduleOff'), value: 'off' },
+                          { label: t('scheduleWorkdayLimited'), value: 'workday_limited' },
+                          { label: t('scheduleNightBoost'), value: 'night_boost' },
+                        ]}
                       />
+                    </Space>
+                    <Form.List name="speed_plan_rules">
+                      {(fields, { add, remove }) => (
+                        <Space direction="vertical" style={{ width: '100%' }}>
+                          {fields.map((field) => (
+                            <Card key={field.key} size="small">
+                              <div className="grid-rule">
+                                <Form.Item name={[field.name, 'days']} label={t('speedDays')}>
+                                  <Input placeholder="1,2,3,4,5 (Mon=1..Sun=7)" />
+                                </Form.Item>
+                                <Form.Item name={[field.name, 'start']} label={t('speedStart')}>
+                                  <Input placeholder="09:00" />
+                                </Form.Item>
+                                <Form.Item name={[field.name, 'end']} label={t('speedEnd')}>
+                                  <Input placeholder="18:00" />
+                                </Form.Item>
+                                <Form.Item name={[field.name, 'limit']} label={t('speedLimit')}>
+                                  <Input placeholder="0 / 2M / 10M" />
+                                </Form.Item>
+                              </div>
+                              <Button danger onClick={() => remove(field.name)}>
+                                {t('removeRule')}
+                              </Button>
+                            </Card>
+                          ))}
+                          <Button
+                            icon={<PlusOutlined />}
+                            onClick={() =>
+                              add({
+                                days: '',
+                                start: '',
+                                end: '',
+                                limit: '0',
+                              })
+                            }
+                          >
+                            {t('addRule')}
+                          </Button>
+                        </Space>
+                      )}
+                    </Form.List>
+                    <Form.Item name="speed_plan" hidden>
+                      <Input />
                     </Form.Item>
                     <Form.Item
                       name="auto_delete_control_files"
@@ -2667,6 +2788,53 @@ export default function App() {
                                 matcher: 'ext',
                                 subdir_by_domain: false,
                                 subdir_by_date: false,
+                              })
+                            }
+                          >
+                            {t('addRule')}
+                          </Button>
+                        </Space>
+                      )}
+                    </Form.List>
+                    <Divider />
+                    <Typography.Title level={5}>{t('categoryRulesTitle')}</Typography.Title>
+                    <Form.List name="category_rules">
+                      {(fields, { add, remove }) => (
+                        <Space direction="vertical" style={{ width: '100%' }}>
+                          {fields.map((field) => (
+                            <Card key={field.key} size="small">
+                              <div className="grid-rule">
+                                <Form.Item name={[field.name, 'enabled']} label={t('enabled')} valuePropName="checked">
+                                  <Switch />
+                                </Form.Item>
+                                <Form.Item name={[field.name, 'matcher']} label={t('matcher')}>
+                                  <Select
+                                    options={[
+                                      { label: 'ext', value: 'ext' },
+                                      { label: 'domain', value: 'domain' },
+                                      { label: 'type', value: 'type' },
+                                    ]}
+                                  />
+                                </Form.Item>
+                                <Form.Item name={[field.name, 'pattern']} label={t('pattern')}>
+                                  <Input placeholder="mp4,mkv or github.com or torrent" />
+                                </Form.Item>
+                                <Form.Item name={[field.name, 'category']} label={t('categoryName')}>
+                                  <Input placeholder="video / docs / work" />
+                                </Form.Item>
+                              </div>
+                              <Button danger onClick={() => remove(field.name)}>
+                                {t('removeRule')}
+                              </Button>
+                            </Card>
+                          ))}
+                          <Button
+                            icon={<PlusOutlined />}
+                            onClick={() =>
+                              add({
+                                enabled: true,
+                                matcher: 'ext',
+                                category: '',
                               })
                             }
                           >

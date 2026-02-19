@@ -25,7 +25,7 @@ use crate::{
     events::SharedEmitter,
     models::{
         AddTaskOptions, AppUpdateStrategy, Aria2UpdateApplyResult, Aria2UpdateInfo, Diagnostics,
-        DownloadDirRule, GlobalSettings, ImportTaskListResult, OperationLog, SaveDirSuggestion,
+        CategoryRule, DownloadDirRule, GlobalSettings, ImportTaskListResult, OperationLog, SaveDirSuggestion,
         StartupSelfCheck, Task, TaskFile, TaskListSnapshot, TaskStatus, TaskType, BrowserBridgeStatus,
     },
 };
@@ -76,6 +76,8 @@ impl DownloadService {
         let http_type = detect_http_content_type(url).await;
         let save_dir =
             self.resolve_save_dir_for_new_task(TaskType::Http, url, &options, http_type.as_deref())?;
+        let category =
+            self.resolve_category_for_new_task(TaskType::Http, url, http_type.as_deref())?;
         let options = with_resolved_save_dir(options, save_dir.clone());
         let task_id = Uuid::new_v4().to_string();
         let gid = self
@@ -91,7 +93,7 @@ impl DownloadService {
             source: url.to_string(),
             status: TaskStatus::Queued,
             name: None,
-            category: None,
+            category,
             save_dir,
             total_length: 0,
             completed_length: 0,
@@ -115,6 +117,7 @@ impl DownloadService {
         self.ensure_aria2_ready().await?;
 
         let save_dir = self.resolve_save_dir_for_new_task(TaskType::Magnet, magnet, &options, None)?;
+        let category = self.resolve_category_for_new_task(TaskType::Magnet, magnet, None)?;
         let options = with_resolved_save_dir(options, save_dir.clone());
         let task_id = Uuid::new_v4().to_string();
         let gid = self
@@ -130,7 +133,7 @@ impl DownloadService {
             source: magnet.to_string(),
             status: TaskStatus::Metadata,
             name: None,
-            category: None,
+            category,
             save_dir,
             total_length: 0,
             completed_length: 0,
@@ -175,6 +178,7 @@ impl DownloadService {
             .unwrap_or_else(|| "torrent:base64".to_string());
         let save_dir =
             self.resolve_save_dir_for_new_task(TaskType::Torrent, &source, &options, None)?;
+        let category = self.resolve_category_for_new_task(TaskType::Torrent, &source, None)?;
         let options = with_resolved_save_dir(options, save_dir.clone());
 
         let task_id = Uuid::new_v4().to_string();
@@ -192,7 +196,7 @@ impl DownloadService {
             source,
             status: TaskStatus::Queued,
             name: None,
-            category: None,
+            category,
             save_dir,
             total_length: 0,
             completed_length: 0,
@@ -750,6 +754,7 @@ impl DownloadService {
             github_cdn: Some(String::new()),
             github_token: Some(String::new()),
             download_dir_rules: Vec::new(),
+            category_rules: Vec::new(),
             browser_bridge_enabled: Some(true),
             browser_bridge_port: Some(16789),
             browser_bridge_token: current.browser_bridge_token,
@@ -1941,6 +1946,27 @@ impl DownloadService {
             .map(|v| v.0)
     }
 
+    fn resolve_category_for_new_task(
+        &self,
+        task_type: TaskType,
+        source: &str,
+        http_content_type: Option<&str>,
+    ) -> Result<Option<String>> {
+        let settings = self.db.load_global_settings()?;
+        for rule in settings.category_rules {
+            if !rule.enabled {
+                continue;
+            }
+            if category_rule_matches(&rule, &task_type, source, http_content_type) {
+                let category = rule.category.trim();
+                if !category.is_empty() {
+                    return Ok(Some(category.to_string()));
+                }
+            }
+        }
+        Ok(None)
+    }
+
     fn resolve_save_dir_for_new_task_detail(
         &self,
         task_type: TaskType,
@@ -2243,6 +2269,23 @@ fn rule_matches(
         }
         _ => false,
     }
+}
+
+fn category_rule_matches(
+    rule: &CategoryRule,
+    task_type: &TaskType,
+    source: &str,
+    http_content_type: Option<&str>,
+) -> bool {
+    let as_dir_rule = DownloadDirRule {
+        enabled: rule.enabled,
+        matcher: rule.matcher.clone(),
+        pattern: rule.pattern.clone(),
+        save_dir: String::new(),
+        subdir_by_date: false,
+        subdir_by_domain: false,
+    };
+    rule_matches(&as_dir_rule, task_type, source, http_content_type)
 }
 
 fn infer_http_type_candidates(source: &str, http_content_type: Option<&str>) -> Vec<String> {
