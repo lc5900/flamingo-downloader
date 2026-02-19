@@ -2042,6 +2042,47 @@ export default function App() {
     }
   }
 
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey
+      const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase() || ''
+      const editing = tag === 'input' || tag === 'textarea' || (e.target as HTMLElement | null)?.isContentEditable
+      if (mod && e.key.toLowerCase() === 'n') {
+        e.preventDefault()
+        void onOpenAdd()
+        return
+      }
+      if (mod && e.key === ',') {
+        e.preventDefault()
+        void openSettings()
+        return
+      }
+      if (mod && e.key.toLowerCase() === 'l') {
+        e.preventDefault()
+        void openLogsWindow()
+        return
+      }
+      if (!mod && e.key === '/' && !editing) {
+        e.preventDefault()
+        const el = document.getElementById('task-search-input') as HTMLInputElement | null
+        el?.focus()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onOpenAdd, openSettings, openLogsWindow])
+
+  useEffect(() => {
+    if (!addOpen) return
+    const timer = window.setTimeout(() => {
+      const fieldId = addType === 'magnet' ? 'add-magnet-input' : addType === 'url' ? 'add-url-input' : ''
+      if (!fieldId) return
+      const el = document.getElementById(fieldId) as HTMLInputElement | null
+      el?.focus()
+    }, 60)
+    return () => window.clearTimeout(timer)
+  }, [addOpen, addType])
+
   const suggestAndSetSaveDir = async (taskType: 'http' | 'magnet' | 'torrent', source: string | null) => {
     try {
       const suggestion = await invoke<SaveDirSuggestion>('suggest_save_dir_detail', {
@@ -2187,24 +2228,28 @@ export default function App() {
               <>
                 <Button
                   size="small"
+                  aria-label={t('queueTop')}
                   title={t('queueTop')}
                   icon={<VerticalAlignTopOutlined />}
                   onClick={() => onMoveTaskPosition(row, 'top')}
                 />
                 <Button
                   size="small"
+                  aria-label={t('queueUp')}
                   title={t('queueUp')}
                   icon={<ArrowUpOutlined />}
                   onClick={() => onMoveTaskPosition(row, 'up')}
                 />
                 <Button
                   size="small"
+                  aria-label={t('queueDown')}
                   title={t('queueDown')}
                   icon={<ArrowDownOutlined />}
                   onClick={() => onMoveTaskPosition(row, 'down')}
                 />
                 <Button
                   size="small"
+                  aria-label={t('queueBottom')}
                   title={t('queueBottom')}
                   icon={<VerticalAlignBottomOutlined />}
                   onClick={() => onMoveTaskPosition(row, 'bottom')}
@@ -2476,6 +2521,7 @@ export default function App() {
               >
                 <Space wrap style={{ marginBottom: 12 }}>
                   <Input
+                    id="task-search-input"
                     allowClear
                     value={searchText}
                     onChange={(e) => setSearchText(e.target.value)}
@@ -2638,6 +2684,7 @@ export default function App() {
               {addType === 'url' && (
                 <Form.Item name="url" label={t('url')} rules={[{ required: true, message: t('urlRequired') }]}>
                   <Input
+                    id="add-url-input"
                     placeholder="https://example.com/file.zip"
                     onPressEnter={(e) => {
                       e.preventDefault()
@@ -2664,6 +2711,7 @@ export default function App() {
               {addType === 'magnet' && (
                 <Form.Item name="magnet" label={t('magnet')} rules={[{ required: true, message: t('magnetRequired') }]}>
                   <Input
+                    id="add-magnet-input"
                     placeholder="magnet:?xt=urn:btih:..."
                     onPressEnter={(e) => {
                       e.preventDefault()

@@ -143,4 +143,4 @@
 - [ ] Split `ui/src/App.tsx` into pages/components/hooks; isolate API layer and state stores
 - [ ] Extract i18n dictionaries into dedicated files (`ui/src/i18n/*.json`) and add key coverage checks
 - [ ] Large list performance: virtualize tables and reduce re-render churn (memoization + stable row keys)
-- [ ] Accessibility: keyboard shortcuts, focus management, and improved contrast audit for light/dark themes
+- [x] Accessibility: keyboard shortcuts, focus management, and improved contrast audit for light/dark themes
