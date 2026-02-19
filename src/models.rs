@@ -88,6 +88,9 @@ pub struct AddTaskOptions {
     pub max_connection_per_server: Option<u32>,
     pub split: Option<u32>,
     pub max_download_limit: Option<String>,
+    pub max_upload_limit: Option<String>,
+    pub seed_ratio: Option<f64>,
+    pub seed_time: Option<u32>,
     pub user_agent: Option<String>,
     pub referer: Option<String>,
     #[serde(default)]

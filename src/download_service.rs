@@ -297,6 +297,23 @@ impl DownloadService {
         Ok(())
     }
 
+    pub async fn stop_seeding(&self, task_id: &str) -> Result<()> {
+        self.ensure_aria2_ready().await?;
+        let task = self
+            .db
+            .get_task(task_id)?
+            .ok_or_else(|| AppError::TaskNotFound(task_id.to_string()))?;
+        if task.task_type != TaskType::Torrent && task.task_type != TaskType::Magnet {
+            return Err(AppError::InvalidInput("stop seeding only supports bt tasks".to_string()).into());
+        }
+        let gid = task
+            .aria2_gid
+            .ok_or_else(|| AppError::InvalidInput("task has no aria2 gid".to_string()))?;
+        self.aria2.remove(&gid, true).await?;
+        self.push_log("stop_seeding", format!("stopped seeding task {task_id}"));
+        Ok(())
+    }
+
     pub async fn resume_all(&self) -> Result<()> {
         self.ensure_aria2_ready().await?;
         self.aria2.unpause_all().await?;
@@ -1624,6 +1641,22 @@ fn to_aria2_options(options: AddTaskOptions) -> Value {
         let limit = v.trim();
         if !limit.is_empty() {
             m.insert("max-download-limit".to_string(), json!(limit));
+        }
+    }
+    if let Some(v) = options.max_upload_limit {
+        let limit = v.trim();
+        if !limit.is_empty() {
+            m.insert("max-upload-limit".to_string(), json!(limit));
+        }
+    }
+    if let Some(v) = options.seed_ratio {
+        if v > 0.0 {
+            m.insert("seed-ratio".to_string(), json!(v.to_string()));
+        }
+    }
+    if let Some(v) = options.seed_time {
+        if v > 0 {
+            m.insert("seed-time".to_string(), json!(v.to_string()));
         }
     }
     if let Some(v) = options.user_agent {

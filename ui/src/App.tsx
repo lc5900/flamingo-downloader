@@ -128,6 +128,9 @@ type AddFormValues = {
   save_dir?: string
   out?: string
   max_download_limit?: string
+  max_upload_limit?: string
+  seed_ratio?: number
+  seed_time?: number
   max_connection_per_server?: number
   split?: number
   user_agent?: string
@@ -146,6 +149,9 @@ type TaskOptionPreset = {
   options: {
     out?: string | null
     max_download_limit?: string | null
+    max_upload_limit?: string | null
+    seed_ratio?: number | null
+    seed_time?: number | null
     max_connection_per_server?: number | null
     split?: number | null
     user_agent?: string | null
@@ -344,6 +350,10 @@ const I18N: Record<Locale, Record<string, string>> = {
     maxDownloadLimit: 'Per-task Max Download Limit',
     taskMaxConn: 'Per-task Max Connections',
     taskSplit: 'Per-task Split',
+    taskMaxUploadLimit: 'Per-task Max Upload Limit',
+    seedRatio: 'Seed Ratio',
+    seedTime: 'Seed Time (minutes)',
+    stopSeeding: 'Stop Seeding',
     userAgent: 'User-Agent',
     referer: 'Referer',
     cookie: 'Cookie',
@@ -566,6 +576,10 @@ const I18N: Record<Locale, Record<string, string>> = {
     maxDownloadLimit: '单任务下载限速',
     taskMaxConn: '单任务最大连接数',
     taskSplit: '单任务分段数',
+    taskMaxUploadLimit: '单任务上传限速',
+    seedRatio: '做种分享率',
+    seedTime: '做种时长（分钟）',
+    stopSeeding: '停止做种',
     userAgent: 'User-Agent',
     referer: 'Referer',
     cookie: 'Cookie',
@@ -1320,6 +1334,15 @@ export default function App() {
     }
   }
 
+  const onStopSeeding = async (task: Task) => {
+    try {
+      await invoke('stop_seeding', { taskId: task.id })
+      await refresh()
+    } catch (err) {
+      msg.error(parseErr(err))
+    }
+  }
+
   const onMoveTaskPosition = async (task: Task, action: 'top' | 'up' | 'down' | 'bottom') => {
     try {
       await invoke('move_task_position', { taskId: task.id, action })
@@ -1521,6 +1544,9 @@ export default function App() {
       preset_selected: undefined,
       out: '',
       max_download_limit: '',
+      max_upload_limit: '',
+      seed_ratio: undefined,
+      seed_time: undefined,
       max_connection_per_server: undefined,
       split: undefined,
       user_agent: '',
@@ -1584,6 +1610,9 @@ export default function App() {
       save_dir: values.save_dir || null,
       out: String(values.out || '').trim() || null,
       max_download_limit: String(values.max_download_limit || '').trim() || null,
+      max_upload_limit: String(values.max_upload_limit || '').trim() || null,
+      seed_ratio: values.seed_ratio ?? null,
+      seed_time: values.seed_time ?? null,
       max_connection_per_server: values.max_connection_per_server ?? null,
       split: values.split ?? null,
       user_agent: String(values.user_agent || '').trim() || null,
@@ -1609,6 +1638,9 @@ export default function App() {
       options: {
         out: optionPayload.out,
         max_download_limit: optionPayload.max_download_limit,
+        max_upload_limit: optionPayload.max_upload_limit,
+        seed_ratio: optionPayload.seed_ratio,
+        seed_time: optionPayload.seed_time,
         max_connection_per_server: optionPayload.max_connection_per_server,
         split: optionPayload.split,
         user_agent: optionPayload.user_agent,
@@ -1637,6 +1669,9 @@ export default function App() {
     addForm.setFieldsValue({
       out: preset.options.out || '',
       max_download_limit: preset.options.max_download_limit || '',
+      max_upload_limit: preset.options.max_upload_limit || '',
+      seed_ratio: preset.options.seed_ratio ?? undefined,
+      seed_time: preset.options.seed_time ?? undefined,
       max_connection_per_server: preset.options.max_connection_per_server ?? undefined,
       split: preset.options.split ?? undefined,
       user_agent: preset.options.user_agent || '',
@@ -2152,6 +2187,11 @@ export default function App() {
             )}
             {row.status === 'completed' && (
               <>
+                {(row.task_type === 'torrent' || row.task_type === 'magnet') && (
+                  <Button size="small" onClick={() => onStopSeeding(row)}>
+                    {t('stopSeeding')}
+                  </Button>
+                )}
                 <Button size="small" icon={<FolderOpenOutlined />} onClick={() => onOpenDir(row)}>
                   {t('openDir')}
                 </Button>
@@ -2271,6 +2311,7 @@ export default function App() {
       onOpenFileSelection,
       onMoveTaskPosition,
       onPauseResume,
+      onStopSeeding,
       section,
       t,
       tableWrapWidth,
@@ -2688,6 +2729,19 @@ export default function App() {
                           <Form.Item name="max_download_limit" label={t('maxDownloadLimit')}>
                             <Input placeholder="0 / 2M / 10M" />
                           </Form.Item>
+                          <Form.Item name="max_upload_limit" label={t('taskMaxUploadLimit')}>
+                            <Input placeholder="0 / 1M / 5M" />
+                          </Form.Item>
+                          {(addType === 'magnet' || addType === 'torrent') && (
+                            <Form.Item name="seed_ratio" label={t('seedRatio')}>
+                              <InputNumber min={0} step={0.1} style={{ width: '100%' }} />
+                            </Form.Item>
+                          )}
+                          {(addType === 'magnet' || addType === 'torrent') && (
+                            <Form.Item name="seed_time" label={t('seedTime')}>
+                              <InputNumber min={0} style={{ width: '100%' }} />
+                            </Form.Item>
+                          )}
                           <Form.Item name="max_connection_per_server" label={t('taskMaxConn')}>
                             <InputNumber min={1} style={{ width: '100%' }} />
                           </Form.Item>
