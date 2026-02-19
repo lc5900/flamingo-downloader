@@ -153,7 +153,7 @@
 - [x] CI: add macOS x64 build (macos-13) alongside arm64, and normalize artifact naming for both
 - [x] CI: cache `tauri-cli` install (or switch to `tauri-apps/tauri-action`) to speed up builds
 - [x] CI: add a fast validation job (`cargo fmt --check`, `cargo clippy`, `npm --prefix ui run lint`, `npm --prefix ui run build`)
-- [ ] Repo hygiene: decide on npm vs pnpm and either commit/remove lockfiles or ignore `ui/pnpm-lock.yaml`
+- [x] Repo hygiene: decide on npm vs pnpm and either commit/remove lockfiles or ignore `ui/pnpm-lock.yaml`
 
 ### P0 - UX and Productivity
 

@@ -3,3 +3,4 @@
 /runtime/
 /downloads/
 .DS_Store
+ui/pnpm-lock.yaml

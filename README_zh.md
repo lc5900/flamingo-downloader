@@ -58,6 +58,8 @@ npm install
 npm run dev
 ```
 
+本仓库统一使用 `npm`（`ui/package-lock.json`）以保证 CI 构建一致性。
+
 将 React 构建产物同步到应用静态资源：
 
 ```bash

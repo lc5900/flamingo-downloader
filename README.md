@@ -58,6 +58,8 @@ npm install
 npm run dev
 ```
 
+This repo standardizes on `npm` (`ui/package-lock.json`) for deterministic CI builds.
+
 Build React UI into app static assets:
 
 ```bash
