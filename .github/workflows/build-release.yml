@@ -183,15 +183,22 @@ jobs:
         run: cargo tauri build
 
       - name: Build app bundle (macOS signed/notarized)
+        id: macos_signed_build
         if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != '' && env.APPLE_CERTIFICATE_PASSWORD != '' && env.APPLE_SIGNING_IDENTITY != ''
+        continue-on-error: true
         working-directory: src-tauri
         run: cargo tauri build
 
       - name: Build app bundle (macOS unsigned fallback)
-        if: runner.os == 'macOS' && (env.APPLE_CERTIFICATE == '' || env.APPLE_CERTIFICATE_PASSWORD == '' || env.APPLE_SIGNING_IDENTITY == '')
+        if: runner.os == 'macOS' && (env.APPLE_CERTIFICATE == '' || env.APPLE_CERTIFICATE_PASSWORD == '' || env.APPLE_SIGNING_IDENTITY == '' || steps.macos_signed_build.outcome == 'failure')
         working-directory: src-tauri
         run: |
-          echo "WARNING: Missing macOS signing secrets (APPLE_CERTIFICATE/APPLE_CERTIFICATE_PASSWORD/APPLE_SIGNING_IDENTITY). Building unsigned artifact."
+          if [ "${{ steps.macos_signed_build.outcome || '' }}" = "failure" ]; then
+            echo "WARNING: macOS signed build failed. Falling back to unsigned build."
+          else
+            echo "WARNING: Missing macOS signing secrets (APPLE_CERTIFICATE/APPLE_CERTIFICATE_PASSWORD/APPLE_SIGNING_IDENTITY). Building unsigned artifact."
+          fi
+          unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
           cargo tauri build
           mkdir -p target/release/bundle/metadata
           cat > target/release/bundle/metadata/UNSIGNED-MACOS-BUILD.txt << 'EOF'
