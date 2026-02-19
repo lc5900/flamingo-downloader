@@ -123,7 +123,7 @@
 
 ### P1 - Download UX and Capability
 
-- [ ] Task queue ordering + priority controls (aria2 `changePosition`), including "top/bottom" actions
+- [x] Task queue ordering + priority controls (aria2 `changePosition`), including "top/bottom" actions
 - [ ] “New Download” dialog: presets per task type (HTTP/BT), and import/export of per-task option presets
 - [ ] Post-download actions: auto-open folder, auto-reveal file, and “copy final path” action
 - [ ] Completion rules: auto-delete `.aria2` control files; optional auto-clear completed records after N days

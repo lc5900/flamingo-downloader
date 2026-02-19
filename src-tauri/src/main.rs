@@ -253,6 +253,19 @@ async fn resume_task(state: State<'_, AppState>, task_id: String) -> Result<(), 
 }
 
 #[tauri::command]
+async fn move_task_position(
+    state: State<'_, AppState>,
+    task_id: String,
+    action: String,
+) -> Result<(), String> {
+    state
+        .service
+        .move_task_position(&task_id, &action)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn pause_all(state: State<'_, AppState>) -> Result<(), String> {
     state.service.pause_all().await.map_err(|e| e.to_string())
 }
@@ -824,6 +837,7 @@ fn main() {
             add_torrent,
             pause_task,
             resume_task,
+            move_task_position,
             pause_all,
             resume_all,
             remove_task,

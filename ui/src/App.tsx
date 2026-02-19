@@ -32,6 +32,8 @@ import {
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import {
+  ArrowDownOutlined,
+  ArrowUpOutlined,
   CloudDownloadOutlined,
   DeleteOutlined,
   DownloadOutlined,
@@ -44,6 +46,8 @@ import {
   SettingOutlined,
   SlidersOutlined,
   SyncOutlined,
+  VerticalAlignBottomOutlined,
+  VerticalAlignTopOutlined,
 } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
@@ -254,6 +258,10 @@ const I18N: Record<Locale, Record<string, string>> = {
     columns: 'Columns',
     moveUp: 'Up',
     moveDown: 'Down',
+    queueTop: 'Queue Top',
+    queueUp: 'Queue Up',
+    queueDown: 'Queue Down',
+    queueBottom: 'Queue Bottom',
     showColumn: 'Show',
     filterAll: 'All',
     filterActive: 'Active',
@@ -451,6 +459,10 @@ const I18N: Record<Locale, Record<string, string>> = {
     columns: '列',
     moveUp: '上移',
     moveDown: '下移',
+    queueTop: '置顶',
+    queueUp: '上移队列',
+    queueDown: '下移队列',
+    queueBottom: '置底',
     showColumn: '显示',
     filterAll: '全部',
     filterActive: '进行中',
@@ -1195,6 +1207,15 @@ export default function App() {
     }
   }
 
+  const onMoveTaskPosition = async (task: Task, action: 'top' | 'up' | 'down' | 'bottom') => {
+    try {
+      await invoke('move_task_position', { taskId: task.id, action })
+      await refresh()
+    } catch (err) {
+      msg.error(parseErr(err))
+    }
+  }
+
   const onRequestRemove = (task: Task) => {
     setRemoveTask(task)
     setRemoveTaskIds([task.id])
@@ -1863,6 +1884,34 @@ export default function App() {
                 {String(row.status).toLowerCase() === 'paused' ? t('resume') : t('pause')}
               </Button>
             )}
+            {section !== 'downloaded' && row.status !== 'completed' && (
+              <>
+                <Button
+                  size="small"
+                  title={t('queueTop')}
+                  icon={<VerticalAlignTopOutlined />}
+                  onClick={() => onMoveTaskPosition(row, 'top')}
+                />
+                <Button
+                  size="small"
+                  title={t('queueUp')}
+                  icon={<ArrowUpOutlined />}
+                  onClick={() => onMoveTaskPosition(row, 'up')}
+                />
+                <Button
+                  size="small"
+                  title={t('queueDown')}
+                  icon={<ArrowDownOutlined />}
+                  onClick={() => onMoveTaskPosition(row, 'down')}
+                />
+                <Button
+                  size="small"
+                  title={t('queueBottom')}
+                  icon={<VerticalAlignBottomOutlined />}
+                  onClick={() => onMoveTaskPosition(row, 'bottom')}
+                />
+              </>
+            )}
             {(row.task_type === 'torrent' || row.task_type === 'magnet') && (
               <Button size="small" loading={fileSelectLoading} onClick={() => onOpenFileSelection(row)}>
                 {t('fileSelect')}
@@ -1983,6 +2032,7 @@ export default function App() {
       onOpenFile,
       onOpenTaskDetail,
       onOpenFileSelection,
+      onMoveTaskPosition,
       onPauseResume,
       section,
       t,

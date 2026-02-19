@@ -41,6 +41,7 @@ pub trait Aria2Api: Send + Sync {
     async fn remove(&self, gid: &str, force: bool) -> Result<String>;
     async fn tell_status(&self, gid: &str) -> Result<Value>;
     async fn tell_all(&self) -> Result<Vec<Aria2TaskSnapshot>>;
+    async fn change_position(&self, gid: &str, pos: i64, how: &str) -> Result<i64>;
     async fn change_option(&self, gid: &str, options: Value) -> Result<String>;
     async fn change_global_option(&self, options: Value) -> Result<String>;
     async fn get_global_stat(&self) -> Result<Value>;
@@ -616,6 +617,25 @@ impl Aria2Manager {
         Ok(merged)
     }
 
+    pub async fn change_position(&self, gid: &str, pos: i64, how: &str) -> Result<i64> {
+        let result: Value = self
+            .client()
+            .await?
+            .call("aria2.changePosition", vec![json!(gid), json!(pos), json!(how)])
+            .await?;
+        if let Some(raw) = result.as_i64() {
+            return Ok(raw);
+        }
+        if let Some(raw) = result.as_str() {
+            return raw
+                .parse::<i64>()
+                .map_err(|e| anyhow!("invalid aria2 changePosition result `{raw}`: {e}"));
+        }
+        Err(anyhow!(
+            "invalid aria2 changePosition result type: {result}"
+        ))
+    }
+
     pub async fn change_option(&self, gid: &str, options: Value) -> Result<String> {
         self.client()
             .await?
@@ -710,6 +730,10 @@ impl Aria2Api for Aria2Manager {
 
     async fn tell_all(&self) -> Result<Vec<Aria2TaskSnapshot>> {
         Aria2Manager::tell_all(self).await
+    }
+
+    async fn change_position(&self, gid: &str, pos: i64, how: &str) -> Result<i64> {
+        Aria2Manager::change_position(self, gid, pos, how).await
     }
 
     async fn change_option(&self, gid: &str, options: Value) -> Result<String> {

@@ -252,6 +252,37 @@ impl DownloadService {
         Ok(())
     }
 
+    pub async fn move_task_position(&self, task_id: &str, action: &str) -> Result<()> {
+        self.ensure_aria2_ready().await?;
+        let task = self
+            .db
+            .get_task(task_id)?
+            .ok_or_else(|| AppError::TaskNotFound(task_id.to_string()))?;
+        if task.status == TaskStatus::Completed {
+            return Err(AppError::InvalidInput("completed task cannot be reordered".to_string()).into());
+        }
+        let gid = task
+            .aria2_gid
+            .ok_or_else(|| AppError::InvalidInput("task has no aria2 gid".to_string()))?;
+        let (pos, how) = match action {
+            "top" => (0_i64, "POS_SET"),
+            "up" => (-1_i64, "POS_CUR"),
+            "down" => (1_i64, "POS_CUR"),
+            "bottom" => (0_i64, "POS_END"),
+            _ => {
+                return Err(
+                    AppError::InvalidInput(format!("unsupported task move action: {action}")).into(),
+                )
+            }
+        };
+        let new_pos = self.aria2.change_position(&gid, pos, how).await?;
+        self.push_log(
+            "move_task_position",
+            format!("task={task_id}, action={action}, new_pos={new_pos}"),
+        );
+        Ok(())
+    }
+
     pub async fn resume_task(&self, task_id: &str) -> Result<()> {
         self.ensure_aria2_ready().await?;
         let task = self
@@ -2924,6 +2955,11 @@ mod tests {
         async fn tell_all(&self) -> Result<Vec<Aria2TaskSnapshot>> {
             self.call("tell_all");
             Ok(self.snapshots.lock().expect("snapshots mutex").clone())
+        }
+
+        async fn change_position(&self, _gid: &str, _pos: i64, _how: &str) -> Result<i64> {
+            self.call("change_position");
+            Ok(0)
         }
 
         async fn change_option(&self, _gid: &str, _options: Value) -> Result<String> {
