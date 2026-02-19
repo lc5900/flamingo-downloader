@@ -1,10 +1,11 @@
 import enUS from './en-US.json'
 import zhCN from './zh-CN.json'
 import type { Locale } from '../types'
+import type { I18nKey } from './keys'
 
-export const I18N: Record<Locale, Record<string, string>> = {
-  'en-US': enUS,
-  'zh-CN': zhCN,
+export const I18N: Record<Locale, Record<I18nKey, string>> = {
+  'en-US': enUS as Record<I18nKey, string>,
+  'zh-CN': zhCN as Record<I18nKey, string>,
 }
 
 export function detectLocale(): Locale {

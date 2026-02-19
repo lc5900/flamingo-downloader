@@ -176,4 +176,4 @@
 ### P2 - Codebase Maintainability
 
 - [ ] Continue splitting UI into `pages/` + `stores/` (Downloading/Downloaded/Settings/AddDownload/TaskDetail), keep `App.tsx` as shell only
-- [ ] i18n: add placeholder coverage checks (e.g. `{tasks}` appears in both locales) and optional key typing generation
+- [x] i18n: add placeholder coverage checks (e.g. `{tasks}` appears in both locales) and optional key typing generation

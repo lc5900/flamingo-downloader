@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run check:i18n && tsc -b && vite build",
-    "check:i18n": "node scripts/check-i18n.mjs",
+    "check:i18n": "node scripts/check-i18n.mjs && npm run gen:i18n-keys",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "gen:i18n-keys": "node scripts/gen-i18n-keys.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.0",

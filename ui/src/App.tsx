@@ -200,7 +200,7 @@ export default function App() {
     return saved === 'zh-CN' || saved === 'en-US' ? saved : detectLocale()
   })
 
-  const t = useCallback((k: string) => I18N[locale][k] || k, [locale])
+  const t = useCallback((k: string) => (I18N[locale] as Record<string, string>)[k] || k, [locale])
   const isMac = useMemo(
     () =>
       /mac|iphone|ipad|ipod/i.test(
