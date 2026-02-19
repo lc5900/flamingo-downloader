@@ -34,11 +34,14 @@ Open extension options and set:
 - Token: paste from Flamingo settings
 - Enable Flamingo bridge: on
 - Auto-intercept downloads: on/off (optional)
+- Use native messaging (optional): on/off
+- Native host name (optional): e.g. `com.lc5900.flamingo.bridge`
 
 ## 4) Behavior
 
 - Auto takeover (optional): new browser downloads are sent to Flamingo and canceled in browser.
 - Context menu: right click a link -> `Download with Flamingo`.
+- Native messaging mode (optional): when enabled, extension can send requests via browser native host instead of local HTTP bridge.
 
 ## Build notes
 

@@ -1,6 +1,8 @@
 const el = {
   enabled: document.getElementById('enabled'),
+  useNativeMessaging: document.getElementById('useNativeMessaging'),
   autoIntercept: document.getElementById('autoIntercept'),
+  nativeHost: document.getElementById('nativeHost'),
   endpoint: document.getElementById('endpoint'),
   token: document.getElementById('token'),
   save: document.getElementById('save'),
@@ -13,16 +15,21 @@ const ext = typeof browser !== 'undefined' ? browser : chrome;
 
 const DEFAULTS = {
   enabled: false,
+  useNativeMessaging: false,
   autoIntercept: true,
+  nativeHost: 'com.lc5900.flamingo.bridge',
   endpoint: 'http://127.0.0.1:16789/add',
   token: '',
 };
 
 async function load() {
-  const saved = await ext.storage.sync.get(['enabled', 'autoIntercept', 'endpoint', 'token']);
+  const saved = await ext.storage.sync.get(['enabled', 'useNativeMessaging', 'autoIntercept', 'nativeHost', 'endpoint', 'token']);
   el.enabled.checked = typeof saved.enabled === 'boolean' ? saved.enabled : DEFAULTS.enabled;
+  el.useNativeMessaging.checked =
+    typeof saved.useNativeMessaging === 'boolean' ? saved.useNativeMessaging : DEFAULTS.useNativeMessaging;
   el.autoIntercept.checked =
     typeof saved.autoIntercept === 'boolean' ? saved.autoIntercept : DEFAULTS.autoIntercept;
+  el.nativeHost.value = String(saved.nativeHost || DEFAULTS.nativeHost);
   el.endpoint.value = String(saved.endpoint || DEFAULTS.endpoint);
   el.token.value = String(saved.token || DEFAULTS.token);
   await loadActivity();
@@ -39,7 +46,9 @@ async function loadActivity() {
 async function save() {
   await ext.storage.sync.set({
     enabled: !!el.enabled.checked,
+    useNativeMessaging: !!el.useNativeMessaging.checked,
     autoIntercept: !!el.autoIntercept.checked,
+    nativeHost: String(el.nativeHost.value || DEFAULTS.nativeHost).trim(),
     endpoint: String(el.endpoint.value || DEFAULTS.endpoint).trim(),
     token: String(el.token.value || '').trim(),
   });

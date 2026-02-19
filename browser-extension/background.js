@@ -1,6 +1,8 @@
 const DEFAULTS = {
   enabled: false,
+  useNativeMessaging: false,
   autoIntercept: true,
+  nativeHost: "com.lc5900.flamingo.bridge",
   endpoint: "http://127.0.0.1:16789/add",
   token: "",
 };
@@ -8,23 +10,52 @@ const DEFAULTS = {
 const ext = typeof browser !== "undefined" ? browser : chrome;
 
 async function getConfig() {
-  const saved = await ext.storage.sync.get(["enabled", "autoIntercept", "endpoint", "token"]);
+  const saved = await ext.storage.sync.get([
+    "enabled",
+    "useNativeMessaging",
+    "autoIntercept",
+    "nativeHost",
+    "endpoint",
+    "token",
+  ]);
   return {
     enabled: typeof saved.enabled === "boolean" ? saved.enabled : DEFAULTS.enabled,
+    useNativeMessaging:
+      typeof saved.useNativeMessaging === "boolean"
+        ? saved.useNativeMessaging
+        : DEFAULTS.useNativeMessaging,
     autoIntercept:
       typeof saved.autoIntercept === "boolean" ? saved.autoIntercept : DEFAULTS.autoIntercept,
+    nativeHost: String(saved.nativeHost || DEFAULTS.nativeHost),
     endpoint: String(saved.endpoint || DEFAULTS.endpoint),
     token: String(saved.token || DEFAULTS.token),
   };
 }
 
+async function sendViaNativeMessaging(host, payload) {
+  return ext.runtime.sendNativeMessage(host, payload);
+}
+
 async function sendToFlamingo(url, saveDir = null) {
   const cfg = await getConfig();
-  if (!cfg.enabled || !cfg.token) return { ok: false, skipped: true, reason: "bridge_disabled_or_token_missing" };
+  if (!cfg.enabled) return { ok: false, skipped: true, reason: "bridge_disabled" };
 
   const body = { url };
   if (saveDir && typeof saveDir === "string") body.save_dir = saveDir;
 
+  if (cfg.useNativeMessaging) {
+    if (!cfg.nativeHost) {
+      return { ok: false, skipped: true, reason: "native_host_missing" };
+    }
+    try {
+      const res = await sendViaNativeMessaging(cfg.nativeHost, body);
+      return res && typeof res === "object" ? res : { ok: true };
+    } catch (e) {
+      throw new Error(`native messaging failed: ${String(e?.message || e)}`.slice(0, 400));
+    }
+  }
+
+  if (!cfg.token) return { ok: false, skipped: true, reason: "bridge_token_missing" };
   const resp = await fetch(cfg.endpoint, {
     method: "POST",
     headers: {
@@ -70,11 +101,23 @@ async function maybeTakeOver(downloadItem) {
 }
 
 ext.runtime.onInstalled.addListener(async () => {
-  const saved = await ext.storage.sync.get(["enabled", "autoIntercept", "endpoint", "token"]);
+  const saved = await ext.storage.sync.get([
+    "enabled",
+    "useNativeMessaging",
+    "autoIntercept",
+    "nativeHost",
+    "endpoint",
+    "token",
+  ]);
   await ext.storage.sync.set({
     enabled: typeof saved.enabled === "boolean" ? saved.enabled : DEFAULTS.enabled,
+    useNativeMessaging:
+      typeof saved.useNativeMessaging === "boolean"
+        ? saved.useNativeMessaging
+        : DEFAULTS.useNativeMessaging,
     autoIntercept:
       typeof saved.autoIntercept === "boolean" ? saved.autoIntercept : DEFAULTS.autoIntercept,
+    nativeHost: String(saved.nativeHost || DEFAULTS.nativeHost),
     endpoint: String(saved.endpoint || DEFAULTS.endpoint),
     token: String(saved.token || DEFAULTS.token),
   });
