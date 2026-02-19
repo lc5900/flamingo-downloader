@@ -78,6 +78,7 @@ pub async fn init_backend(
     db.set_setting_if_absent("metadata_timeout_secs", "180")?;
     db.set_setting_if_absent("speed_plan", "[]")?;
     db.set_setting_if_absent("task_option_presets", "[]")?;
+    db.set_setting_if_absent("post_complete_action", "none")?;
     db.set_setting_if_absent("first_run_done", "false")?;
     db.set_setting_if_absent("start_minimized", "false")?;
     db.set_setting_if_absent("minimize_to_tray", "false")?;

@@ -125,7 +125,7 @@
 
 - [x] Task queue ordering + priority controls (aria2 `changePosition`), including "top/bottom" actions
 - [x] “New Download” dialog: presets per task type (HTTP/BT), and import/export of per-task option presets
-- [ ] Post-download actions: auto-open folder, auto-reveal file, and “copy final path” action
+- [x] Post-download actions: auto-open folder, auto-reveal file, and “copy final path” action
 - [ ] Completion rules: auto-delete `.aria2` control files; optional auto-clear completed records after N days
 
 ### P1 - BT Improvements

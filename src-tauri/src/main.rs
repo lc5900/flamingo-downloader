@@ -303,6 +303,14 @@ async fn open_task_dir(state: State<'_, AppState>, task_id: String) -> Result<()
 }
 
 #[tauri::command]
+async fn get_task_primary_path(state: State<'_, AppState>, task_id: String) -> Result<String, String> {
+    state
+        .service
+        .get_task_primary_path(&task_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn list_tasks(
     state: State<'_, AppState>,
     status: Option<TaskStatus>,
@@ -843,6 +851,7 @@ fn main() {
             remove_task,
             open_task_file,
             open_task_dir,
+            get_task_primary_path,
             list_tasks,
             set_task_category,
             get_task_detail,

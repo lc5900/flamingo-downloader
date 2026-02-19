@@ -53,7 +53,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { readText as readClipboardText } from '@tauri-apps/plugin-clipboard-manager'
+import { readText as readClipboardText, writeText as writeClipboardText } from '@tauri-apps/plugin-clipboard-manager'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { Resizable } from 'react-resizable'
 import './App.css'
@@ -113,6 +113,7 @@ type GlobalSettings = {
   metadata_timeout_secs?: number | null
   speed_plan?: string | null
   task_option_presets?: string | null
+  post_complete_action?: string | null
   first_run_done?: boolean | null
   start_minimized?: boolean | null
   minimize_to_tray?: boolean | null
@@ -391,6 +392,11 @@ const I18N: Record<Locale, Record<string, string>> = {
     trayRecoverHintMac: 'On macOS, restore the app from Dock. Menu bar icon is mainly for quick menu actions.',
     trayDisabledMac: 'Menu bar tray icon is disabled on macOS for reliability.',
     notifyOnComplete: 'Notify when download completes',
+    postCompleteAction: 'Post-complete Action',
+    postCompleteNone: 'None',
+    postCompleteOpenDir: 'Auto Open Folder',
+    postCompleteOpenFile: 'Auto Reveal File',
+    copyPath: 'Copy Path',
     resetSettingsDefaults: 'Reset Settings',
     resetUiLayout: 'Reset UI Layout',
     resetSettingsConfirm: 'Reset settings to defaults? This keeps your aria2 path.',
@@ -606,6 +612,11 @@ const I18N: Record<Locale, Record<string, string>> = {
     trayRecoverHintMac: '在 macOS 上建议从 Dock 恢复应用，菜单栏图标主要用于快捷菜单操作。',
     trayDisabledMac: '为保证稳定性，macOS 下默认不使用菜单栏托盘图标。',
     notifyOnComplete: '下载完成时通知',
+    postCompleteAction: '完成后动作',
+    postCompleteNone: '无',
+    postCompleteOpenDir: '自动打开目录',
+    postCompleteOpenFile: '自动定位文件',
+    copyPath: '复制路径',
     resetSettingsDefaults: '重置设置',
     resetUiLayout: '重置界面布局',
     resetSettingsConfirm: '确认恢复默认设置？会保留 aria2 路径。',
@@ -921,6 +932,7 @@ export default function App() {
   const [dragHover, setDragHover] = useState(false)
   const [clipboardWatchEnabled, setClipboardWatchEnabled] = useState(false)
   const [notifyOnCompleteEnabled, setNotifyOnCompleteEnabled] = useState(true)
+  const [postCompleteAction, setPostCompleteAction] = useState<'none' | 'open_dir' | 'open_file'>('none')
   const lastClipboardRef = useRef('')
   const clipboardPromptingRef = useRef(false)
   const prevTaskStatusRef = useRef<Record<string, string>>({})
@@ -979,6 +991,7 @@ export default function App() {
         retry_fallback_mirrors: s?.retry_fallback_mirrors || undefined,
         metadata_timeout_secs: s?.metadata_timeout_secs ?? undefined,
         speed_plan: s?.speed_plan || undefined,
+        post_complete_action: s?.post_complete_action || 'none',
         first_run_done: s?.first_run_done ?? undefined,
         start_minimized: s?.start_minimized ?? undefined,
         minimize_to_tray: s?.minimize_to_tray ?? undefined,
@@ -989,6 +1002,11 @@ export default function App() {
       }
       setClipboardWatchEnabled(Boolean(s?.clipboard_watch_enabled))
       setNotifyOnCompleteEnabled(s?.notify_on_complete !== false)
+      setPostCompleteAction(
+        s?.post_complete_action === 'open_dir' || s?.post_complete_action === 'open_file'
+          ? s.post_complete_action
+          : 'none',
+      )
       const presets = (() => {
         try {
           const raw = String(s?.task_option_presets || '[]')
@@ -1147,6 +1165,11 @@ export default function App() {
       const prevStatus = prev[task.id]
       if (!notifyOnCompleteEnabled || !prevStatus || prevStatus === status) continue
       if (status === 'completed') {
+        if (postCompleteAction === 'open_dir') {
+          void invoke('open_task_dir', { taskId: task.id })
+        } else if (postCompleteAction === 'open_file') {
+          void invoke('open_task_file', { taskId: task.id })
+        }
         notification.success({
           message: `${t('taskDetails')}: ${task.name || task.id}`,
           description: t('filterCompleted'),
@@ -1182,7 +1205,7 @@ export default function App() {
       }
     }
     prevTaskStatusRef.current = next
-  }, [notifyOnCompleteEnabled, t, tasks])
+  }, [notifyOnCompleteEnabled, postCompleteAction, t, tasks])
 
   useEffect(() => {
     const active = tasks.filter((task) => {
@@ -1371,6 +1394,16 @@ export default function App() {
   const onOpenDir = async (task: Task) => {
     try {
       await invoke('open_task_dir', { taskId: task.id })
+    } catch (err) {
+      msg.error(parseErr(err))
+    }
+  }
+
+  const onCopyPath = async (task: Task) => {
+    try {
+      const path = await invoke<string>('get_task_primary_path', { taskId: task.id })
+      await writeClipboardText(String(path || ''))
+      msg.success(t('copy'))
     } catch (err) {
       msg.error(parseErr(err))
     }
@@ -1718,6 +1751,7 @@ export default function App() {
         metadata_timeout_secs: values.metadata_timeout_secs ?? null,
         speed_plan: values.speed_plan || null,
         task_option_presets: JSON.stringify(taskOptionPresets),
+        post_complete_action: values.post_complete_action || 'none',
         first_run_done: values.first_run_done ?? null,
         start_minimized: values.start_minimized ?? null,
         minimize_to_tray: values.minimize_to_tray ?? null,
@@ -1727,6 +1761,11 @@ export default function App() {
         ),
       }
       await invoke('set_global_settings', { settings: payload })
+      setPostCompleteAction(
+        payload.post_complete_action === 'open_dir' || payload.post_complete_action === 'open_file'
+          ? payload.post_complete_action
+          : 'none',
+      )
       setThemeMode(normalizeThemeMode(payload.ui_theme))
       msg.success(t('settingsSaved'))
       await Promise.all([loadSettings(), loadDiagnostics(), loadUpdateInfo()])
@@ -2109,6 +2148,9 @@ export default function App() {
                 <Button size="small" onClick={() => onOpenFile(row)}>
                   {t('openFile')}
                 </Button>
+                <Button size="small" onClick={() => onCopyPath(row)}>
+                  {t('copyPath')}
+                </Button>
               </>
             )}
             <Button size="small" danger icon={<DeleteOutlined />} onClick={() => onRequestRemove(row)}>
@@ -2214,6 +2256,7 @@ export default function App() {
       fileSelectLoading,
       onOpenDir,
       onOpenFile,
+      onCopyPath,
       onOpenTaskDetail,
       onOpenFileSelection,
       onMoveTaskPosition,
@@ -3030,6 +3073,15 @@ export default function App() {
                       )}
                       <Form.Item name="notify_on_complete" label={t('notifyOnComplete')} valuePropName="checked">
                         <Switch />
+                      </Form.Item>
+                      <Form.Item name="post_complete_action" label={t('postCompleteAction')}>
+                        <Select
+                          options={[
+                            { label: t('postCompleteNone'), value: 'none' },
+                            { label: t('postCompleteOpenDir'), value: 'open_dir' },
+                            { label: t('postCompleteOpenFile'), value: 'open_file' },
+                          ]}
+                        />
                       </Form.Item>
                     </div>
                     <Space style={{ marginBottom: 8 }}>

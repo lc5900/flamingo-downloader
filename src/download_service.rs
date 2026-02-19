@@ -334,6 +334,18 @@ impl DownloadService {
         self.open_task_path(task_id, true)
     }
 
+    pub fn get_task_primary_path(&self, task_id: &str) -> Result<String> {
+        let task = self
+            .db
+            .get_task(task_id)?
+            .ok_or_else(|| AppError::TaskNotFound(task_id.to_string()))?;
+        let files = self.db.list_task_files(task_id)?;
+        let path = self
+            .resolve_primary_task_path(&task, &files)
+            .ok_or_else(|| anyhow!("cannot resolve task path"))?;
+        Ok(path.to_string_lossy().to_string())
+    }
+
     fn open_task_path(&self, task_id: &str, open_dir: bool) -> Result<()> {
         let task = self
             .db
@@ -643,6 +655,7 @@ impl DownloadService {
             metadata_timeout_secs: Some(180),
             speed_plan: Some("[]".to_string()),
             task_option_presets: Some("[]".to_string()),
+            post_complete_action: Some("none".to_string()),
             first_run_done: Some(true),
             start_minimized: Some(false),
             minimize_to_tray: Some(false),

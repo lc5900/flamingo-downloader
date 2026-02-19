@@ -130,6 +130,7 @@ pub struct GlobalSettings {
     pub metadata_timeout_secs: Option<u32>,
     pub speed_plan: Option<String>, // JSON array: [{"days":"1,2,3","start":"09:00","end":"18:00","limit":"2M"}]
     pub task_option_presets: Option<String>, // JSON array: [{name, task_type, options}]
+    pub post_complete_action: Option<String>, // none | open_dir | open_file
     pub first_run_done: Option<bool>,
     pub start_minimized: Option<bool>,
     pub minimize_to_tray: Option<bool>,
