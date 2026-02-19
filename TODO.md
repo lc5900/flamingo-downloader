@@ -160,7 +160,7 @@
 - [x] Toolbar: add global actions (pause all / resume all / retry failed / clear completed)
 - [x] New Download: support multi-line paste (create multiple tasks) with per-line validation/errors
 - [x] Downloaded list: tailor columns for completed tasks (hide irrelevant columns) and add a compact “details” popover
-- [ ] Logs window: add search/filter, copy selected, export logs to file, and “follow tail” toggle
+- [x] Logs window: add search/filter, copy selected, export logs to file, and “follow tail” toggle
 
 ### P1 - Rules and Automation
 
