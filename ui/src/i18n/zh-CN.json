@@ -131,6 +131,8 @@
   "addFailedPrefix": "添加任务失败",
   "addInvalidType": "输入内容与当前标签不匹配，请切换标签或修正内容。",
   "taskAdded": "任务已添加",
+  "taskAddedCount": "已添加 {count} 个任务",
+  "invalidLines": "存在无效行",
   "settingsTitle": "设置",
   "save": "保存",
   "tabBasic": "基础",

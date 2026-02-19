@@ -1073,15 +1073,37 @@ export default function App() {
 
       setAddSubmitting(true)
       if (addType === 'url') {
-        await api.call('add_url', {
-          url: urlValue,
-          options: optionPayload,
-        })
+        const lines = urlValue
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+        const invalid = lines.filter((line) => detectAddSource(line)?.kind !== 'url')
+        if (invalid.length > 0) {
+          throw new Error(`${t('invalidLines')}: ${invalid.slice(0, 3).join(' | ')}`)
+        }
+        for (const line of lines) {
+          await api.call('add_url', {
+            url: line,
+            options: optionPayload,
+          })
+        }
+        msg.success(i18nFormat(t('taskAddedCount'), { count: lines.length }))
       } else if (addType === 'magnet') {
-        await api.call('add_magnet', {
-          magnet: magnetValue,
-          options: optionPayload,
-        })
+        const lines = magnetValue
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+        const invalid = lines.filter((line) => detectAddSource(line)?.kind !== 'magnet')
+        if (invalid.length > 0) {
+          throw new Error(`${t('invalidLines')}: ${invalid.slice(0, 3).join(' | ')}`)
+        }
+        for (const line of lines) {
+          await api.call('add_magnet', {
+            magnet: line,
+            options: optionPayload,
+          })
+        }
+        msg.success(i18nFormat(t('taskAddedCount'), { count: lines.length }))
       } else {
         if (!addTorrentFile) throw new Error(t('torrentRequired'))
         const buf = await addTorrentFile.arrayBuffer()
@@ -1093,8 +1115,8 @@ export default function App() {
           torrentBase64: btoa(binary),
           options: optionPayload,
         })
+        msg.success(t('taskAdded'))
       }
-      msg.success(t('taskAdded'))
       setAddOpen(false)
       await refresh()
     } catch (err) {
@@ -1997,13 +2019,10 @@ export default function App() {
             <Form form={addForm} layout="vertical">
               {addType === 'url' && (
                 <Form.Item name="url" label={t('url')} rules={[{ required: true, message: t('urlRequired') }]}>
-                  <Input
+                  <Input.TextArea
                     id="add-url-input"
-                    placeholder="https://example.com/file.zip"
-                    onPressEnter={(e) => {
-                      e.preventDefault()
-                      void onAddUrl()
-                    }}
+                    autoSize={{ minRows: 2, maxRows: 8 }}
+                    placeholder="https://example.com/file.zip\nhttps://example.com/file2.zip"
                     onPaste={(e) => {
                       const pasted = e.clipboardData.getData('text')
                       const inferred = detectAddSource(pasted)
@@ -2024,13 +2043,10 @@ export default function App() {
               )}
               {addType === 'magnet' && (
                 <Form.Item name="magnet" label={t('magnet')} rules={[{ required: true, message: t('magnetRequired') }]}>
-                  <Input
+                  <Input.TextArea
                     id="add-magnet-input"
+                    autoSize={{ minRows: 2, maxRows: 8 }}
                     placeholder="magnet:?xt=urn:btih:..."
-                    onPressEnter={(e) => {
-                      e.preventDefault()
-                      void onAddUrl()
-                    }}
                     onPaste={(e) => {
                       const pasted = e.clipboardData.getData('text')
                       const inferred = detectAddSource(pasted)

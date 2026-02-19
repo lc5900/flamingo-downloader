@@ -131,6 +131,8 @@
   "addFailedPrefix": "Add task failed",
   "addInvalidType": "Input does not match current tab. Please switch tab or fix content.",
   "taskAdded": "Task added",
+  "taskAddedCount": "Added {count} task(s)",
+  "invalidLines": "Invalid lines",
   "settingsTitle": "Settings",
   "save": "Save",
   "tabBasic": "Basic",
