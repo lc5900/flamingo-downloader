@@ -112,6 +112,7 @@ type GlobalSettings = {
   retry_fallback_mirrors?: string | null
   metadata_timeout_secs?: number | null
   speed_plan?: string | null
+  task_option_presets?: string | null
   first_run_done?: boolean | null
   start_minimized?: boolean | null
   minimize_to_tray?: boolean | null
@@ -130,6 +131,24 @@ type AddFormValues = {
   referer?: string
   cookie?: string
   headers_text?: string
+  preset_name?: string
+  preset_selected?: string
+}
+
+type AddPresetTaskType = 'http' | 'magnet' | 'torrent'
+
+type TaskOptionPreset = {
+  name: string
+  task_type: AddPresetTaskType
+  options: {
+    out?: string | null
+    max_download_limit?: string | null
+    max_connection_per_server?: number | null
+    split?: number | null
+    user_agent?: string | null
+    referer?: string | null
+    headers?: string[]
+  }
 }
 
 type StartupNotice = {
@@ -304,6 +323,20 @@ const I18N: Record<Locale, Record<string, string>> = {
     matchedRule: 'Matched Rule',
     noMatchedRule: 'No matched rule (fallback to default)',
     addAdvanced: 'Advanced Options',
+    taskPresets: 'Task Presets',
+    presetName: 'Preset Name',
+    presetSelect: 'Select Preset',
+    savePreset: 'Save Preset',
+    applyPreset: 'Apply Preset',
+    exportPresets: 'Export Presets',
+    importPresets: 'Import Presets',
+    presetJsonTitle: 'Preset JSON',
+    presetJsonPlaceholder: 'Paste preset JSON array here',
+    presetSaved: 'Preset saved',
+    presetApplied: 'Preset applied',
+    presetImported: 'Presets imported',
+    presetRequired: 'Please input preset name',
+    presetInvalid: 'Invalid preset JSON',
     outName: 'Filename (optional)',
     maxDownloadLimit: 'Per-task Max Download Limit',
     taskMaxConn: 'Per-task Max Connections',
@@ -505,6 +538,20 @@ const I18N: Record<Locale, Record<string, string>> = {
     matchedRule: '命中规则',
     noMatchedRule: '未命中规则（使用默认目录）',
     addAdvanced: '高级选项',
+    taskPresets: '任务预设',
+    presetName: '预设名称',
+    presetSelect: '选择预设',
+    savePreset: '保存预设',
+    applyPreset: '应用预设',
+    exportPresets: '导出预设',
+    importPresets: '导入预设',
+    presetJsonTitle: '预设 JSON',
+    presetJsonPlaceholder: '在此粘贴预设 JSON 数组',
+    presetSaved: '预设已保存',
+    presetApplied: '预设已应用',
+    presetImported: '预设已导入',
+    presetRequired: '请输入预设名称',
+    presetInvalid: '预设 JSON 无效',
     outName: '文件名（可选）',
     maxDownloadLimit: '单任务下载限速',
     taskMaxConn: '单任务最大连接数',
@@ -851,6 +898,9 @@ export default function App() {
   const [addTorrentFile, setAddTorrentFile] = useState<File | null>(null)
   const [addMatchedRule, setAddMatchedRule] = useState<DownloadRule | null>(null)
   const [addSubmitting, setAddSubmitting] = useState(false)
+  const [taskOptionPresets, setTaskOptionPresets] = useState<TaskOptionPreset[]>([])
+  const [presetJsonOpen, setPresetJsonOpen] = useState(false)
+  const [presetJsonText, setPresetJsonText] = useState('')
   const [diagnosticsText, setDiagnosticsText] = useState('')
   const [startupSummary, setStartupSummary] = useState<StartupSelfCheck | null>(null)
   const [updateText, setUpdateText] = useState('')
@@ -939,10 +989,42 @@ export default function App() {
       }
       setClipboardWatchEnabled(Boolean(s?.clipboard_watch_enabled))
       setNotifyOnCompleteEnabled(s?.notify_on_complete !== false)
+      const presets = (() => {
+        try {
+          const raw = String(s?.task_option_presets || '[]')
+          const parsed = JSON.parse(raw)
+          if (!Array.isArray(parsed)) return [] as TaskOptionPreset[]
+          return parsed
+            .filter((item) => item && typeof item === 'object')
+            .map((item) => ({
+              name: String((item as TaskOptionPreset).name || '').trim(),
+              task_type: String((item as TaskOptionPreset).task_type || '') as AddPresetTaskType,
+              options: (item as TaskOptionPreset).options || {},
+            }))
+            .filter(
+              (item) =>
+                item.name &&
+                (item.task_type === 'http' || item.task_type === 'magnet' || item.task_type === 'torrent'),
+            )
+        } catch {
+          return [] as TaskOptionPreset[]
+        }
+      })()
+      setTaskOptionPresets(presets)
     } catch (err) {
       msg.error(parseErr(err))
     }
   }, [msg, settingsForm])
+
+  const currentAddTaskType = useMemo<AddPresetTaskType>(
+    () => (addType === 'url' ? 'http' : addType),
+    [addType],
+  )
+
+  const presetOptionsForCurrentType = useMemo(
+    () => taskOptionPresets.filter((preset) => preset.task_type === currentAddTaskType),
+    [currentAddTaskType, taskOptionPresets],
+  )
 
   const loadDiagnostics = useCallback(async () => {
     try {
@@ -1394,6 +1476,8 @@ export default function App() {
       url: '',
       magnet: '',
       save_dir: '',
+      preset_name: '',
+      preset_selected: undefined,
       out: '',
       max_download_limit: '',
       max_connection_per_server: undefined,
@@ -1448,27 +1532,125 @@ export default function App() {
     await openAddFromDetected(inferred)
   }
 
+  const buildAddOptionPayload = (values: AddFormValues) => {
+    const headerLines = String(values.headers_text || '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+    const cookie = String(values.cookie || '').trim()
+    if (cookie) headerLines.push(`Cookie: ${cookie}`)
+    return {
+      save_dir: values.save_dir || null,
+      out: String(values.out || '').trim() || null,
+      max_download_limit: String(values.max_download_limit || '').trim() || null,
+      max_connection_per_server: values.max_connection_per_server ?? null,
+      split: values.split ?? null,
+      user_agent: String(values.user_agent || '').trim() || null,
+      referer: String(values.referer || '').trim() || null,
+      headers: headerLines,
+    }
+  }
+
+  const onSaveCurrentPreset = async () => {
+    const values = addForm.getFieldsValue()
+    const presetName = String(values.preset_name || '').trim()
+    if (!presetName) {
+      msg.warning(t('presetRequired'))
+      return
+    }
+    const optionPayload = buildAddOptionPayload(values)
+    const next = taskOptionPresets.filter(
+      (preset) => !(preset.task_type === currentAddTaskType && preset.name === presetName),
+    )
+    next.push({
+      name: presetName,
+      task_type: currentAddTaskType,
+      options: {
+        out: optionPayload.out,
+        max_download_limit: optionPayload.max_download_limit,
+        max_connection_per_server: optionPayload.max_connection_per_server,
+        split: optionPayload.split,
+        user_agent: optionPayload.user_agent,
+        referer: optionPayload.referer,
+        headers: optionPayload.headers,
+      },
+    })
+    setTaskOptionPresets(next)
+    await invoke('set_global_settings', {
+      settings: { task_option_presets: JSON.stringify(next) },
+    })
+    msg.success(t('presetSaved'))
+  }
+
+  const onApplySelectedPreset = async () => {
+    const selectedName = String(addForm.getFieldValue('preset_selected') || '').trim()
+    if (!selectedName) return
+    const preset = taskOptionPresets.find(
+      (item) => item.task_type === currentAddTaskType && item.name === selectedName,
+    )
+    if (!preset) return
+    const headers = Array.isArray(preset.options.headers) ? preset.options.headers : []
+    const cookieHeader = headers.find((line) => /^cookie:/i.test(String(line || '')))
+    const cookie = cookieHeader ? String(cookieHeader).replace(/^cookie:\s*/i, '') : ''
+    const remainingHeaders = headers.filter((line) => !/^cookie:/i.test(String(line || '')))
+    addForm.setFieldsValue({
+      out: preset.options.out || '',
+      max_download_limit: preset.options.max_download_limit || '',
+      max_connection_per_server: preset.options.max_connection_per_server ?? undefined,
+      split: preset.options.split ?? undefined,
+      user_agent: preset.options.user_agent || '',
+      referer: preset.options.referer || '',
+      cookie,
+      headers_text: remainingHeaders.join('\n'),
+    })
+    msg.success(t('presetApplied'))
+  }
+
+  const onExportPresets = () => {
+    setPresetJsonText(JSON.stringify(taskOptionPresets, null, 2))
+    setPresetJsonOpen(true)
+  }
+
+  const onImportPresets = () => {
+    setPresetJsonText('')
+    setPresetJsonOpen(true)
+  }
+
+  const onApplyPresetJson = async () => {
+    try {
+      const parsed = JSON.parse(String(presetJsonText || '[]'))
+      if (!Array.isArray(parsed)) {
+        throw new Error('invalid')
+      }
+      const normalized = parsed
+        .filter((item) => item && typeof item === 'object')
+        .map((item) => ({
+          name: String((item as TaskOptionPreset).name || '').trim(),
+          task_type: String((item as TaskOptionPreset).task_type || '') as AddPresetTaskType,
+          options: (item as TaskOptionPreset).options || {},
+        }))
+        .filter(
+          (item) =>
+            item.name &&
+            (item.task_type === 'http' || item.task_type === 'magnet' || item.task_type === 'torrent'),
+        )
+      setTaskOptionPresets(normalized)
+      await invoke('set_global_settings', {
+        settings: { task_option_presets: JSON.stringify(normalized) },
+      })
+      setPresetJsonOpen(false)
+      msg.success(t('presetImported'))
+    } catch {
+      msg.error(t('presetInvalid'))
+    }
+  }
+
   const onAddUrl = async () => {
     try {
       const values = await addForm.validateFields()
       const urlValue = String(values.url || '').trim()
       const magnetValue = String(values.magnet || '').trim()
-      const headerLines = String(values.headers_text || '')
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
-      const cookie = String(values.cookie || '').trim()
-      if (cookie) headerLines.push(`Cookie: ${cookie}`)
-      const optionPayload = {
-        save_dir: values.save_dir || null,
-        out: String(values.out || '').trim() || null,
-        max_download_limit: String(values.max_download_limit || '').trim() || null,
-        max_connection_per_server: values.max_connection_per_server ?? null,
-        split: values.split ?? null,
-        user_agent: String(values.user_agent || '').trim() || null,
-        referer: String(values.referer || '').trim() || null,
-        headers: headerLines,
-      }
+      const optionPayload = buildAddOptionPayload(values)
       if (addType === 'url' && detectAddSource(urlValue)?.kind === 'magnet') {
         throw new Error(t('addInvalidType'))
       }
@@ -1535,6 +1717,7 @@ export default function App() {
         retry_fallback_mirrors: values.retry_fallback_mirrors || null,
         metadata_timeout_secs: values.metadata_timeout_secs ?? null,
         speed_plan: values.speed_plan || null,
+        task_option_presets: JSON.stringify(taskOptionPresets),
         first_run_done: values.first_run_done ?? null,
         start_minimized: values.start_minimized ?? null,
         minimize_to_tray: values.minimize_to_tray ?? null,
@@ -1760,6 +1943,7 @@ export default function App() {
   const onChangeAddType = async (key: string) => {
     const next = key as 'url' | 'magnet' | 'torrent'
     setAddType(next)
+    addForm.setFieldValue('preset_selected', undefined)
     try {
       const source =
         next === 'url'
@@ -2413,6 +2597,37 @@ export default function App() {
                     label: t('addAdvanced'),
                     children: (
                       <>
+                        <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+                          {t('taskPresets')}
+                        </Typography.Text>
+                        <div className="grid-2">
+                          <Form.Item name="preset_name" label={t('presetName')}>
+                            <Input placeholder="default-http" />
+                          </Form.Item>
+                          <Form.Item name="preset_selected" label={t('presetSelect')}>
+                            <Select
+                              allowClear
+                              options={presetOptionsForCurrentType.map((preset) => ({
+                                label: preset.name,
+                                value: preset.name,
+                              }))}
+                            />
+                          </Form.Item>
+                        </div>
+                        <Space wrap style={{ marginBottom: 12 }}>
+                          <Button size="small" onClick={onSaveCurrentPreset}>
+                            {t('savePreset')}
+                          </Button>
+                          <Button size="small" onClick={onApplySelectedPreset}>
+                            {t('applyPreset')}
+                          </Button>
+                          <Button size="small" onClick={onExportPresets}>
+                            {t('exportPresets')}
+                          </Button>
+                          <Button size="small" onClick={onImportPresets}>
+                            {t('importPresets')}
+                          </Button>
+                        </Space>
                         <div className="grid-2">
                           <Form.Item name="out" label={t('outName')}>
                             <Input placeholder="example.zip" />
@@ -2446,6 +2661,22 @@ export default function App() {
               />
             </Form>
           </div>
+        </Modal>
+
+        <Modal
+          title={t('presetJsonTitle')}
+          open={presetJsonOpen}
+          onCancel={() => setPresetJsonOpen(false)}
+          onOk={onApplyPresetJson}
+          okText={t('applyImport')}
+          width={760}
+        >
+          <Input.TextArea
+            value={presetJsonText}
+            onChange={(e) => setPresetJsonText(e.target.value)}
+            rows={16}
+            placeholder={t('presetJsonPlaceholder')}
+          />
         </Modal>
 
         <Modal

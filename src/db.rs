@@ -387,6 +387,9 @@ impl Database {
         if let Some(v) = &settings.speed_plan {
             self.set_setting("speed_plan", v)?;
         }
+        if let Some(v) = &settings.task_option_presets {
+            self.set_setting("task_option_presets", v)?;
+        }
         if let Some(v) = settings.first_run_done {
             self.set_setting("first_run_done", if v { "true" } else { "false" })?;
         }
@@ -461,6 +464,7 @@ impl Database {
                 .get_setting("metadata_timeout_secs")?
                 .and_then(|v| v.parse::<u32>().ok()),
             speed_plan: self.get_setting("speed_plan")?,
+            task_option_presets: self.get_setting("task_option_presets")?,
             first_run_done: self
                 .get_setting("first_run_done")?
                 .and_then(|v| match v.as_str() {
@@ -803,6 +807,10 @@ mod tests {
             retry_fallback_mirrors: None,
             metadata_timeout_secs: None,
             speed_plan: None,
+            task_option_presets: Some(
+                r#"[{"name":"Video Standard","task_type":"http","options":{"max_connection_per_server":8,"split":16}}]"#
+                    .to_string(),
+            ),
             first_run_done: None,
             start_minimized: None,
             minimize_to_tray: None,
@@ -826,6 +834,11 @@ mod tests {
         assert_eq!(loaded.github_token.as_deref(), Some("ghp_test_token"));
         assert_eq!(loaded.download_dir_rules.len(), 1);
         assert_eq!(loaded.download_dir_rules[0].matcher, "ext");
+        assert!(loaded
+            .task_option_presets
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Video Standard"));
         assert_eq!(loaded.browser_bridge_enabled, Some(true));
         assert_eq!(loaded.browser_bridge_port, Some(16789));
         assert_eq!(

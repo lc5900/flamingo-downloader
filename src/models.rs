@@ -129,6 +129,7 @@ pub struct GlobalSettings {
     pub retry_fallback_mirrors: Option<String>, // newline/comma separated URL prefixes
     pub metadata_timeout_secs: Option<u32>,
     pub speed_plan: Option<String>, // JSON array: [{"days":"1,2,3","start":"09:00","end":"18:00","limit":"2M"}]
+    pub task_option_presets: Option<String>, // JSON array: [{name, task_type, options}]
     pub first_run_done: Option<bool>,
     pub start_minimized: Option<bool>,
     pub minimize_to_tray: Option<bool>,

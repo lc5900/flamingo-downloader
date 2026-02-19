@@ -642,6 +642,7 @@ impl DownloadService {
             retry_fallback_mirrors: Some(String::new()),
             metadata_timeout_secs: Some(180),
             speed_plan: Some("[]".to_string()),
+            task_option_presets: Some("[]".to_string()),
             first_run_done: Some(true),
             start_minimized: Some(false),
             minimize_to_tray: Some(false),
