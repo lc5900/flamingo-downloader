@@ -17,6 +17,7 @@
   "colStatus": "Status",
   "colActions": "Actions",
   "details": "Details",
+  "compactDetails": "Quick Details",
   "taskDetails": "Task Details",
   "overview": "Overview",
   "runtimeStatus": "Runtime Status",

@@ -16,6 +16,7 @@ import {
   Menu,
   Modal,
   Progress,
+  Popover,
   Select,
   Skeleton,
   Space,
@@ -1545,9 +1546,28 @@ export default function App() {
         fixed: 'right' as const,
         render: (_: unknown, row: Task) => (
           <Space wrap>
-            <Button size="small" onClick={() => onOpenTaskDetail(row)}>
-              {t('details')}
-            </Button>
+            {section !== 'downloaded' && (
+              <Button size="small" onClick={() => onOpenTaskDetail(row)}>
+                {t('details')}
+              </Button>
+            )}
+            {section === 'downloaded' && (
+              <Popover
+                title={t('compactDetails')}
+                trigger="click"
+                content={
+                  <Space direction="vertical" size={2}>
+                    <Typography.Text type="secondary">{t('taskIdLabel')}: {row.id}</Typography.Text>
+                    <Typography.Text type="secondary">{t('sourceLabel')}: {row.source || '-'}</Typography.Text>
+                    <Typography.Text type="secondary">{t('colStatus')}: {String(row.status).toUpperCase()}</Typography.Text>
+                    <Typography.Text type="secondary">{t('colSize')}: {fmtBytes(row.total_length)}</Typography.Text>
+                    <Typography.Text type="secondary">{t('colCompletedAt')}: {fmtDateTime(row.updated_at)}</Typography.Text>
+                  </Space>
+                }
+              >
+                <Button size="small">{t('compactDetails')}</Button>
+              </Popover>
+            )}
             {row.status !== 'completed' && (
               <Button size="small" onClick={() => onPauseResume(row)}>
                 {String(row.status).toLowerCase() === 'paused' ? t('resume') : t('pause')}
