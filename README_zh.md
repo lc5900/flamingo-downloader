@@ -105,6 +105,7 @@ cargo tauri build
 - 构建前自动安装并注入 `aria2c` 到 `aria2/bin/...`
 - 构建 Tauri 安装包
 - 上传各平台构建产物
+- 自动打包并附带浏览器扩展 zip（`chromium` / `firefox`）到 Release
 - 推送 `v*` 标签（如 `v0.1.0`）时自动创建 GitHub Release
 - 配置 Apple 证书后可在 macOS 任务中自动签名与公证
 

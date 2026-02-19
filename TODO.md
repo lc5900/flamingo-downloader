@@ -170,7 +170,7 @@
 
 ### P1 - Browser Integration
 
-- [ ] CI: build and attach browser extension zip(s) to GitHub Releases
+- [x] CI: build and attach browser extension zip(s) to GitHub Releases
 - [ ] Extension: optional native-messaging mode (no open port) as an alternative to HTTP bridge
 
 ### P2 - Codebase Maintainability

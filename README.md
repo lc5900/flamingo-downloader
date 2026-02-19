@@ -105,6 +105,7 @@ What it does:
 - installs/stages `aria2c` into `aria2/bin/...` before building
 - builds Tauri bundles
 - uploads build artifacts for each platform
+- packages and publishes browser extension zips (`chromium`/`firefox`) in Release assets
 - creates a GitHub Release automatically when you push a tag like `v0.1.0`
 - supports macOS signing/notarization when Apple secrets are configured
 

@@ -124,6 +124,19 @@ jobs:
           fi
           echo "frontendDist is ready: ui/dist"
 
+      - name: Package browser extensions
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p browser-extension/dist browser-extension/dist/firefox
+          zip -r browser-extension/dist/flamingo-browser-extension-chromium.zip browser-extension \
+            -x "browser-extension/dist/*" "browser-extension/manifest.firefox.json"
+
+          cp browser-extension/background.js browser-extension/options.js browser-extension/options.html browser-extension/dist/firefox/
+          cp browser-extension/manifest.firefox.json browser-extension/dist/firefox/manifest.json
+          (cd browser-extension/dist/firefox && zip -r ../flamingo-browser-extension-firefox.zip .)
+
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
@@ -307,6 +320,7 @@ jobs:
             src-tauri/target/release/bundle/**/*.rpm
             src-tauri/target/release/bundle/**/*.app.tar.gz
             src-tauri/target/release/bundle/metadata/*.txt
+            browser-extension/dist/*.zip
           if-no-files-found: error
 
   release:
@@ -362,6 +376,10 @@ jobs:
 
             ext=""
             case "$bn" in
+              flamingo-browser-extension-*.zip)
+                cp "$f" "release-assets-flat/$bn"
+                continue
+                ;;
               *.AppImage) ext=".AppImage" ;;
               *.dmg) ext=".dmg" ;;
               *.msi) ext=".msi" ;;
