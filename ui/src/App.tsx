@@ -51,198 +51,46 @@ import {
 } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
-import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { readText as readClipboardText, writeText as writeClipboardText } from '@tauri-apps/plugin-clipboard-manager'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
-import { Resizable } from 'react-resizable'
+import * as api from './api/client'
+import { ResizableTitle } from './components/ResizableTitle'
+import { defaultLayoutFor, useTableLayout } from './hooks/useTableLayout'
+import type {
+  AddFormValues,
+  AddPresetTaskType,
+  BrowserBridgeStatus,
+  DownloadRule,
+  GlobalSettings,
+  ImportTaskListResult,
+  Locale,
+  OperationLog,
+  SaveDirSuggestion,
+  SectionKey,
+  StartupNotice,
+  StartupSelfCheck,
+  TableDensity,
+  Task,
+  TaskFile,
+  TaskOptionPreset,
+  TaskSortKey,
+  ThemeMode,
+} from './types'
+import {
+  detectAddSource,
+  fmtBytes,
+  fmtDateTime,
+  fmtEta,
+  fmtTime,
+  i18nFormat,
+  parseErr,
+  statusColor,
+} from './utils/format'
 import './App.css'
 import 'react-resizable/css/styles.css'
 
-type Locale = 'en-US' | 'zh-CN'
-type ThemeMode = 'system' | 'light' | 'dark'
-type SectionKey = 'downloading' | 'downloaded'
-type MatcherType = 'ext' | 'domain' | 'type'
-
-type Task = {
-  id: string
-  aria2_gid?: string | null
-  task_type?: string
-  source: string
-  name?: string | null
-  status: string
-  save_dir?: string
-  category?: string | null
-  total_length: number
-  completed_length: number
-  download_speed: number
-  error_code?: string | null
-  error_message?: string | null
-  created_at?: number
-  updated_at?: number
-}
-
-type DownloadRule = {
-  enabled: boolean
-  matcher: MatcherType
-  pattern: string
-  save_dir: string
-  subdir_by_date?: boolean
-  subdir_by_domain?: boolean
-}
-
-type GlobalSettings = {
-  aria2_bin_path?: string | null
-  download_dir?: string | null
-  max_concurrent_downloads?: number | null
-  max_connection_per_server?: number | null
-  max_overall_download_limit?: string | null
-  bt_tracker?: string | null
-  github_cdn?: string | null
-  github_token?: string | null
-  enable_upnp?: boolean | null
-  ui_theme?: string | null
-  browser_bridge_enabled?: boolean | null
-  browser_bridge_port?: number | null
-  browser_bridge_token?: string | null
-  browser_bridge_allowed_origins?: string | null
-  clipboard_watch_enabled?: boolean | null
-  download_dir_rules?: DownloadRule[]
-  retry_max_attempts?: number | null
-  retry_backoff_secs?: number | null
-  retry_fallback_mirrors?: string | null
-  metadata_timeout_secs?: number | null
-  speed_plan?: string | null
-  task_option_presets?: string | null
-  post_complete_action?: string | null
-  auto_delete_control_files?: boolean | null
-  auto_clear_completed_days?: number | null
-  first_run_done?: boolean | null
-  start_minimized?: boolean | null
-  minimize_to_tray?: boolean | null
-  notify_on_complete?: boolean | null
-}
-
-type AddFormValues = {
-  url: string
-  magnet: string
-  save_dir?: string
-  out?: string
-  max_download_limit?: string
-  max_upload_limit?: string
-  seed_ratio?: number
-  seed_time?: number
-  max_connection_per_server?: number
-  split?: number
-  user_agent?: string
-  referer?: string
-  cookie?: string
-  headers_text?: string
-  preset_name?: string
-  preset_selected?: string
-}
-
-type AddPresetTaskType = 'http' | 'magnet' | 'torrent'
-
-type TaskOptionPreset = {
-  name: string
-  task_type: AddPresetTaskType
-  options: {
-    out?: string | null
-    max_download_limit?: string | null
-    max_upload_limit?: string | null
-    seed_ratio?: number | null
-    seed_time?: number | null
-    max_connection_per_server?: number | null
-    split?: number | null
-    user_agent?: string | null
-    referer?: string | null
-    headers?: string[]
-  }
-}
-
-type StartupNotice = {
-  level: string
-  message: string
-}
-
-type StartupSelfCheck = {
-  aria2_bin_path: string
-  aria2_bin_exists: boolean
-  aria2_bin_executable: boolean
-  download_dir: string
-  download_dir_exists: boolean
-  download_dir_writable: boolean
-  rpc_ready: boolean
-  rpc_endpoint?: string | null
-}
-
-type ImportTaskListResult = {
-  imported_tasks: number
-  imported_files: number
-}
-
-type TaskFile = {
-  path: string
-  length: number
-  completed_length: number
-  selected: boolean
-}
-
-type OperationLog = {
-  ts: number
-  action: string
-  message: string
-}
-
-type SaveDirSuggestion = {
-  save_dir: string
-  matched_rule?: DownloadRule | null
-}
-
-type BrowserBridgeStatus = {
-  enabled: boolean
-  endpoint: string
-  token_set: boolean
-  connected: boolean
-  message: string
-}
-
-type TaskSortKey = 'updated_desc' | 'speed_desc' | 'progress_desc' | 'name_asc'
-type TableDensity = 'small' | 'middle' | 'large'
-type TableLayout = {
-  columnWidths: Record<string, number>
-  columnOrder: string[]
-  hiddenColumns: string[]
-  density: TableDensity
-}
-type TableLayoutStore = Record<SectionKey, TableLayout>
-
 const LOCALE_KEY = 'flamingo.locale'
-const TABLE_LAYOUT_KEY = 'flamingo.table_layout.v1'
-const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
-  progress: 180,
-  speed: 105,
-  eta: 88,
-  status: 180,
-  actions: 180,
-  size: 120,
-  completed_at: 180,
-}
-const DEFAULT_TABLE_LAYOUT: TableLayoutStore = {
-  downloading: {
-    columnWidths: { ...DEFAULT_COLUMN_WIDTHS },
-    columnOrder: ['name', 'progress', 'speed', 'eta', 'status', 'actions'],
-    hiddenColumns: [],
-    density: 'small',
-  },
-  downloaded: {
-    columnWidths: { ...DEFAULT_COLUMN_WIDTHS },
-    columnOrder: ['name', 'size', 'completed_at', 'actions'],
-    hiddenColumns: [],
-    density: 'small',
-  },
-}
 
 const I18N: Record<Locale, Record<string, string>> = {
   'en-US': {
@@ -734,163 +582,6 @@ function normalizeThemeMode(v: unknown): ThemeMode {
   return 'system'
 }
 
-function fmtBytes(n: number): string {
-  if (!n || n <= 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let idx = 0
-  let value = n
-  while (value >= 1024 && idx < units.length - 1) {
-    value /= 1024
-    idx += 1
-  }
-  return `${value.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`
-}
-
-function fmtEta(remainingBytes: number, speedBytesPerSec: number, fallback: string): string {
-  if (remainingBytes <= 0) return '0s'
-  if (speedBytesPerSec <= 0) return fallback
-  const total = Math.floor(remainingBytes / speedBytesPerSec)
-  if (total <= 0) return '1s'
-  const h = Math.floor(total / 3600)
-  const m = Math.floor((total % 3600) / 60)
-  const s = total % 60
-  if (h > 0) return `${h}h ${m}m`
-  if (m > 0) return `${m}m ${s}s`
-  return `${s}s`
-}
-
-function fmtDateTime(ts?: number): string {
-  if (!ts || ts <= 0) return '-'
-  const d = new Date(ts * 1000)
-  if (Number.isNaN(d.getTime())) return '-'
-  return d.toLocaleString()
-}
-
-function fmtTime(ts?: number): string {
-  if (!ts || ts <= 0) return '-'
-  const d = new Date(ts * 1000)
-  if (Number.isNaN(d.getTime())) return '-'
-  return d.toLocaleTimeString()
-}
-
-function i18nFormat(template: string, vars: Record<string, string | number>): string {
-  let out = template
-  for (const [k, v] of Object.entries(vars)) {
-    out = out.replaceAll(`{${k}}`, String(v))
-  }
-  return out
-}
-
-function detectAddSource(text: string): { kind: 'url' | 'magnet'; value: string } | null {
-  const v = String(text || '').trim()
-  if (!v) return null
-  const lower = v.toLowerCase()
-  if (lower.startsWith('magnet:?')) return { kind: 'magnet', value: v }
-  if (
-    lower.startsWith('http://') ||
-    lower.startsWith('https://') ||
-    lower.startsWith('ftp://') ||
-    lower.startsWith('ftps://')
-  ) {
-    return { kind: 'url', value: v }
-  }
-  return null
-}
-
-function statusColor(status: string): string {
-  const s = (status || '').toLowerCase()
-  if (s === 'active') return 'processing'
-  if (s === 'paused') return 'warning'
-  if (s === 'completed') return 'success'
-  if (s === 'error') return 'error'
-  if (s === 'metadata') return 'purple'
-  return 'default'
-}
-
-function parseErr(err: unknown): string {
-  return String((err as Error)?.message || err)
-}
-
-function defaultLayoutFor(section: SectionKey): TableLayout {
-  const d = DEFAULT_TABLE_LAYOUT[section]
-  return {
-    columnWidths: { ...d.columnWidths },
-    columnOrder: [...d.columnOrder],
-    hiddenColumns: [...d.hiddenColumns],
-    density: d.density,
-  }
-}
-
-function sanitizeLayout(section: SectionKey, raw: unknown): TableLayout {
-  const base = defaultLayoutFor(section)
-  if (!raw || typeof raw !== 'object') return base
-  const obj = raw as Partial<TableLayout>
-  const widths = { ...base.columnWidths, ...(obj.columnWidths || {}) }
-  const allowed = new Set(base.columnOrder)
-  const order = Array.isArray(obj.columnOrder)
-    ? obj.columnOrder.filter((k): k is string => typeof k === 'string' && allowed.has(k))
-    : []
-  const mergedOrder = [...order, ...base.columnOrder.filter((k) => !order.includes(k))]
-  const hiddenColumns = Array.isArray(obj.hiddenColumns)
-    ? obj.hiddenColumns.filter((k): k is string => typeof k === 'string' && allowed.has(k))
-    : []
-  const density: TableDensity =
-    obj.density === 'middle' || obj.density === 'large' || obj.density === 'small'
-      ? obj.density
-      : base.density
-  return {
-    columnWidths: widths,
-    columnOrder: mergedOrder,
-    hiddenColumns,
-    density,
-  }
-}
-
-function loadTableLayoutStore(): TableLayoutStore {
-  try {
-    const raw = localStorage.getItem(TABLE_LAYOUT_KEY)
-    if (!raw) {
-      return {
-        downloading: defaultLayoutFor('downloading'),
-        downloaded: defaultLayoutFor('downloaded'),
-      }
-    }
-    const parsed = JSON.parse(raw) as Partial<TableLayoutStore>
-    return {
-      downloading: sanitizeLayout('downloading', parsed?.downloading),
-      downloaded: sanitizeLayout('downloaded', parsed?.downloaded),
-    }
-  } catch {
-    return {
-      downloading: defaultLayoutFor('downloading'),
-      downloaded: defaultLayoutFor('downloaded'),
-    }
-  }
-}
-
-type ResizeableHeaderProps = React.HTMLAttributes<HTMLElement> & {
-  onResize?: (e: unknown, data: { size: { width: number; height: number } }) => void
-  width?: number
-}
-
-function ResizableTitle(props: ResizeableHeaderProps) {
-  const { onResize, width, ...rest } = props
-  if (!width) {
-    return <th {...rest} />
-  }
-  return (
-    <Resizable
-      width={width}
-      height={0}
-      handle={<span className="resize-handle" onClick={(e) => e.stopPropagation()} />}
-      onResize={onResize}
-      draggableOpts={{ enableUserSelectHack: false }}
-    >
-      <th {...rest} />
-    </Resizable>
-  )
-}
-
 export default function App() {
   const [msg, msgCtx] = message.useMessage({
     top: 72,
@@ -925,7 +616,7 @@ export default function App() {
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [sortBy, setSortBy] = useState<TaskSortKey>('updated_desc')
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([])
-  const [tableLayouts, setTableLayouts] = useState<TableLayoutStore>(() => loadTableLayoutStore())
+  const { tableLayouts, setTableLayouts } = useTableLayout()
   const [layoutOpen, setLayoutOpen] = useState(false)
   const tableWrapRef = useRef<HTMLDivElement | null>(null)
   const [tableWrapWidth, setTableWrapWidth] = useState(0)
@@ -979,17 +670,13 @@ export default function App() {
 
   const [settingsForm] = Form.useForm<GlobalSettings>()
   const [addForm] = Form.useForm<AddFormValues>()
-  const currentLayout = tableLayouts[section] || defaultLayoutFor(section)
+  const currentLayout = tableLayouts[section]
   const columnWidths = currentLayout.columnWidths
-
-  useEffect(() => {
-    localStorage.setItem(TABLE_LAYOUT_KEY, JSON.stringify(tableLayouts))
-  }, [tableLayouts])
 
   const refresh = useCallback(async () => {
     setLoading(true)
     try {
-      const list = await invoke<Task[]>('list_tasks', { status: null, limit: 500, offset: 0 })
+      const list = await api.call<Task[]>('list_tasks', { status: null, limit: 500, offset: 0 })
       setTasks(Array.isArray(list) ? list : [])
     } catch (err) {
       msg.error(parseErr(err))
@@ -1001,7 +688,7 @@ export default function App() {
 
   const loadSettings = useCallback(async () => {
     try {
-      const s = await invoke<GlobalSettings>('get_global_settings')
+      const s = await api.call<GlobalSettings>('get_global_settings')
       const mode = normalizeThemeMode(s?.ui_theme)
       setThemeMode(mode)
       settingsForm.setFieldsValue({
@@ -1083,9 +770,9 @@ export default function App() {
 
   const loadDiagnostics = useCallback(async () => {
     try {
-      const d = await invoke('get_diagnostics')
+      const d = await api.call('get_diagnostics')
       setDiagnosticsText(JSON.stringify(d, null, 2))
-      const summary = await invoke<StartupSelfCheck>('startup_self_check_summary')
+      const summary = await api.call<StartupSelfCheck>('startup_self_check_summary')
       setStartupSummary(summary)
     } catch (err) {
       setDiagnosticsText(parseErr(err))
@@ -1095,9 +782,9 @@ export default function App() {
 
   const loadUpdateInfo = useCallback(async () => {
     try {
-      const d = await invoke('check_aria2_update')
+      const d = await api.call('check_aria2_update')
       setUpdateText(JSON.stringify(d, null, 2))
-      const s = await invoke('get_app_update_strategy')
+      const s = await api.call('get_app_update_strategy')
       setAppUpdateStrategyText(JSON.stringify(s, null, 2))
     } catch (err) {
       setUpdateText(parseErr(err))
@@ -1107,7 +794,7 @@ export default function App() {
   const checkBridgeStatus = useCallback(async () => {
     setBridgeChecking(true)
     try {
-      const status = await invoke<BrowserBridgeStatus>('check_browser_bridge_status')
+      const status = await api.call<BrowserBridgeStatus>('check_browser_bridge_status')
       setBridgeStatus(status)
     } catch (err) {
       setBridgeStatus({
@@ -1132,7 +819,7 @@ export default function App() {
   useEffect(() => {
     const checkStartupNotice = async () => {
       try {
-        const notice = await invoke<StartupNotice | null>('consume_startup_notice')
+        const notice = await api.call<StartupNotice | null>('consume_startup_notice')
         if (!notice?.message) return
         const level = String(notice.level || 'info').toLowerCase()
         if (level === 'warning') msg.warning(notice.message, 2.5)
@@ -1203,9 +890,9 @@ export default function App() {
       if (!notifyOnCompleteEnabled || !prevStatus || prevStatus === status) continue
       if (status === 'completed') {
         if (postCompleteAction === 'open_dir') {
-          void invoke('open_task_dir', { taskId: task.id })
+          void api.call('open_task_dir', { taskId: task.id })
         } else if (postCompleteAction === 'open_file') {
-          void invoke('open_task_file', { taskId: task.id })
+          void api.call('open_task_file', { taskId: task.id })
         }
         notification.success({
           message: `${t('taskDetails')}: ${task.name || task.id}`,
@@ -1215,7 +902,7 @@ export default function App() {
               <Button
                 size="small"
                 onClick={() => {
-                  void invoke('open_task_dir', { taskId: task.id })
+                  void api.call('open_task_dir', { taskId: task.id })
                 }}
               >
                 {t('openDir')}
@@ -1224,7 +911,7 @@ export default function App() {
                 size="small"
                 type="primary"
                 onClick={() => {
-                  void invoke('open_task_file', { taskId: task.id })
+                  void api.call('open_task_file', { taskId: task.id })
                 }}
               >
                 {t('openFile')}
@@ -1337,7 +1024,7 @@ export default function App() {
     setThemeMode(next)
     settingsForm.setFieldValue('ui_theme', next)
     try {
-      await invoke('set_global_settings', { settings: { ui_theme: next } })
+      await api.call('set_global_settings', { settings: { ui_theme: next } })
     } catch (err) {
       msg.error(parseErr(err))
     }
@@ -1345,8 +1032,8 @@ export default function App() {
 
   const onPauseResume = async (task: Task) => {
     try {
-      if (String(task.status).toLowerCase() === 'paused') await invoke('resume_task', { taskId: task.id })
-      else await invoke('pause_task', { taskId: task.id })
+      if (String(task.status).toLowerCase() === 'paused') await api.call('resume_task', { taskId: task.id })
+      else await api.call('pause_task', { taskId: task.id })
       await refresh()
     } catch (err) {
       msg.error(parseErr(err))
@@ -1355,7 +1042,7 @@ export default function App() {
 
   const onStopSeeding = async (task: Task) => {
     try {
-      await invoke('stop_seeding', { taskId: task.id })
+      await api.call('stop_seeding', { taskId: task.id })
       await refresh()
     } catch (err) {
       msg.error(parseErr(err))
@@ -1364,7 +1051,7 @@ export default function App() {
 
   const onMoveTaskPosition = async (task: Task, action: 'top' | 'up' | 'down' | 'bottom') => {
     try {
-      await invoke('move_task_position', { taskId: task.id, action })
+      await api.call('move_task_position', { taskId: task.id, action })
       await refresh()
     } catch (err) {
       msg.error(parseErr(err))
@@ -1391,7 +1078,7 @@ export default function App() {
     if (removeTaskIds.length === 0) return
     try {
       for (const taskId of removeTaskIds) {
-        await invoke('remove_task', { taskId, deleteFiles: removeDeleteFiles })
+        await api.call('remove_task', { taskId, deleteFiles: removeDeleteFiles })
       }
       await refresh()
       setRemoveDialogOpen(false)
@@ -1409,7 +1096,7 @@ export default function App() {
         const task = list.find((x) => x.id === taskId)
         if (!task) continue
         if (String(task.status).toLowerCase() !== 'completed') {
-          await invoke('pause_task', { taskId })
+          await api.call('pause_task', { taskId })
         }
       }
       await refresh()
@@ -1424,7 +1111,7 @@ export default function App() {
         const task = list.find((x) => x.id === taskId)
         if (!task) continue
         if (String(task.status).toLowerCase() !== 'completed') {
-          await invoke('resume_task', { taskId })
+          await api.call('resume_task', { taskId })
         }
       }
       await refresh()
@@ -1435,7 +1122,7 @@ export default function App() {
 
   const onOpenFile = async (task: Task) => {
     try {
-      await invoke('open_task_file', { taskId: task.id })
+      await api.call('open_task_file', { taskId: task.id })
     } catch (err) {
       msg.error(parseErr(err))
     }
@@ -1443,7 +1130,7 @@ export default function App() {
 
   const onOpenDir = async (task: Task) => {
     try {
-      await invoke('open_task_dir', { taskId: task.id })
+      await api.call('open_task_dir', { taskId: task.id })
     } catch (err) {
       msg.error(parseErr(err))
     }
@@ -1451,7 +1138,7 @@ export default function App() {
 
   const onCopyPath = async (task: Task) => {
     try {
-      const path = await invoke<string>('get_task_primary_path', { taskId: task.id })
+      const path = await api.call<string>('get_task_primary_path', { taskId: task.id })
       await writeClipboardText(String(path || ''))
       msg.success(t('copy'))
     } catch (err) {
@@ -1462,7 +1149,7 @@ export default function App() {
   const onOpenFileSelection = async (task: Task) => {
     try {
       setFileSelectLoading(true)
-      const detail = await invoke<{ task: Task; files: TaskFile[] }>('get_task_detail', {
+      const detail = await api.call<{ task: Task; files: TaskFile[] }>('get_task_detail', {
         taskId: task.id,
       })
       const files = Array.isArray(detail?.files) ? detail.files : []
@@ -1491,14 +1178,14 @@ export default function App() {
     setDetailBtSummary('')
     setDetailRetryLogs([])
     try {
-      const detail = await invoke<{ task: Task; files: TaskFile[] }>('get_task_detail', {
+      const detail = await api.call<{ task: Task; files: TaskFile[] }>('get_task_detail', {
         taskId: task.id,
       })
       setDetailTask(detail?.task || task)
       setDetailCategoryInput(String((detail?.task || task)?.category || ''))
       setDetailFiles(Array.isArray(detail?.files) ? detail.files : [])
       try {
-        const runtime = await invoke<unknown>('get_task_runtime_status', { taskId: task.id })
+        const runtime = await api.call<unknown>('get_task_runtime_status', { taskId: task.id })
         setDetailRuntimeText(JSON.stringify(runtime ?? {}, null, 2))
         const asObj = runtime as {
           summary?: { peers_count?: number; seeders_count?: number; trackers_count?: number }
@@ -1517,7 +1204,7 @@ export default function App() {
         setDetailRuntimeText('')
         setDetailBtSummary('')
       }
-      const logs = await invoke<OperationLog[]>('list_operation_logs', { limit: 500 })
+      const logs = await api.call<OperationLog[]>('list_operation_logs', { limit: 500 })
       const gid = detail?.task?.aria2_gid || task.aria2_gid || ''
       const related = (Array.isArray(logs) ? logs : []).filter((log) => {
         const text = `${log.action || ''} ${log.message || ''}`
@@ -1539,7 +1226,7 @@ export default function App() {
     if (!detailTask?.id) return
     try {
       const value = String(detailCategoryInput || '').trim()
-      await invoke('set_task_category', {
+      await api.call('set_task_category', {
         taskId: detailTask.id,
         category: value || null,
       })
@@ -1554,7 +1241,7 @@ export default function App() {
   const onApplyFileSelection = async () => {
     if (!fileSelectTaskId) return
     try {
-      await invoke('set_task_file_selection', {
+      await api.call('set_task_file_selection', {
         taskId: fileSelectTaskId,
         selectedIndexes: selectedFileIndexes,
       })
@@ -1683,7 +1370,7 @@ export default function App() {
       },
     })
     setTaskOptionPresets(next)
-    await invoke('set_global_settings', {
+    await api.call('set_global_settings', {
       settings: { task_option_presets: JSON.stringify(next) },
     })
     msg.success(t('presetSaved'))
@@ -1745,7 +1432,7 @@ export default function App() {
             (item.task_type === 'http' || item.task_type === 'magnet' || item.task_type === 'torrent'),
         )
       setTaskOptionPresets(normalized)
-      await invoke('set_global_settings', {
+      await api.call('set_global_settings', {
         settings: { task_option_presets: JSON.stringify(normalized) },
       })
       setPresetJsonOpen(false)
@@ -1770,12 +1457,12 @@ export default function App() {
 
       setAddSubmitting(true)
       if (addType === 'url') {
-        await invoke('add_url', {
+        await api.call('add_url', {
           url: urlValue,
           options: optionPayload,
         })
       } else if (addType === 'magnet') {
-        await invoke('add_magnet', {
+        await api.call('add_magnet', {
           magnet: magnetValue,
           options: optionPayload,
         })
@@ -1785,7 +1472,7 @@ export default function App() {
         const bytes = new Uint8Array(buf)
         let binary = ''
         for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i])
-        await invoke('add_torrent', {
+        await api.call('add_torrent', {
           torrentFilePath: null,
           torrentBase64: btoa(binary),
           options: optionPayload,
@@ -1840,7 +1527,7 @@ export default function App() {
           (r) => r && String(r.pattern || '').trim() && String(r.save_dir || '').trim(),
         ),
       }
-      await invoke('set_global_settings', { settings: payload })
+      await api.call('set_global_settings', { settings: payload })
       setPostCompleteAction(
         payload.post_complete_action === 'open_dir' || payload.post_complete_action === 'open_file'
           ? payload.post_complete_action
@@ -1866,7 +1553,7 @@ export default function App() {
         max_connection_per_server: values.max_connection_per_server ?? null,
         first_run_done: true,
       }
-      await invoke('set_global_settings', { settings: payload })
+      await api.call('set_global_settings', { settings: payload })
       msg.success(t('settingsSaved'))
       setFirstRunOpen(false)
       await loadSettings()
@@ -1877,7 +1564,7 @@ export default function App() {
 
   const detectAria2Path = async () => {
     try {
-      const paths = await invoke<string[]>('detect_aria2_bin_paths')
+      const paths = await api.call<string[]>('detect_aria2_bin_paths')
       if (Array.isArray(paths) && paths.length > 0) {
         settingsForm.setFieldValue('aria2_bin_path', paths[0])
         msg.success(`${t('detectedPrefix')}: ${paths[0]}`)
@@ -1911,7 +1598,7 @@ export default function App() {
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
-          await invoke('reset_global_settings_to_defaults')
+          await api.call('reset_global_settings_to_defaults')
           await Promise.all([loadSettings(), loadDiagnostics(), loadUpdateInfo()])
           msg.success(t('settingsSaved'))
         } catch (err) {
@@ -1936,7 +1623,7 @@ export default function App() {
 
   const doRpcPing = async () => {
     try {
-      const res = await invoke<string>('rpc_ping')
+      const res = await api.call<string>('rpc_ping')
       msg.success(res)
       await loadDiagnostics()
     } catch (err) {
@@ -1946,7 +1633,7 @@ export default function App() {
 
   const doRestart = async () => {
     try {
-      const res = await invoke<string>('restart_aria2')
+      const res = await api.call<string>('restart_aria2')
       msg.success(res)
       await Promise.all([refresh(), loadDiagnostics()])
     } catch (err) {
@@ -1956,7 +1643,7 @@ export default function App() {
 
   const doStartupCheck = async () => {
     try {
-      const res = await invoke<string>('startup_check_aria2')
+      const res = await api.call<string>('startup_check_aria2')
       msg.success(res)
       await loadDiagnostics()
     } catch (err) {
@@ -1966,7 +1653,7 @@ export default function App() {
 
   const doSaveSession = async () => {
     try {
-      const res = await invoke<string>('save_session')
+      const res = await api.call<string>('save_session')
       msg.success(res)
     } catch (err) {
       msg.error(parseErr(err))
@@ -1975,7 +1662,7 @@ export default function App() {
 
   const doExportDebugBundle = async () => {
     try {
-      const path = await invoke<string>('export_debug_bundle')
+      const path = await api.call<string>('export_debug_bundle')
       msg.success(i18nFormat(t('debugBundleSaved'), { path: path || '' }), 6)
       await loadDiagnostics()
     } catch (err) {
@@ -1985,7 +1672,7 @@ export default function App() {
 
   const doUpdateAria2Now = async () => {
     try {
-      const res = await invoke<{ message: string }>('update_aria2_now')
+      const res = await api.call<{ message: string }>('update_aria2_now')
       msg.success(res?.message || 'Updated')
       await Promise.all([loadUpdateInfo(), loadDiagnostics()])
     } catch (err) {
@@ -1996,7 +1683,7 @@ export default function App() {
   const openImportExport = async () => {
     setIoOpen(true)
     try {
-      const payload = await invoke<string>('export_task_list_json')
+      const payload = await api.call<string>('export_task_list_json')
       setExportJsonText(payload || '')
     } catch (err) {
       msg.error(parseErr(err))
@@ -2017,7 +1704,7 @@ export default function App() {
     if (!payload) return
     setImporting(true)
     try {
-      const res = await invoke<ImportTaskListResult>('import_task_list_json', { payload })
+      const res = await api.call<ImportTaskListResult>('import_task_list_json', { payload })
       msg.success(
         i18nFormat(t('importedResult'), {
           tasks: Number(res?.imported_tasks || 0),
@@ -2040,7 +1727,7 @@ export default function App() {
 
   const openLogsWindow = async () => {
     try {
-      await invoke('open_logs_window')
+      await api.call('open_logs_window')
     } catch (err) {
       msg.error(parseErr(err))
     }
@@ -2089,7 +1776,7 @@ export default function App() {
 
   const suggestAndSetSaveDir = async (taskType: 'http' | 'magnet' | 'torrent', source: string | null) => {
     try {
-      const suggestion = await invoke<SaveDirSuggestion>('suggest_save_dir_detail', {
+      const suggestion = await api.call<SaveDirSuggestion>('suggest_save_dir_detail', {
         taskType,
         source,
       })
@@ -2967,7 +2654,7 @@ export default function App() {
                         if (!detailTask?.id) return
                         try {
                           setDetailCategoryInput('')
-                          await invoke('set_task_category', {
+                          await api.call('set_task_category', {
                             taskId: detailTask.id,
                             category: null,
                           })
@@ -3164,7 +2851,7 @@ export default function App() {
                       <Button
                         onClick={async () => {
                           try {
-                            const token = await invoke<string>('rotate_browser_bridge_token')
+                            const token = await api.call<string>('rotate_browser_bridge_token')
                             settingsForm.setFieldValue('browser_bridge_token', token)
                             msg.success(t('settingsSaved'))
                           } catch (err) {
