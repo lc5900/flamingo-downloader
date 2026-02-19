@@ -59,6 +59,12 @@ import * as api from './api/client'
 import { ResizableTitle } from './components/ResizableTitle'
 import { defaultLayoutFor, useTableLayout } from './hooks/useTableLayout'
 import { detectLocale, I18N } from './i18n'
+import { AddDownloadPage } from './pages/AddDownloadPage'
+import { DownloadedPage } from './pages/DownloadedPage'
+import { DownloadingPage } from './pages/DownloadingPage'
+import { SettingsPage } from './pages/SettingsPage'
+import { TaskDetailPage } from './pages/TaskDetailPage'
+import { useUiViewStore } from './stores/uiViewStore'
 import type {
   AddFormValues,
   AddPresetTaskType,
@@ -217,11 +223,18 @@ export default function App() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [section, setSection] = useState<SectionKey>('downloading')
-  const [searchText, setSearchText] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [categoryFilter, setCategoryFilter] = useState('all')
-  const [sortBy, setSortBy] = useState<TaskSortKey>('updated_desc')
+  const {
+    section,
+    setSection,
+    searchText,
+    setSearchText,
+    statusFilter,
+    setStatusFilter,
+    categoryFilter,
+    setCategoryFilter,
+    sortBy,
+    setSortBy,
+  } = useUiViewStore()
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([])
   const { tableLayouts, setTableLayouts } = useTableLayout()
   const [layoutOpen, setLayoutOpen] = useState(false)
@@ -1893,6 +1906,8 @@ export default function App() {
     ]
   }, [section, t])
 
+  const TaskPageShell = section === 'downloaded' ? DownloadedPage : DownloadingPage
+
   return (
     <ConfigProvider
       theme={{
@@ -1983,10 +1998,11 @@ export default function App() {
               onDrop={onDropToAdd}
             >
               {dragHover && <div className="drop-hint">{t('dropHint')}</div>}
-              <Card
-                className="main-card"
-                title={section === 'downloaded' ? t('downloadedList') : t('currentDownloads')}
-              >
+              <TaskPageShell>
+                <Card
+                  className="main-card"
+                  title={section === 'downloaded' ? t('downloadedList') : t('currentDownloads')}
+                >
                 <Space wrap style={{ marginBottom: 12 }}>
                   <Input
                     id="task-search-input"
@@ -2113,33 +2129,35 @@ export default function App() {
                     />
                   )}
                 </div>
-              </Card>
+                </Card>
+              </TaskPageShell>
             </Layout.Content>
           </Layout>
         </Layout>
 
-        <Modal
-          title={addType === 'url' ? t('addUrlTitle') : addType === 'magnet' ? t('addMagnetTitle') : t('addTorrentTitle')}
-          open={addOpen}
-          onCancel={() => setAddOpen(false)}
-          onOk={onAddUrl}
-          okText={t('add')}
-          confirmLoading={addSubmitting}
-          className="add-modal"
-          rootClassName="add-modal-root"
-          style={{ top: 24 }}
-          styles={{
-            body: {
-              display: 'flex',
-              flexDirection: 'column',
-              minHeight: 0,
-              maxHeight: 'calc(100vh - 200px)',
-              overflowY: 'auto',
-              overflowX: 'hidden',
-            },
-          }}
-        >
-          <div className="add-modal-body">
+        <AddDownloadPage>
+          <Modal
+            title={addType === 'url' ? t('addUrlTitle') : addType === 'magnet' ? t('addMagnetTitle') : t('addTorrentTitle')}
+            open={addOpen}
+            onCancel={() => setAddOpen(false)}
+            onOk={onAddUrl}
+            okText={t('add')}
+            confirmLoading={addSubmitting}
+            className="add-modal"
+            rootClassName="add-modal-root"
+            style={{ top: 24 }}
+            styles={{
+              body: {
+                display: 'flex',
+                flexDirection: 'column',
+                minHeight: 0,
+                maxHeight: 'calc(100vh - 200px)',
+                overflowY: 'auto',
+                overflowX: 'hidden',
+              },
+            }}
+          >
+            <div className="add-modal-body">
             <Tabs
               activeKey={addType}
               onChange={onChangeAddType}
@@ -2309,8 +2327,9 @@ export default function App() {
                 ]}
               />
             </Form>
-          </div>
-        </Modal>
+            </div>
+          </Modal>
+        </AddDownloadPage>
 
         <Modal
           title={t('presetJsonTitle')}
@@ -2387,14 +2406,15 @@ export default function App() {
           </Space>
         </Modal>
 
-        <Drawer
-          title={t('taskDetails')}
-          placement="right"
-          width={620}
-          open={detailOpen}
-          onClose={() => setDetailOpen(false)}
-        >
-          <Space direction="vertical" style={{ width: '100%' }} size={16}>
+        <TaskDetailPage>
+          <Drawer
+            title={t('taskDetails')}
+            placement="right"
+            width={620}
+            open={detailOpen}
+            onClose={() => setDetailOpen(false)}
+          >
+            <Space direction="vertical" style={{ width: '100%' }} size={16}>
             <Card size="small" title={t('overview')} loading={detailLoading}>
               <Descriptions size="small" column={1}>
                 <Descriptions.Item label={t('colName')}>
@@ -2485,30 +2505,32 @@ export default function App() {
                 )}
               </Space>
             </Card>
-          </Space>
-        </Drawer>
+            </Space>
+          </Drawer>
+        </TaskDetailPage>
 
-        <Modal
-          title={t('settingsTitle')}
-          open={settingsOpen}
-          onCancel={() => setSettingsOpen(false)}
-          width={980}
-          okText={t('save')}
-          onOk={saveSettings}
-          confirmLoading={settingsSaving}
-          className="settings-modal"
-          rootClassName="settings-modal-root"
-          style={{ top: 24 }}
-          styles={{
-            body: {
-              flex: 1,
-              minHeight: 0,
-              overflow: 'hidden',
-              paddingRight: 8,
-            },
-          }}
-        >
-          <div className="settings-shell">
+        <SettingsPage>
+          <Modal
+            title={t('settingsTitle')}
+            open={settingsOpen}
+            onCancel={() => setSettingsOpen(false)}
+            width={980}
+            okText={t('save')}
+            onOk={saveSettings}
+            confirmLoading={settingsSaving}
+            className="settings-modal"
+            rootClassName="settings-modal-root"
+            style={{ top: 24 }}
+            styles={{
+              body: {
+                flex: 1,
+                minHeight: 0,
+                overflow: 'hidden',
+                paddingRight: 8,
+              },
+            }}
+          >
+            <div className="settings-shell">
             <Tabs
               className="settings-tabs"
               activeKey={settingsTab}
@@ -2957,8 +2979,9 @@ export default function App() {
               },
               ]}
             />
-          </div>
-        </Modal>
+            </div>
+          </Modal>
+        </SettingsPage>
 
         <Modal
           title={t('removeConfirm')}
