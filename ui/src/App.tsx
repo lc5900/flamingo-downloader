@@ -502,7 +502,7 @@ export default function App() {
       clearInterval(timer)
       clipboardPromptingRef.current = false
     }
-  }, [clipboardWatchEnabled, t])
+  }, [clipboardWatchEnabled, openAddFromDetected, t])
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
@@ -663,7 +663,7 @@ export default function App() {
     }
   }
 
-  const onPauseResume = async (task: Task) => {
+  const onPauseResume = useCallback(async (task: Task) => {
     try {
       if (String(task.status).toLowerCase() === 'paused') await api.call('resume_task', { taskId: task.id })
       else await api.call('pause_task', { taskId: task.id })
@@ -671,25 +671,25 @@ export default function App() {
     } catch (err) {
       msg.error(parseErr(err))
     }
-  }
+  }, [msg, refresh])
 
-  const onStopSeeding = async (task: Task) => {
+  const onStopSeeding = useCallback(async (task: Task) => {
     try {
       await api.call('stop_seeding', { taskId: task.id })
       await refresh()
     } catch (err) {
       msg.error(parseErr(err))
     }
-  }
+  }, [msg, refresh])
 
-  const onMoveTaskPosition = async (task: Task, action: 'top' | 'up' | 'down' | 'bottom') => {
+  const onMoveTaskPosition = useCallback(async (task: Task, action: 'top' | 'up' | 'down' | 'bottom') => {
     try {
       await api.call('move_task_position', { taskId: task.id, action })
       await refresh()
     } catch (err) {
       msg.error(parseErr(err))
     }
-  }
+  }, [msg, refresh])
 
   const onRequestRemove = (task: Task) => {
     setRemoveTask(task)
@@ -847,23 +847,23 @@ export default function App() {
     })
   }
 
-  const onOpenFile = async (task: Task) => {
+  const onOpenFile = useCallback(async (task: Task) => {
     try {
       await api.call('open_task_file', { taskId: task.id })
     } catch (err) {
       msg.error(parseErr(err))
     }
-  }
+  }, [msg])
 
-  const onOpenDir = async (task: Task) => {
+  const onOpenDir = useCallback(async (task: Task) => {
     try {
       await api.call('open_task_dir', { taskId: task.id })
     } catch (err) {
       msg.error(parseErr(err))
     }
-  }
+  }, [msg])
 
-  const onCopyPath = async (task: Task) => {
+  const onCopyPath = useCallback(async (task: Task) => {
     try {
       const path = await api.call<string>('get_task_primary_path', { taskId: task.id })
       await writeClipboardText(String(path || ''))
@@ -871,9 +871,9 @@ export default function App() {
     } catch (err) {
       msg.error(parseErr(err))
     }
-  }
+  }, [msg, t])
 
-  const onOpenFileSelection = async (task: Task) => {
+  const onOpenFileSelection = useCallback(async (task: Task) => {
     try {
       setFileSelectLoading(true)
       const detail = await api.call<{ task: Task; files: TaskFile[] }>('get_task_detail', {
@@ -893,9 +893,9 @@ export default function App() {
     } finally {
       setFileSelectLoading(false)
     }
-  }
+  }, [msg])
 
-  const onOpenTaskDetail = async (task: Task) => {
+  const onOpenTaskDetail = useCallback(async (task: Task) => {
     setDetailOpen(true)
     setDetailLoading(true)
     setDetailTask(task)
@@ -947,7 +947,7 @@ export default function App() {
     } finally {
       setDetailLoading(false)
     }
-  }
+  }, [msg, t])
 
   const onSaveTaskCategory = async () => {
     if (!detailTask?.id) return
@@ -979,7 +979,20 @@ export default function App() {
     }
   }
 
-  const onOpenAdd = async () => {
+  const suggestAndSetSaveDir = useCallback(async (taskType: 'http' | 'magnet' | 'torrent', source: string | null) => {
+    try {
+      const suggestion = await api.call<SaveDirSuggestion>('suggest_save_dir_detail', {
+        taskType,
+        source,
+      })
+      addForm.setFieldValue('save_dir', suggestion?.save_dir || '')
+      setAddMatchedRule((suggestion?.matched_rule as DownloadRule) || null)
+    } catch {
+      setAddMatchedRule(null)
+    }
+  }, [addForm])
+
+  const onOpenAdd = useCallback(async () => {
     setAddOpen(true)
     setAddType('url')
     setAddTorrentFile(null)
@@ -1007,9 +1020,9 @@ export default function App() {
     } catch {
       setAddMatchedRule(null)
     }
-  }
+  }, [addForm, suggestAndSetSaveDir])
 
-  const openAddFromDetected = async (inferred: { kind: 'url' | 'magnet'; value: string }) => {
+  const openAddFromDetected = useCallback(async (inferred: { kind: 'url' | 'magnet'; value: string }) => {
     await onOpenAdd()
     if (inferred.kind === 'magnet') {
       setAddType('magnet')
@@ -1028,7 +1041,7 @@ export default function App() {
         setAddMatchedRule(null)
       }
     }
-  }
+  }, [addForm, onOpenAdd, suggestAndSetSaveDir])
 
   const onDropToAdd = async (e: React.DragEvent<HTMLElement>) => {
     e.preventDefault()
@@ -1493,18 +1506,18 @@ export default function App() {
     }
   }
 
-  const openSettings = async () => {
+  const openSettings = useCallback(async () => {
     setSettingsOpen(true)
     await Promise.all([loadSettings(), loadDiagnostics(), loadUpdateInfo(), checkBridgeStatus()])
-  }
+  }, [checkBridgeStatus, loadDiagnostics, loadSettings, loadUpdateInfo])
 
-  const openLogsWindow = async () => {
+  const openLogsWindow = useCallback(async () => {
     try {
       await api.call('open_logs_window')
     } catch (err) {
       msg.error(parseErr(err))
     }
-  }
+  }, [msg])
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1546,19 +1559,6 @@ export default function App() {
     }, 60)
     return () => window.clearTimeout(timer)
   }, [addOpen, addType])
-
-  const suggestAndSetSaveDir = async (taskType: 'http' | 'magnet' | 'torrent', source: string | null) => {
-    try {
-      const suggestion = await api.call<SaveDirSuggestion>('suggest_save_dir_detail', {
-        taskType,
-        source,
-      })
-      addForm.setFieldValue('save_dir', suggestion?.save_dir || '')
-      setAddMatchedRule((suggestion?.matched_rule as DownloadRule) || null)
-    } catch {
-      setAddMatchedRule(null)
-    }
-  }
 
   const onChangeAddType = async (key: string) => {
     const next = key as 'url' | 'magnet' | 'torrent'
