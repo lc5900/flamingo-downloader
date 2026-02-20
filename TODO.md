@@ -183,7 +183,7 @@
 ### P0 - CI Guardrails
 
 - [x] Add a single `scripts/preflight.sh` (and `scripts/preflight.ps1`) and reuse it in CI to keep checks consistent
-- [ ] Add GitHub Actions concurrency (cancel superseded runs on the same branch/tag)
+- [x] Add GitHub Actions concurrency (cancel superseded runs on the same branch/tag)
 - [ ] Make macOS x64 build opt-in (workflow input) and keep it disabled by default unless the runner is supported
 
 ### P0 - UI Correctness
