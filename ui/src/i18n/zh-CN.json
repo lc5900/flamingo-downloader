@@ -255,5 +255,8 @@
   "taskIdLabel": "任务ID",
   "emptyDownloading": "当前没有下载任务",
   "emptyDownloaded": "还没有已完成任务",
-  "emptyHint": "新建一个下载任务开始使用"
+  "emptyHint": "新建一个下载任务开始使用",
+  "duplicateDetectedTitle": "检测到重复来源",
+  "duplicateDetectedContent": "已有 {count} 条相同来源任务，是否仍继续新增？",
+  "continueAdd": "继续新增"
 }

@@ -860,6 +860,29 @@ export default function App() {
     return false
   }
 
+  const existingSourceSet = useMemo(() => {
+    const set = new Set<string>()
+    for (const task of tasks) {
+      const source = String(task.source || '').trim().toLowerCase()
+      if (!source) continue
+      set.add(source)
+    }
+    return set
+  }, [tasks])
+
+  const confirmDuplicateAdd = useCallback(async (count: number) => {
+    return await new Promise<boolean>((resolve) => {
+      Modal.confirm({
+        title: t('duplicateDetectedTitle'),
+        content: i18nFormat(t('duplicateDetectedContent'), { count }),
+        okText: t('continueAdd'),
+        cancelText: t('cancel'),
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false),
+      })
+    })
+  }, [t])
+
   const retrySingleTask = async (task: Task) => {
     const options = {
       saveDir: task.save_dir || null,
@@ -1243,9 +1266,17 @@ export default function App() {
           .split(/\r?\n/)
           .map((line) => line.trim())
           .filter(Boolean)
+        const duplicates = lines.filter((line) => existingSourceSet.has(line.toLowerCase()))
         const invalid = lines.filter((line) => detectAddSource(line)?.kind !== 'url')
         if (invalid.length > 0) {
           throw new Error(`${t('invalidLines')}: ${invalid.slice(0, 3).join(' | ')}`)
+        }
+        if (duplicates.length > 0) {
+          const allowContinue = await confirmDuplicateAdd(duplicates.length)
+          if (!allowContinue) {
+            setAddSubmitting(false)
+            return
+          }
         }
         for (const line of lines) {
           await api.call('add_url', {
@@ -1259,9 +1290,17 @@ export default function App() {
           .split(/\r?\n/)
           .map((line) => line.trim())
           .filter(Boolean)
+        const duplicates = lines.filter((line) => existingSourceSet.has(line.toLowerCase()))
         const invalid = lines.filter((line) => detectAddSource(line)?.kind !== 'magnet')
         if (invalid.length > 0) {
           throw new Error(`${t('invalidLines')}: ${invalid.slice(0, 3).join(' | ')}`)
+        }
+        if (duplicates.length > 0) {
+          const allowContinue = await confirmDuplicateAdd(duplicates.length)
+          if (!allowContinue) {
+            setAddSubmitting(false)
+            return
+          }
         }
         for (const line of lines) {
           await api.call('add_magnet', {

@@ -255,5 +255,8 @@
   "taskIdLabel": "Task ID",
   "emptyDownloading": "No active downloads",
   "emptyDownloaded": "No completed downloads yet",
-  "emptyHint": "Create a new task to get started"
+  "emptyHint": "Create a new task to get started",
+  "duplicateDetectedTitle": "Duplicate source detected",
+  "duplicateDetectedContent": "{count} item(s) already exist. Continue adding anyway?",
+  "continueAdd": "Continue"
 }
