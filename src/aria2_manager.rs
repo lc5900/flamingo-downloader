@@ -103,10 +103,7 @@ fn resolve_aria2_bin(base_dir: &Path) -> PathBuf {
             bin_dir.join("aria2c"),
         ]
     } else {
-        vec![
-            bin_dir.join("linux").join("aria2c"),
-            bin_dir.join("aria2c"),
-        ]
+        vec![bin_dir.join("linux").join("aria2c"), bin_dir.join("aria2c")]
     };
     candidates.extend(base_candidates);
 
@@ -630,7 +627,10 @@ impl Aria2Manager {
         let result: Value = self
             .client()
             .await?
-            .call("aria2.changePosition", vec![json!(gid), json!(pos), json!(how)])
+            .call(
+                "aria2.changePosition",
+                vec![json!(gid), json!(pos), json!(how)],
+            )
             .await?;
         if let Some(raw) = result.as_i64() {
             return Ok(raw);

@@ -70,7 +70,10 @@ pub async fn init_backend(
     db.set_setting_if_absent("download_dir_rules", "[]")?;
     db.set_setting_if_absent("browser_bridge_enabled", "true")?;
     db.set_setting_if_absent("browser_bridge_port", "16789")?;
-    db.set_setting_if_absent("browser_bridge_allowed_origins", "chrome-extension://,moz-extension://")?;
+    db.set_setting_if_absent(
+        "browser_bridge_allowed_origins",
+        "chrome-extension://,moz-extension://",
+    )?;
     db.set_setting_if_absent("clipboard_watch_enabled", "false")?;
     db.set_setting_if_absent("ui_theme", "system")?;
     db.set_setting_if_absent("retry_max_attempts", "2")?;
@@ -106,10 +109,7 @@ pub async fn init_backend(
         let aria2_bg = aria2.clone();
         let service_bg = service.clone();
         tokio::spawn(async move {
-            let _ = service_bg.set_startup_notice(
-                "info",
-                "Starting aria2 in background...",
-            );
+            let _ = service_bg.set_startup_notice("info", "Starting aria2 in background...");
             match aria2_bg.start().await {
                 Ok(ep) => {
                     let _ = service_bg.apply_saved_runtime_global_options().await;
@@ -136,7 +136,9 @@ pub async fn init_backend(
                 Err(e) => {
                     let _ = service_bg.set_startup_notice(
                         "warning",
-                        &format!("Startup check failed: {e}. Please verify aria2 path in Settings."),
+                        &format!(
+                            "Startup check failed: {e}. Please verify aria2 path in Settings."
+                        ),
                     );
                 }
             }

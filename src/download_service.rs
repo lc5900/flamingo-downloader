@@ -1,8 +1,8 @@
 use std::{
     collections::HashMap,
     collections::HashSet,
-    fs::File,
     fs,
+    fs::File,
     io::{Cursor, Read},
     path::{Path, PathBuf},
     process::Command,
@@ -12,11 +12,11 @@ use std::{
 
 use anyhow::{Result, anyhow};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
+use chrono::{Datelike, Local, Timelike};
 use serde_json::{Value, json};
 use tokio::{sync::Mutex as AsyncMutex, time};
 use uuid::Uuid;
 use zip::write::SimpleFileOptions;
-use chrono::{Datelike, Local, Timelike};
 
 use crate::{
     aria2_manager::Aria2Api,
@@ -24,9 +24,10 @@ use crate::{
     error::AppError,
     events::SharedEmitter,
     models::{
-        AddTaskOptions, AppUpdateStrategy, Aria2UpdateApplyResult, Aria2UpdateInfo, Diagnostics,
-        CategoryRule, DownloadDirRule, GlobalSettings, ImportTaskListResult, OperationLog, SaveDirSuggestion,
-        StartupSelfCheck, Task, TaskFile, TaskListSnapshot, TaskStatus, TaskType, BrowserBridgeStatus,
+        AddTaskOptions, AppUpdateStrategy, Aria2UpdateApplyResult, Aria2UpdateInfo,
+        BrowserBridgeStatus, CategoryRule, Diagnostics, DownloadDirRule, GlobalSettings,
+        ImportTaskListResult, OperationLog, SaveDirSuggestion, StartupSelfCheck, Task, TaskFile,
+        TaskListSnapshot, TaskStatus, TaskType,
     },
 };
 
@@ -74,8 +75,12 @@ impl DownloadService {
         self.ensure_aria2_ready().await?;
 
         let http_type = detect_http_content_type(url).await;
-        let save_dir =
-            self.resolve_save_dir_for_new_task(TaskType::Http, url, &options, http_type.as_deref())?;
+        let save_dir = self.resolve_save_dir_for_new_task(
+            TaskType::Http,
+            url,
+            &options,
+            http_type.as_deref(),
+        )?;
         let category =
             self.resolve_category_for_new_task(TaskType::Http, url, http_type.as_deref())?;
         let options = with_resolved_save_dir(options, save_dir.clone());
@@ -116,7 +121,8 @@ impl DownloadService {
         }
         self.ensure_aria2_ready().await?;
 
-        let save_dir = self.resolve_save_dir_for_new_task(TaskType::Magnet, magnet, &options, None)?;
+        let save_dir =
+            self.resolve_save_dir_for_new_task(TaskType::Magnet, magnet, &options, None)?;
         let category = self.resolve_category_for_new_task(TaskType::Magnet, magnet, None)?;
         let options = with_resolved_save_dir(options, save_dir.clone());
         let task_id = Uuid::new_v4().to_string();
@@ -263,7 +269,9 @@ impl DownloadService {
             .get_task(task_id)?
             .ok_or_else(|| AppError::TaskNotFound(task_id.to_string()))?;
         if task.status == TaskStatus::Completed {
-            return Err(AppError::InvalidInput("completed task cannot be reordered".to_string()).into());
+            return Err(
+                AppError::InvalidInput("completed task cannot be reordered".to_string()).into(),
+            );
         }
         let gid = task
             .aria2_gid
@@ -274,9 +282,10 @@ impl DownloadService {
             "down" => (1_i64, "POS_CUR"),
             "bottom" => (0_i64, "POS_END"),
             _ => {
-                return Err(
-                    AppError::InvalidInput(format!("unsupported task move action: {action}")).into(),
-                )
+                return Err(AppError::InvalidInput(format!(
+                    "unsupported task move action: {action}"
+                ))
+                .into());
             }
         };
         let new_pos = self.aria2.change_position(&gid, pos, how).await?;
@@ -308,7 +317,9 @@ impl DownloadService {
             .get_task(task_id)?
             .ok_or_else(|| AppError::TaskNotFound(task_id.to_string()))?;
         if task.task_type != TaskType::Torrent && task.task_type != TaskType::Magnet {
-            return Err(AppError::InvalidInput("stop seeding only supports bt tasks".to_string()).into());
+            return Err(
+                AppError::InvalidInput("stop seeding only supports bt tasks".to_string()).into(),
+            );
         }
         let gid = task
             .aria2_gid
@@ -392,7 +403,11 @@ impl DownloadService {
         }
         open_path_in_os(&path)?;
         self.push_log(
-            if open_dir { "open_task_dir" } else { "open_task_file" },
+            if open_dir {
+                "open_task_dir"
+            } else {
+                "open_task_file"
+            },
             format!("opened {}", path.display()),
         );
         Ok(())
@@ -480,7 +495,10 @@ impl DownloadService {
         self.db.set_task_category(task_id, clean.as_deref())?;
         self.push_log(
             "set_task_category",
-            format!("task {task_id} category set to {}", clean.as_deref().unwrap_or("<none>")),
+            format!(
+                "task {task_id} category set to {}",
+                clean.as_deref().unwrap_or("<none>")
+            ),
         );
         Ok(())
     }
@@ -615,7 +633,10 @@ impl DownloadService {
                         format!("manual aria2 binary saved but apply failed: {e}"),
                     );
                 } else {
-                    self.push_log("set_global_settings", format!("applied manual aria2 binary from {path}"));
+                    self.push_log(
+                        "set_global_settings",
+                        format!("applied manual aria2 binary from {path}"),
+                    );
                 }
             }
         }
@@ -639,7 +660,9 @@ impl DownloadService {
         if let Err(e) = self.aria2.start().await {
             rollback_aria2_binary(target_path, backup.clone());
             let _ = self.aria2.start().await;
-            return Err(anyhow!("aria2 restart failed after applying manual binary: {e}"));
+            return Err(anyhow!(
+                "aria2 restart failed after applying manual binary: {e}"
+            ));
         }
         if let Some(backup_path) = backup
             && backup_path.exists()
@@ -656,7 +679,10 @@ impl DownloadService {
     pub fn rotate_browser_bridge_token(&self) -> Result<String> {
         let new_token = Uuid::new_v4().to_string();
         self.db.set_setting("browser_bridge_token", &new_token)?;
-        self.push_log("rotate_browser_bridge_token", "browser bridge token rotated".to_string());
+        self.push_log(
+            "rotate_browser_bridge_token",
+            "browser bridge token rotated".to_string(),
+        );
         Ok(new_token)
     }
 
@@ -693,11 +719,7 @@ impl DownloadService {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(2))
             .build()?;
-        let result = client
-            .get(&endpoint)
-            .header("X-Token", token)
-            .send()
-            .await;
+        let result = client.get(&endpoint).header("X-Token", token).send().await;
         match result {
             Ok(resp) if resp.status().is_success() => {
                 let body = resp.text().await.unwrap_or_default();
@@ -758,7 +780,9 @@ impl DownloadService {
             browser_bridge_enabled: Some(true),
             browser_bridge_port: Some(16789),
             browser_bridge_token: current.browser_bridge_token,
-            browser_bridge_allowed_origins: Some("chrome-extension://,moz-extension://".to_string()),
+            browser_bridge_allowed_origins: Some(
+                "chrome-extension://,moz-extension://".to_string(),
+            ),
             clipboard_watch_enabled: Some(false),
             ui_theme: Some("system".to_string()),
             retry_max_attempts: Some(2),
@@ -903,7 +927,11 @@ impl DownloadService {
                         .get_version()
                         .await
                         .ok()
-                        .and_then(|v| v.get("version").and_then(Value::as_str).map(ToString::to_string))
+                        .and_then(|v| {
+                            v.get("version")
+                                .and_then(Value::as_str)
+                                .map(ToString::to_string)
+                        })
                         .unwrap_or_else(|| "unknown".to_string());
                     let stderr = self.aria2.stderr_tail().unwrap_or_default();
                     let message = if stderr.is_empty() {
@@ -1037,8 +1065,13 @@ impl DownloadService {
             .as_deref()
             .unwrap_or("aria2-package");
 
-        let archive =
-            download_asset_archive(asset_url, asset_name, github_cdn.as_deref(), github_token.as_deref()).await?;
+        let archive = download_asset_archive(
+            asset_url,
+            asset_name,
+            github_cdn.as_deref(),
+            github_token.as_deref(),
+        )
+        .await?;
         let binary = extract_aria2_binary(asset_name, &archive)?;
         let target = self.aria2_bin_path();
         if target.is_empty() {
@@ -1245,7 +1278,8 @@ impl DownloadService {
         let zip_path = std::env::temp_dir().join(format!("flamingo-debug-{ts}.zip"));
         let zip_file = File::create(&zip_path)?;
         let mut zip = zip::ZipWriter::new(zip_file);
-        let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        let opts =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
         for (name, path) in [
             ("diagnostics.json", diagnostics_path),
@@ -1365,7 +1399,10 @@ impl DownloadService {
                 json!(v.to_string()),
             );
         }
-        if let Some(v) = settings.max_overall_download_limit.filter(|v| !v.trim().is_empty()) {
+        if let Some(v) = settings
+            .max_overall_download_limit
+            .filter(|v| !v.trim().is_empty())
+        {
             aria2_options.insert("max-overall-download-limit".to_string(), json!(v));
         }
         if let Some(v) = settings.bt_tracker.filter(|v| !v.trim().is_empty()) {
@@ -1417,7 +1454,10 @@ impl DownloadService {
             .last_speed_limit
             .lock()
             .expect("last_speed_limit mutex poisoned") = Some(desired.clone());
-        self.push_log("speed_plan", format!("applied max-overall-download-limit={desired}"));
+        self.push_log(
+            "speed_plan",
+            format!("applied max-overall-download-limit={desired}"),
+        );
         Ok(())
     }
 
@@ -1439,9 +1479,7 @@ impl DownloadService {
         for mut task in tasks {
             match task.status {
                 TaskStatus::Metadata => {
-                    if now - task.created_at > metadata_timeout_secs
-                        && task.total_length == 0
-                    {
+                    if now - task.created_at > metadata_timeout_secs && task.total_length == 0 {
                         task.status = TaskStatus::Error;
                         task.error_code = Some("METADATA_TIMEOUT".to_string());
                         task.error_message = Some(format!(
@@ -1469,7 +1507,9 @@ impl DownloadService {
                             })
                             .clone()
                     };
-                    if current_state.attempts >= retry_max_attempts || now < current_state.next_retry_at {
+                    if current_state.attempts >= retry_max_attempts
+                        || now < current_state.next_retry_at
+                    {
                         continue;
                     }
                     if let Ok(new_gid) = self
@@ -1538,16 +1578,17 @@ impl DownloadService {
                     )
                     .await
             }
-            TaskType::Magnet => self
-                .aria2
-                .add_uri(
-                    vec![task.source.clone()],
-                    Some(to_aria2_options(AddTaskOptions {
-                        save_dir: Some(task.save_dir.clone()),
-                        ..AddTaskOptions::default()
-                    })),
-                )
-                .await,
+            TaskType::Magnet => {
+                self.aria2
+                    .add_uri(
+                        vec![task.source.clone()],
+                        Some(to_aria2_options(AddTaskOptions {
+                            save_dir: Some(task.save_dir.clone()),
+                            ..AddTaskOptions::default()
+                        })),
+                    )
+                    .await
+            }
             _ => Err(anyhow!("auto retry currently supports http/magnet tasks")),
         }
     }
@@ -1902,7 +1943,10 @@ impl DownloadService {
             match self.aria2.ensure_started().await {
                 Ok(_) => return Ok(()),
                 Err(e) => {
-                    self.push_log("ensure_aria2_ready", format!("attempt {attempt} failed: {e}"));
+                    self.push_log(
+                        "ensure_aria2_ready",
+                        format!("attempt {attempt} failed: {e}"),
+                    );
                     last_err = Some(e.to_string());
                     let _ = self.aria2.stop().await;
                     time::sleep(Duration::from_millis(300)).await;
@@ -1974,7 +2018,12 @@ impl DownloadService {
         options: &AddTaskOptions,
         http_content_type: Option<&str>,
     ) -> Result<(String, Option<DownloadDirRule>)> {
-        if let Some(v) = options.save_dir.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        if let Some(v) = options
+            .save_dir
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+        {
             return Ok((v.to_string(), None));
         }
         let default_dir = self.configured_download_dir()?;
@@ -2236,9 +2285,7 @@ fn rule_matches(
                 return false;
             }
             let inferred = infer_http_type_candidates(source, http_content_type);
-            patterns
-                .iter()
-                .any(|p| inferred.iter().any(|v| v == p))
+            patterns.iter().any(|p| inferred.iter().any(|v| v == p))
         }
         "domain" => {
             let host = reqwest::Url::parse(source)
@@ -2252,13 +2299,11 @@ fn rule_matches(
                 .any(|p| host == *p || host.ends_with(&format!(".{p}")))
         }
         "ext" => {
-            let ext = reqwest::Url::parse(source)
-                .ok()
-                .and_then(|u| {
-                    Path::new(u.path())
-                        .extension()
-                        .map(|v| v.to_string_lossy().to_lowercase())
-                });
+            let ext = reqwest::Url::parse(source).ok().and_then(|u| {
+                Path::new(u.path())
+                    .extension()
+                    .map(|v| v.to_string_lossy().to_lowercase())
+            });
             let Some(ext) = ext else {
                 return false;
             };
@@ -2301,14 +2346,11 @@ fn infer_http_type_candidates(source: &str, http_content_type: Option<&str>) -> 
             }
         }
     }
-    if let Some(ext) = reqwest::Url::parse(source)
-        .ok()
-        .and_then(|u| {
-            Path::new(u.path())
-                .extension()
-                .map(|v| v.to_string_lossy().to_lowercase())
-        })
-    {
+    if let Some(ext) = reqwest::Url::parse(source).ok().and_then(|u| {
+        Path::new(u.path())
+            .extension()
+            .map(|v| v.to_string_lossy().to_lowercase())
+    }) {
         out.push(ext_to_type_group(&ext).to_string());
     }
     out.sort();
@@ -2386,10 +2428,7 @@ async fn fetch_latest_aria2_release(
     github_cdn: Option<&str>,
     github_token: Option<&str>,
 ) -> Result<ReleaseInfo> {
-    let repos = [
-        "aria2/aria2",
-        "abcfy2/aria2-static-build",
-    ];
+    let repos = ["aria2/aria2", "abcfy2/aria2-static-build"];
     let mut last_error: Option<anyhow::Error> = None;
     let mut saw_non_error_repo = false;
     for repo in repos {
@@ -2408,9 +2447,9 @@ async fn fetch_latest_aria2_release(
             "no compatible binary asset found for current platform ({platform})"
         ))
     } else {
-        Err(last_error.unwrap_or_else(|| anyhow!(
-            "no compatible binary asset found for current platform ({platform})"
-        )))
+        Err(last_error.unwrap_or_else(|| {
+            anyhow!("no compatible binary asset found for current platform ({platform})")
+        }))
     }
 }
 
@@ -2471,7 +2510,11 @@ async fn fetch_release_from_repo(
     }))
 }
 
-async fn fetch_json(client: &reqwest::Client, url: &str, github_token: Option<&str>) -> Result<Value> {
+async fn fetch_json(
+    client: &reqwest::Client,
+    url: &str,
+    github_token: Option<&str>,
+) -> Result<Value> {
     let mut req = client.get(url).header("User-Agent", "flamingo-downloader");
     if let Some(token) = github_token {
         req = req.header("Authorization", format!("Bearer {token}"));
@@ -2542,7 +2585,10 @@ async fn download_asset_bytes_once(
     let status = resp.status();
     let body = resp.bytes().await?.to_vec();
     if !status.is_success() {
-        let snippet = String::from_utf8_lossy(&body).chars().take(200).collect::<String>();
+        let snippet = String::from_utf8_lossy(&body)
+            .chars()
+            .take(200)
+            .collect::<String>();
         return Err(anyhow!(
             "asset download failed ({status}) for {url}: {}",
             snippet.trim()
@@ -2554,7 +2600,11 @@ async fn download_asset_bytes_once(
     Ok(body)
 }
 
-fn parse_release_info(payload: &Value, github_cdn: Option<&str>, repo: &str) -> Option<ReleaseInfo> {
+fn parse_release_info(
+    payload: &Value,
+    github_cdn: Option<&str>,
+    repo: &str,
+) -> Option<ReleaseInfo> {
     let tag = payload
         .get("tag_name")
         .and_then(Value::as_str)
@@ -2573,7 +2623,11 @@ fn parse_release_info(payload: &Value, github_cdn: Option<&str>, repo: &str) -> 
                 .get("browser_download_url")
                 .and_then(Value::as_str)?
                 .to_string();
-            let url = if github_cdn.is_some() { raw_url.clone() } else { raw_url };
+            let url = if github_cdn.is_some() {
+                raw_url.clone()
+            } else {
+                raw_url
+            };
             Some(ReleaseAsset { name, url })
         })
         .collect::<Vec<_>>();
@@ -2631,7 +2685,9 @@ fn select_release_asset(assets: &[ReleaseAsset], repo: &str) -> Option<ReleaseAs
     let os_keys: Vec<&str> = if cfg!(target_os = "windows") {
         vec!["windows", "win", "mingw"]
     } else if cfg!(target_os = "macos") {
-        vec!["macos", "darwin", "osx", "apple", "mac", "mac12", "mac13", "mac14"]
+        vec![
+            "macos", "darwin", "osx", "apple", "mac", "mac12", "mac13", "mac14",
+        ]
     } else {
         vec!["linux", "gnu", "musl"]
     };
@@ -2655,8 +2711,7 @@ fn select_release_asset(assets: &[ReleaseAsset], repo: &str) -> Option<ReleaseAs
         .iter()
         .filter_map(|asset| {
             let name = asset.name.to_lowercase();
-            if !is_supported_asset_name(&name)
-            {
+            if !is_supported_asset_name(&name) {
                 return None;
             }
             // Filter out likely source archives like aria2-1.37.0.tar.xz.
@@ -2672,8 +2727,12 @@ fn select_release_asset(assets: &[ReleaseAsset], repo: &str) -> Option<ReleaseAs
                 return None;
             }
             let mut score = 10;
-            if os_score { score += 8; }
-            if arch_score { score += 5; }
+            if os_score {
+                score += 8;
+            }
+            if arch_score {
+                score += 5;
+            }
             if name.contains("static") {
                 score += 2;
             }
@@ -2748,8 +2807,8 @@ fn is_source_archive_name(name: &str) -> bool {
     }
 
     let platform_markers = [
-        "windows", "win-", "mingw", "linux", "android", "darwin", "osx", "mac", "apple",
-        "x86_64", "amd64", "x64", "aarch64", "arm64", "armv8", "32bit", "64bit",
+        "windows", "win-", "mingw", "linux", "android", "darwin", "osx", "mac", "apple", "x86_64",
+        "amd64", "x64", "aarch64", "arm64", "armv8", "32bit", "64bit",
     ];
     !platform_markers.iter().any(|k| name.contains(k))
 }
@@ -2780,7 +2839,11 @@ fn extract_from_zip(bytes: &[u8]) -> Result<Vec<u8>> {
             continue;
         }
         let name = file.name().to_ascii_lowercase();
-        if name.ends_with("/aria2c") || name.ends_with("/aria2c.exe") || name == "aria2c" || name == "aria2c.exe" {
+        if name.ends_with("/aria2c")
+            || name.ends_with("/aria2c.exe")
+            || name == "aria2c"
+            || name == "aria2c.exe"
+        {
             let mut out = Vec::new();
             file.read_to_end(&mut out)?;
             return Ok(out);
@@ -2812,7 +2875,11 @@ fn extract_from_tar_reader<R: Read>(reader: R) -> Result<Vec<u8>> {
             continue;
         }
         let path = entry.path()?.to_string_lossy().to_ascii_lowercase();
-        if path.ends_with("/aria2c") || path.ends_with("/aria2c.exe") || path == "aria2c" || path == "aria2c.exe" {
+        if path.ends_with("/aria2c")
+            || path.ends_with("/aria2c.exe")
+            || path == "aria2c"
+            || path == "aria2c.exe"
+        {
             let mut out = Vec::new();
             entry.read_to_end(&mut out)?;
             return Ok(out);
@@ -3307,9 +3374,7 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("outside download root"));
         assert!(
-            db.get_task(&task_id)
-                .expect("get task")
-                .is_some(),
+            db.get_task(&task_id).expect("get task").is_some(),
             "task record should remain when file delete is rejected"
         );
     }

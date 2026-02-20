@@ -8,7 +8,8 @@ use anyhow::{Context, Result, anyhow};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::models::{
-    Aria2TaskSnapshot, CategoryRule, DownloadDirRule, GlobalSettings, Task, TaskFile, TaskStatus, TaskType,
+    Aria2TaskSnapshot, CategoryRule, DownloadDirRule, GlobalSettings, Task, TaskFile, TaskStatus,
+    TaskType,
 };
 
 pub struct Database {
@@ -397,7 +398,10 @@ impl Database {
             self.set_setting("post_complete_action", v)?;
         }
         if let Some(v) = settings.auto_delete_control_files {
-            self.set_setting("auto_delete_control_files", if v { "true" } else { "false" })?;
+            self.set_setting(
+                "auto_delete_control_files",
+                if v { "true" } else { "false" },
+            )?;
         }
         if let Some(v) = settings.auto_clear_completed_days {
             self.set_setting("auto_clear_completed_days", &v.to_string())?;
@@ -417,8 +421,8 @@ impl Database {
         let rules_json = serde_json::to_string(&settings.download_dir_rules)
             .context("serialize download_dir_rules")?;
         self.set_setting("download_dir_rules", &rules_json)?;
-        let category_rules_json = serde_json::to_string(&settings.category_rules)
-            .context("serialize category_rules")?;
+        let category_rules_json =
+            serde_json::to_string(&settings.category_rules).context("serialize category_rules")?;
         self.set_setting("category_rules", &category_rules_json)?;
         Ok(())
     }
@@ -454,25 +458,25 @@ impl Database {
             github_token: self.get_setting("github_token")?,
             download_dir_rules: rules,
             category_rules,
-            browser_bridge_enabled: self
-                .get_setting("browser_bridge_enabled")?
-                .and_then(|v| match v.as_str() {
+            browser_bridge_enabled: self.get_setting("browser_bridge_enabled")?.and_then(
+                |v| match v.as_str() {
                     "true" => Some(true),
                     "false" => Some(false),
                     _ => None,
-                }),
+                },
+            ),
             browser_bridge_port: self
                 .get_setting("browser_bridge_port")?
                 .and_then(|v| v.parse::<u16>().ok()),
             browser_bridge_token: self.get_setting("browser_bridge_token")?,
             browser_bridge_allowed_origins: self.get_setting("browser_bridge_allowed_origins")?,
-            clipboard_watch_enabled: self
-                .get_setting("clipboard_watch_enabled")?
-                .and_then(|v| match v.as_str() {
+            clipboard_watch_enabled: self.get_setting("clipboard_watch_enabled")?.and_then(|v| {
+                match v.as_str() {
                     "true" => Some(true),
                     "false" => Some(false),
                     _ => None,
-                }),
+                }
+            }),
             ui_theme: self.get_setting("ui_theme")?,
             retry_max_attempts: self
                 .get_setting("retry_max_attempts")?
@@ -487,13 +491,13 @@ impl Database {
             speed_plan: self.get_setting("speed_plan")?,
             task_option_presets: self.get_setting("task_option_presets")?,
             post_complete_action: self.get_setting("post_complete_action")?,
-            auto_delete_control_files: self
-                .get_setting("auto_delete_control_files")?
-                .and_then(|v| match v.as_str() {
+            auto_delete_control_files: self.get_setting("auto_delete_control_files")?.and_then(
+                |v| match v.as_str() {
                     "true" => Some(true),
                     "false" => Some(false),
                     _ => None,
-                }),
+                },
+            ),
             auto_clear_completed_days: self
                 .get_setting("auto_clear_completed_days")?
                 .and_then(|v| v.parse::<u32>().ok()),
@@ -511,20 +515,20 @@ impl Database {
                     "false" => Some(false),
                     _ => None,
                 }),
-            minimize_to_tray: self
-                .get_setting("minimize_to_tray")?
-                .and_then(|v| match v.as_str() {
+            minimize_to_tray: self.get_setting("minimize_to_tray")?.and_then(|v| {
+                match v.as_str() {
                     "true" => Some(true),
                     "false" => Some(false),
                     _ => None,
-                }),
-            notify_on_complete: self
-                .get_setting("notify_on_complete")?
-                .and_then(|v| match v.as_str() {
+                }
+            }),
+            notify_on_complete: self.get_setting("notify_on_complete")?.and_then(|v| {
+                match v.as_str() {
                     "true" => Some(true),
                     "false" => Some(false),
                     _ => None,
-                }),
+                }
+            }),
         })
     }
 
@@ -624,7 +628,6 @@ impl Database {
         )?;
         Ok(())
     }
-
 }
 
 fn row_to_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
@@ -895,11 +898,13 @@ mod tests {
         assert_eq!(loaded.download_dir_rules[0].matcher, "ext");
         assert_eq!(loaded.category_rules.len(), 1);
         assert_eq!(loaded.category_rules[0].category, "work");
-        assert!(loaded
-            .task_option_presets
-            .as_deref()
-            .unwrap_or_default()
-            .contains("Video Standard"));
+        assert!(
+            loaded
+                .task_option_presets
+                .as_deref()
+                .unwrap_or_default()
+                .contains("Video Standard")
+        );
         assert_eq!(loaded.post_complete_action.as_deref(), Some("open_dir"));
         assert_eq!(loaded.auto_delete_control_files, Some(true));
         assert_eq!(loaded.auto_clear_completed_days, Some(14));

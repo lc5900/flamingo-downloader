@@ -3,25 +3,24 @@ use std::{
     time::Duration,
 };
 
-use serde::Serialize;
 use flamingo_downloader::{
     events::EventEmitter,
     init_backend,
     models::{
-        AddTaskOptions, AppUpdateStrategy, Aria2UpdateApplyResult, Aria2UpdateInfo,
-        GlobalSettings, ImportTaskListResult, OperationLog, StartupNotice, Task, TaskFile,
-        TaskStatus, TaskType,
+        AddTaskOptions, AppUpdateStrategy, Aria2UpdateApplyResult, Aria2UpdateInfo, GlobalSettings,
+        ImportTaskListResult, OperationLog, StartupNotice, Task, TaskFile, TaskStatus, TaskType,
     },
 };
+use serde::Serialize;
 #[cfg(target_os = "macos")]
 use tauri::ActivationPolicy;
-use tauri::{Emitter, Manager, State};
 #[cfg(not(target_os = "macos"))]
 use tauri::include_image;
 #[cfg(not(target_os = "macos"))]
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 #[cfg(not(target_os = "macos"))]
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
+use tauri::{Emitter, Manager, State};
 
 #[derive(Default)]
 struct TauriEventEmitter {
@@ -41,11 +40,7 @@ impl EventEmitter for TauriEventEmitter {
         if tasks.is_empty() {
             return Ok(());
         }
-        let app = self
-            .app
-            .read()
-            .ok()
-            .and_then(|g| g.as_ref().cloned());
+        let app = self.app.read().ok().and_then(|g| g.as_ref().cloned());
         if let Some(app) = app {
             app.emit("task_update", tasks)?;
         }
@@ -193,7 +188,11 @@ fn restore_main_window(app: &tauri::AppHandle) {
 }
 
 #[tauri::command]
-async fn add_url(state: State<'_, AppState>, url: String, options: AddTaskOptions) -> Result<String, String> {
+async fn add_url(
+    state: State<'_, AppState>,
+    url: String,
+    options: AddTaskOptions,
+) -> Result<String, String> {
     state
         .service
         .add_url(&url, options)
@@ -202,7 +201,11 @@ async fn add_url(state: State<'_, AppState>, url: String, options: AddTaskOption
 }
 
 #[tauri::command]
-async fn add_magnet(state: State<'_, AppState>, magnet: String, options: AddTaskOptions) -> Result<String, String> {
+async fn add_magnet(
+    state: State<'_, AppState>,
+    magnet: String,
+    options: AddTaskOptions,
+) -> Result<String, String> {
     state
         .service
         .add_magnet(&magnet, options)
@@ -285,7 +288,11 @@ async fn resume_all(state: State<'_, AppState>) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn remove_task(state: State<'_, AppState>, task_id: String, delete_files: bool) -> Result<(), String> {
+async fn remove_task(
+    state: State<'_, AppState>,
+    task_id: String,
+    delete_files: bool,
+) -> Result<(), String> {
     state
         .service
         .remove_task(&task_id, delete_files)
@@ -312,7 +319,10 @@ async fn open_task_dir(state: State<'_, AppState>, task_id: String) -> Result<()
 }
 
 #[tauri::command]
-async fn get_task_primary_path(state: State<'_, AppState>, task_id: String) -> Result<String, String> {
+async fn get_task_primary_path(
+    state: State<'_, AppState>,
+    task_id: String,
+) -> Result<String, String> {
     state
         .service
         .get_task_primary_path(&task_id)
@@ -345,7 +355,10 @@ async fn set_task_category(
 }
 
 #[tauri::command]
-async fn get_task_detail(state: State<'_, AppState>, task_id: String) -> Result<TaskDetailResponse, String> {
+async fn get_task_detail(
+    state: State<'_, AppState>,
+    task_id: String,
+) -> Result<TaskDetailResponse, String> {
     let (task, files) = state
         .service
         .get_task_detail(&task_id)
@@ -380,7 +393,10 @@ async fn set_task_file_selection(
 }
 
 #[tauri::command]
-async fn set_global_settings(state: State<'_, AppState>, settings: GlobalSettings) -> Result<(), String> {
+async fn set_global_settings(
+    state: State<'_, AppState>,
+    settings: GlobalSettings,
+) -> Result<(), String> {
     state
         .service
         .set_global_settings(settings)
@@ -438,7 +454,9 @@ async fn detect_aria2_bin_paths(state: State<'_, AppState>) -> Result<Vec<String
 }
 
 #[tauri::command]
-async fn get_diagnostics(state: State<'_, AppState>) -> Result<flamingo_downloader::models::Diagnostics, String> {
+async fn get_diagnostics(
+    state: State<'_, AppState>,
+) -> Result<flamingo_downloader::models::Diagnostics, String> {
     state
         .service
         .get_diagnostics()
@@ -518,7 +536,10 @@ async fn save_session(state: State<'_, AppState>) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn list_operation_logs(state: State<'_, AppState>, limit: Option<usize>) -> Result<Vec<OperationLog>, String> {
+async fn list_operation_logs(
+    state: State<'_, AppState>,
+    limit: Option<usize>,
+) -> Result<Vec<OperationLog>, String> {
     state
         .service
         .list_operation_logs(limit.unwrap_or(200))
@@ -553,7 +574,9 @@ async fn import_task_list_json(
 }
 
 #[tauri::command]
-async fn consume_startup_notice(state: State<'_, AppState>) -> Result<Option<StartupNotice>, String> {
+async fn consume_startup_notice(
+    state: State<'_, AppState>,
+) -> Result<Option<StartupNotice>, String> {
     state
         .service
         .consume_startup_notice()
@@ -600,18 +623,14 @@ fn open_logs_window(app: tauri::AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    tauri::WebviewWindowBuilder::new(
-        &app,
-        label,
-        tauri::WebviewUrl::App("logs.html".into()),
-    )
-    .title("Operation Logs")
-    .inner_size(780.0, 560.0)
-    .resizable(true)
-    .center()
-    .build()
-    .map(|_| ())
-    .map_err(|e| e.to_string())
+    tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::App("logs.html".into()))
+        .title("Operation Logs")
+        .inner_size(780.0, 560.0)
+        .resizable(true)
+        .center()
+        .build()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
