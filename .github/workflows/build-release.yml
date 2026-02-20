@@ -85,9 +85,6 @@ jobs:
           - os: windows-latest
             artifact_suffix: windows-x64
             allow_failure: false
-          - os: macos-13
-            artifact_suffix: macos-x64
-            allow_failure: true
           - os: macos-14
             artifact_suffix: macos-arm64
             allow_failure: false
