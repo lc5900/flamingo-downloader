@@ -7,6 +7,15 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      build_macos_x64:
+        description: 'Build optional macOS x64 artifact (requires macos-13 runner support)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 permissions:
   contents: write
@@ -82,10 +91,17 @@ jobs:
           - os: windows-latest
             artifact_suffix: windows-x64
             allow_failure: false
+            enabled: true
+          - os: macos-13
+            artifact_suffix: macos-x64
+            allow_failure: true
+            enabled: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_macos_x64 == 'true' }}
           - os: macos-14
             artifact_suffix: macos-arm64
             allow_failure: false
+            enabled: true
     runs-on: ${{ matrix.os }}
+    if: ${{ matrix.enabled == true }}
     continue-on-error: ${{ matrix.allow_failure }}
 
     steps:
