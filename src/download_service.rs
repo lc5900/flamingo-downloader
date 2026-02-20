@@ -972,6 +972,7 @@ impl DownloadService {
     pub async fn startup_self_check_summary(&self) -> Result<StartupSelfCheck> {
         let aria2_bin_path = self.aria2_bin_path();
         let aria2_path = PathBuf::from(&aria2_bin_path);
+        let aria2_path_source = self.aria2_path_source(&aria2_path);
         let aria2_bin_exists = aria2_path.exists();
         let aria2_bin_executable = is_executable(&aria2_path);
 
@@ -989,6 +990,7 @@ impl DownloadService {
 
         Ok(StartupSelfCheck {
             aria2_bin_path,
+            aria2_path_source,
             aria2_bin_exists,
             aria2_bin_executable,
             download_dir,
@@ -2049,6 +2051,32 @@ impl DownloadService {
             .ok()
             .flatten()
             .unwrap_or_default()
+    }
+
+    fn aria2_path_source(&self, path: &Path) -> String {
+        let manual = self
+            .db
+            .get_setting("manual_aria2_bin_path")
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+        if !manual.trim().is_empty() && Path::new(manual.trim()) == path {
+            return "manual".to_string();
+        }
+
+        if let Some(resource_dir) = std::env::var_os("FLAMINGO_RESOURCE_DIR").map(PathBuf::from) {
+            let bundled_root = resource_dir.join("aria2").join("bin");
+            if path.starts_with(&bundled_root) {
+                return "bundled".to_string();
+            }
+        }
+
+        let path_text = path.to_string_lossy();
+        if path_text.contains("/aria2/bin/") || path_text.contains("\\aria2\\bin\\") {
+            return "bundled".to_string();
+        }
+
+        "system".to_string()
     }
 
     fn aria2_bin_exists(&self) -> bool {

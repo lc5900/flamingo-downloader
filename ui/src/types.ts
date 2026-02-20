@@ -121,6 +121,7 @@ export type StartupNotice = {
 
 export type StartupSelfCheck = {
   aria2_bin_path: string
+  aria2_path_source: string
   aria2_bin_exists: boolean
   aria2_bin_executable: boolean
   download_dir: string

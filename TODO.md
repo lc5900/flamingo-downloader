@@ -190,7 +190,7 @@
 
 - [x] Fix all `react-hooks/exhaustive-deps` warnings in `ui/src/App.tsx` (stabilize callbacks and dependency arrays)
 - [x] Switch task list refresh to event-driven updates (`task_update`) with a fallback polling timer
-- [ ] Add a diagnostics field showing resolved aria2 path source (bundled vs system vs manual)
+- [x] Add a diagnostics field showing resolved aria2 path source (bundled vs system vs manual)
 
 ### P1 - Download UX
 

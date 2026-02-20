@@ -2972,6 +2972,16 @@ export default function App() {
                         <Typography.Text>
                           aria2: <Typography.Text code>{startupSummary?.aria2_bin_path || '-'}</Typography.Text>
                         </Typography.Text>
+                        <Typography.Text>
+                          {t('aria2PathSource')}:{' '}
+                          <Typography.Text code>
+                            {startupSummary?.aria2_path_source === 'manual'
+                              ? t('aria2SourceManual')
+                              : startupSummary?.aria2_path_source === 'bundled'
+                                ? t('aria2SourceBundled')
+                                : t('aria2SourceSystem')}
+                          </Typography.Text>
+                        </Typography.Text>
                         <Space wrap>
                           <Tag color={startupSummary?.aria2_bin_exists ? 'green' : 'red'}>
                             bin {startupSummary?.aria2_bin_exists ? t('statusOk') : t('statusFail')}

@@ -226,6 +226,7 @@ pub struct StartupNotice {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StartupSelfCheck {
     pub aria2_bin_path: String,
+    pub aria2_path_source: String, // manual | bundled | system
     pub aria2_bin_exists: bool,
     pub aria2_bin_executable: bool,
     pub download_dir: String,
