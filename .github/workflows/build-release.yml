@@ -448,17 +448,55 @@ jobs:
             commit_range="${tag}"
           fi
 
-          changelog="$(git log --no-merges --pretty='- %s (%h)' ${commit_range} | head -n 20 || true)"
-          if [ -z "${changelog}" ]; then
-            changelog="- Maintenance updates."
+          commits="$(git log --no-merges --pretty='%s|%h' ${commit_range} | head -n 80 || true)"
+          if [ -z "${commits}" ]; then
+            commits="chore: maintenance updates|HEAD"
           fi
+
+          features_tmp="$(mktemp)"
+          fixes_tmp="$(mktemp)"
+          ci_tmp="$(mktemp)"
+          other_tmp="$(mktemp)"
+          while IFS='|' read -r subject short_hash; do
+            [ -n "${subject}" ] || continue
+            line="- ${subject} (${short_hash})"
+            lower_subject="$(echo "${subject}" | tr '[:upper:]' '[:lower:]')"
+            if echo "${lower_subject}" | grep -Eq '^(feat)(\(.+\))?:'; then
+              echo "${line}" >> "${features_tmp}"
+            elif echo "${lower_subject}" | grep -Eq '^(fix|hotfix)(\(.+\))?:'; then
+              echo "${line}" >> "${fixes_tmp}"
+            elif echo "${lower_subject}" | grep -Eq '^(ci|build|chore\(ci\)|chore\(release\))(\(.+\))?:'; then
+              echo "${line}" >> "${ci_tmp}"
+            else
+              echo "${line}" >> "${other_tmp}"
+            fi
+          done <<< "${commits}"
 
           cp .github/RELEASE_TEMPLATE.md release-notes.md
           sed -i "s/__VERSION__/${tag}/g" release-notes.md
           {
             echo ""
-            echo "## Changelog"
-            echo "${changelog}"
+            echo "## What's New"
+            if [ -s "${features_tmp}" ]; then
+              echo "### Features"
+              cat "${features_tmp}"
+              echo ""
+            fi
+            if [ -s "${fixes_tmp}" ]; then
+              echo "### Fixes"
+              cat "${fixes_tmp}"
+              echo ""
+            fi
+            if [ -s "${ci_tmp}" ]; then
+              echo "### CI / Build"
+              cat "${ci_tmp}"
+              echo ""
+            fi
+            if [ -s "${other_tmp}" ]; then
+              echo "### Other"
+              cat "${other_tmp}"
+              echo ""
+            fi
             echo ""
             echo "## Artifacts"
             find release-assets-flat -maxdepth 1 -type f \

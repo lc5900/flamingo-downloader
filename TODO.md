@@ -211,4 +211,4 @@
 ### P2 - Performance and Polish
 
 - [x] Reduce initial bundle size (Vite `manualChunks` and lazy-load Settings/TaskDetail/Logs)
-- [ ] Add a “What’s new” section in Release notes with grouped changes (feat/fix/ci) instead of raw commit subjects
+- [x] Add a “What’s new” section in Release notes with grouped changes (feat/fix/ci) instead of raw commit subjects
