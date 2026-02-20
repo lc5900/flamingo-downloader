@@ -272,3 +272,9 @@ pub struct BrowserBridgeStatus {
     pub connected: bool,
     pub message: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StorageSummary {
+    pub download_dir: String,
+    pub free_bytes: u64,
+}

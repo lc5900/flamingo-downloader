@@ -80,6 +80,7 @@ import type {
   SectionKey,
   StartupNotice,
   StartupSelfCheck,
+  StorageSummary,
   TableDensity,
   Task,
   TaskFile,
@@ -262,6 +263,7 @@ export default function App() {
   const [updateText, setUpdateText] = useState('')
   const [appUpdateStrategyText, setAppUpdateStrategyText] = useState('')
   const [bridgeStatus, setBridgeStatus] = useState<BrowserBridgeStatus | null>(null)
+  const [storageSummary, setStorageSummary] = useState<StorageSummary | null>(null)
   const [bridgeChecking, setBridgeChecking] = useState(false)
   const [ioOpen, setIoOpen] = useState(false)
   const [exportJsonText, setExportJsonText] = useState('')
@@ -451,6 +453,15 @@ export default function App() {
     }
   }, [])
 
+  const loadStorageSummary = useCallback(async () => {
+    try {
+      const summary = await api.call<StorageSummary>('get_storage_summary')
+      setStorageSummary(summary || null)
+    } catch {
+      setStorageSummary(null)
+    }
+  }, [])
+
   useEffect(() => {
     let unlistenTaskUpdate: (() => void) | null = null
     let disposed = false
@@ -477,11 +488,13 @@ export default function App() {
 
     void refresh()
     void loadSettings()
+    void loadStorageSummary()
     void bindTaskUpdate()
 
     const timer = setInterval(() => {
       if (disposed) return
       void refresh()
+      void loadStorageSummary()
     }, 8000)
 
     return () => {
@@ -489,7 +502,7 @@ export default function App() {
       clearInterval(timer)
       if (unlistenTaskUpdate) unlistenTaskUpdate()
     }
-  }, [refresh, loadSettings])
+  }, [refresh, loadSettings, loadStorageSummary])
 
   useEffect(() => {
     const checkStartupNotice = async () => {
@@ -757,6 +770,15 @@ export default function App() {
     const visibleIds = new Set(list.map((task) => task.id))
     setSelectedTaskIds((prev) => prev.filter((id) => visibleIds.has(id)))
   }, [list])
+
+  const activeTaskCount = useMemo(
+    () => tasks.filter((task) => String(task.status || '').toLowerCase() !== 'completed').length,
+    [tasks],
+  )
+  const totalDownloadSpeed = useMemo(
+    () => tasks.reduce((sum, task) => sum + Number(task.download_speed || 0), 0),
+    [tasks],
+  )
 
   const quickToggleTheme = async () => {
     const next = effectiveTheme === 'dark' ? 'light' : 'dark'
@@ -2081,6 +2103,9 @@ export default function App() {
                 <Button icon={<FileSearchOutlined />} onClick={openLogsWindow}>
                   {t('logsWindow')}
                 </Button>
+                <Tag>{`${t('navDownloading')}: ${activeTaskCount}`}</Tag>
+                <Tag>{`${t('colSpeed')}: ${fmtBytes(totalDownloadSpeed)}/s`}</Tag>
+                <Tag>{`${t('freeSpace')}: ${fmtBytes(Number(storageSummary?.free_bytes || 0))}`}</Tag>
                 <Button icon={<SyncOutlined />} onClick={quickToggleTheme}>
                   {t('darkLight')}
                 </Button>

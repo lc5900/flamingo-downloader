@@ -540,6 +540,16 @@ async fn startup_self_check_summary(
 }
 
 #[tauri::command]
+async fn get_storage_summary(
+    state: State<'_, AppState>,
+) -> Result<flamingo_downloader::models::StorageSummary, String> {
+    state
+        .service
+        .get_storage_summary()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn save_session(state: State<'_, AppState>) -> Result<String, String> {
     state
         .service
@@ -922,6 +932,7 @@ fn main() {
             restart_aria2,
             startup_check_aria2,
             startup_self_check_summary,
+            get_storage_summary,
             save_session,
             list_operation_logs,
             clear_operation_logs,

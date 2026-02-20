@@ -162,6 +162,11 @@ export type BrowserBridgeStatus = {
   message: string
 }
 
+export type StorageSummary = {
+  download_dir: string
+  free_bytes: number
+}
+
 export type TaskSortKey = 'updated_desc' | 'speed_desc' | 'progress_desc' | 'name_asc'
 export type TableDensity = 'small' | 'middle' | 'large'
 export type TableLayout = {

@@ -26,8 +26,8 @@ use crate::{
     models::{
         AddTaskOptions, AppUpdateStrategy, Aria2UpdateApplyResult, Aria2UpdateInfo,
         BrowserBridgeStatus, CategoryRule, Diagnostics, DownloadDirRule, GlobalSettings,
-        ImportTaskListResult, OperationLog, SaveDirSuggestion, StartupSelfCheck, Task, TaskFile,
-        TaskListSnapshot, TaskStatus, TaskType,
+        ImportTaskListResult, OperationLog, SaveDirSuggestion, StartupSelfCheck, StorageSummary,
+        Task, TaskFile, TaskListSnapshot, TaskStatus, TaskType,
     },
 };
 
@@ -1047,6 +1047,15 @@ impl DownloadService {
             download_dir_writable,
             rpc_ready,
             rpc_endpoint,
+        })
+    }
+
+    pub fn get_storage_summary(&self) -> Result<StorageSummary> {
+        let download_dir = self.configured_download_dir()?;
+        let free_bytes = fs2::available_space(Path::new(&download_dir)).unwrap_or(0);
+        Ok(StorageSummary {
+            download_dir,
+            free_bytes,
         })
     }
 

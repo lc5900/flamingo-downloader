@@ -257,6 +257,7 @@
   "emptyDownloading": "No active downloads",
   "emptyDownloaded": "No completed downloads yet",
   "emptyHint": "Create a new task to get started",
+  "freeSpace": "Free Space",
   "duplicateDetectedTitle": "Duplicate source detected",
   "duplicateDetectedContent": "{count} item(s) already exist. Continue adding anyway?",
   "continueAdd": "Continue"

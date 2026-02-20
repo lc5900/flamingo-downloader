@@ -94,6 +94,7 @@ export const I18N_KEYS = [
   "filterMetadata",
   "filterPaused",
   "filterQueued",
+  "freeSpace",
   "githubCdn",
   "githubToken",
   "grpAppearance",
