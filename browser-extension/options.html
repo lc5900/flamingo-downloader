@@ -8,7 +8,8 @@
       body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 20px; }
       .wrap { max-width: 640px; display: grid; gap: 12px; }
       label { display: grid; gap: 6px; font-size: 13px; color: #374151; }
-      input[type="text"] { padding: 8px; border: 1px solid #d1d5db; border-radius: 8px; }
+      input[type="text"], textarea { padding: 8px; border: 1px solid #d1d5db; border-radius: 8px; }
+      textarea { min-height: 72px; resize: vertical; }
       .row { display: flex; align-items: center; gap: 8px; }
       button { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; background: white; cursor: pointer; }
       #status { color: #6b7280; font-size: 12px; }
@@ -28,6 +29,10 @@
       <label class="row">
         <input id="autoIntercept" type="checkbox" />
         <span>Auto-intercept browser downloads</span>
+      </label>
+      <label>
+        <span>Intercept allowlist (domain per line, empty = all)</span>
+        <textarea id="interceptAllowlist" placeholder="example.com&#10;download.example.org"></textarea>
       </label>
       <label>
         <span>Native host name</span>

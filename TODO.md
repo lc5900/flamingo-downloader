@@ -206,7 +206,7 @@
 ### P1 - Browser Integration
 
 - [x] Provide native-messaging host installers + docs for Win/macOS/Linux (to avoid open HTTP port)
-- [ ] Extension: optional downloads interception with allowlist (per-domain) and a clear “why not intercepted” reason
+- [x] Extension: optional downloads interception with allowlist (per-domain) and a clear “why not intercepted” reason
 
 ### P2 - Performance and Polish
 

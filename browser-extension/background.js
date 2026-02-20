@@ -2,6 +2,7 @@ const DEFAULTS = {
   enabled: false,
   useNativeMessaging: false,
   autoIntercept: true,
+  interceptAllowlist: "",
   nativeHost: "com.lc5900.flamingo.bridge",
   endpoint: "http://127.0.0.1:16789/add",
   token: "",
@@ -14,6 +15,7 @@ async function getConfig() {
     "enabled",
     "useNativeMessaging",
     "autoIntercept",
+    "interceptAllowlist",
     "nativeHost",
     "endpoint",
     "token",
@@ -26,10 +28,29 @@ async function getConfig() {
         : DEFAULTS.useNativeMessaging,
     autoIntercept:
       typeof saved.autoIntercept === "boolean" ? saved.autoIntercept : DEFAULTS.autoIntercept,
+    interceptAllowlist: String(saved.interceptAllowlist || DEFAULTS.interceptAllowlist),
     nativeHost: String(saved.nativeHost || DEFAULTS.nativeHost),
     endpoint: String(saved.endpoint || DEFAULTS.endpoint),
     token: String(saved.token || DEFAULTS.token),
   };
+}
+
+function parseAllowlist(raw) {
+  return String(raw || "")
+    .split(/[,\n]/)
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => item.length > 0);
+}
+
+function hostAllowed(url, rules) {
+  if (!Array.isArray(rules) || rules.length === 0) return true;
+  try {
+    const host = String(new URL(url).hostname || "").toLowerCase();
+    if (!host) return false;
+    return rules.some((rule) => host === rule || host.endsWith(`.${rule}`));
+  } catch {
+    return false;
+  }
 }
 
 async function sendViaNativeMessaging(host, payload) {
@@ -82,10 +103,25 @@ async function setBridgeActivity(entry) {
 async function maybeTakeOver(downloadItem) {
   try {
     const cfg = await getConfig();
-    if (!cfg.enabled || !cfg.autoIntercept) return;
-    if (!downloadItem || !downloadItem.url) return;
+    if (!cfg.enabled) {
+      await setBridgeActivity({ lastBridgeSkip: "skip: bridge disabled" });
+      return;
+    }
+    if (!cfg.autoIntercept) {
+      await setBridgeActivity({ lastBridgeSkip: "skip: auto intercept disabled" });
+      return;
+    }
+    if (!downloadItem || !downloadItem.url) {
+      await setBridgeActivity({ lastBridgeSkip: "skip: missing download url" });
+      return;
+    }
     const url = String(downloadItem.url);
     if (!(url.startsWith("http://") || url.startsWith("https://") || url.startsWith("magnet:?"))) {
+      await setBridgeActivity({ lastBridgeSkip: `skip: unsupported scheme for ${url}` });
+      return;
+    }
+    if ((url.startsWith("http://") || url.startsWith("https://")) && !hostAllowed(url, parseAllowlist(cfg.interceptAllowlist))) {
+      await setBridgeActivity({ lastBridgeSkip: `skip: host not in allowlist (${url})` });
       return;
     }
     const result = await sendToFlamingo(url, null);
@@ -93,6 +129,10 @@ async function maybeTakeOver(downloadItem) {
       await ext.downloads.cancel(downloadItem.id).catch(() => {});
       await ext.downloads.erase({ id: downloadItem.id }).catch(() => {});
       await setBridgeActivity({ lastBridgeSuccess: `auto intercept ok: ${url}` });
+    } else {
+      await setBridgeActivity({
+        lastBridgeSkip: `skip: ${String(result?.reason || result?.error || "unknown reason")} (${url})`,
+      });
     }
   } catch (e) {
     console.error("Flamingo bridge takeover failed", e);
@@ -105,6 +145,7 @@ ext.runtime.onInstalled.addListener(async () => {
     "enabled",
     "useNativeMessaging",
     "autoIntercept",
+    "interceptAllowlist",
     "nativeHost",
     "endpoint",
     "token",
@@ -117,6 +158,7 @@ ext.runtime.onInstalled.addListener(async () => {
         : DEFAULTS.useNativeMessaging,
     autoIntercept:
       typeof saved.autoIntercept === "boolean" ? saved.autoIntercept : DEFAULTS.autoIntercept,
+    interceptAllowlist: String(saved.interceptAllowlist || DEFAULTS.interceptAllowlist),
     nativeHost: String(saved.nativeHost || DEFAULTS.nativeHost),
     endpoint: String(saved.endpoint || DEFAULTS.endpoint),
     token: String(saved.token || DEFAULTS.token),
