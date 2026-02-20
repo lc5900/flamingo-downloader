@@ -53,6 +53,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { listen } from '@tauri-apps/api/event'
 import { readText as readClipboardText, writeText as writeClipboardText } from '@tauri-apps/plugin-clipboard-manager'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import * as api from './api/client'
@@ -443,10 +444,43 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    refresh()
-    loadSettings()
-    const timer = setInterval(refresh, 2500)
-    return () => clearInterval(timer)
+    let unlistenTaskUpdate: (() => void) | null = null
+    let disposed = false
+
+    const bindTaskUpdate = async () => {
+      try {
+        unlistenTaskUpdate = await listen<Task[]>('task_update', (event) => {
+          const updates = Array.isArray(event.payload) ? event.payload : []
+          if (updates.length === 0) return
+          setTasks((prev) => {
+            const byId = new Map(prev.map((task) => [task.id, task] as const))
+            for (const update of updates) {
+              const current = byId.get(update.id)
+              byId.set(update.id, current ? { ...current, ...update } : update)
+            }
+            return Array.from(byId.values())
+          })
+          setHasLoadedOnce(true)
+        })
+      } catch {
+        // polling fallback still keeps list fresh when event listening is unavailable
+      }
+    }
+
+    void refresh()
+    void loadSettings()
+    void bindTaskUpdate()
+
+    const timer = setInterval(() => {
+      if (disposed) return
+      void refresh()
+    }, 8000)
+
+    return () => {
+      disposed = true
+      clearInterval(timer)
+      if (unlistenTaskUpdate) unlistenTaskUpdate()
+    }
   }, [refresh, loadSettings])
 
   useEffect(() => {
@@ -464,6 +498,70 @@ export default function App() {
     }
     void checkStartupNotice()
   }, [msg])
+
+  const suggestAndSetSaveDir = useCallback(async (taskType: 'http' | 'magnet' | 'torrent', source: string | null) => {
+    try {
+      const suggestion = await api.call<SaveDirSuggestion>('suggest_save_dir_detail', {
+        taskType,
+        source,
+      })
+      addForm.setFieldValue('save_dir', suggestion?.save_dir || '')
+      setAddMatchedRule((suggestion?.matched_rule as DownloadRule) || null)
+    } catch {
+      setAddMatchedRule(null)
+    }
+  }, [addForm])
+
+  const onOpenAdd = useCallback(async () => {
+    setAddOpen(true)
+    setAddType('url')
+    setAddTorrentFile(null)
+    setAddMatchedRule(null)
+    addForm.setFieldsValue({
+      url: '',
+      magnet: '',
+      save_dir: '',
+      preset_name: '',
+      preset_selected: undefined,
+      out: '',
+      max_download_limit: '',
+      max_upload_limit: '',
+      seed_ratio: undefined,
+      seed_time: undefined,
+      max_connection_per_server: undefined,
+      split: undefined,
+      user_agent: '',
+      referer: '',
+      cookie: '',
+      headers_text: '',
+    })
+    try {
+      await suggestAndSetSaveDir('http', null)
+    } catch {
+      setAddMatchedRule(null)
+    }
+  }, [addForm, suggestAndSetSaveDir])
+
+  const openAddFromDetected = useCallback(async (inferred: { kind: 'url' | 'magnet'; value: string }) => {
+    await onOpenAdd()
+    if (inferred.kind === 'magnet') {
+      setAddType('magnet')
+      addForm.setFieldValue('magnet', inferred.value)
+      try {
+        await suggestAndSetSaveDir('magnet', inferred.value)
+      } catch {
+        setAddMatchedRule(null)
+      }
+    } else {
+      setAddType('url')
+      addForm.setFieldValue('url', inferred.value)
+      try {
+        await suggestAndSetSaveDir('http', inferred.value)
+      } catch {
+        setAddMatchedRule(null)
+      }
+    }
+  }, [addForm, onOpenAdd, suggestAndSetSaveDir])
 
   useEffect(() => {
     if (!clipboardWatchEnabled) return
@@ -978,70 +1076,6 @@ export default function App() {
       msg.error(parseErr(err))
     }
   }
-
-  const suggestAndSetSaveDir = useCallback(async (taskType: 'http' | 'magnet' | 'torrent', source: string | null) => {
-    try {
-      const suggestion = await api.call<SaveDirSuggestion>('suggest_save_dir_detail', {
-        taskType,
-        source,
-      })
-      addForm.setFieldValue('save_dir', suggestion?.save_dir || '')
-      setAddMatchedRule((suggestion?.matched_rule as DownloadRule) || null)
-    } catch {
-      setAddMatchedRule(null)
-    }
-  }, [addForm])
-
-  const onOpenAdd = useCallback(async () => {
-    setAddOpen(true)
-    setAddType('url')
-    setAddTorrentFile(null)
-    setAddMatchedRule(null)
-    addForm.setFieldsValue({
-      url: '',
-      magnet: '',
-      save_dir: '',
-      preset_name: '',
-      preset_selected: undefined,
-      out: '',
-      max_download_limit: '',
-      max_upload_limit: '',
-      seed_ratio: undefined,
-      seed_time: undefined,
-      max_connection_per_server: undefined,
-      split: undefined,
-      user_agent: '',
-      referer: '',
-      cookie: '',
-      headers_text: '',
-    })
-    try {
-      await suggestAndSetSaveDir('http', null)
-    } catch {
-      setAddMatchedRule(null)
-    }
-  }, [addForm, suggestAndSetSaveDir])
-
-  const openAddFromDetected = useCallback(async (inferred: { kind: 'url' | 'magnet'; value: string }) => {
-    await onOpenAdd()
-    if (inferred.kind === 'magnet') {
-      setAddType('magnet')
-      addForm.setFieldValue('magnet', inferred.value)
-      try {
-        await suggestAndSetSaveDir('magnet', inferred.value)
-      } catch {
-        setAddMatchedRule(null)
-      }
-    } else {
-      setAddType('url')
-      addForm.setFieldValue('url', inferred.value)
-      try {
-        await suggestAndSetSaveDir('http', inferred.value)
-      } catch {
-        setAddMatchedRule(null)
-      }
-    }
-  }, [addForm, onOpenAdd, suggestAndSetSaveDir])
 
   const onDropToAdd = async (e: React.DragEvent<HTMLElement>) => {
     e.preventDefault()
