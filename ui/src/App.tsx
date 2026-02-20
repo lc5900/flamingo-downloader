@@ -50,7 +50,7 @@ import {
   VerticalAlignBottomOutlined,
   VerticalAlignTopOutlined,
 } from '@ant-design/icons'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { listen } from '@tauri-apps/api/event'
@@ -60,11 +60,8 @@ import * as api from './api/client'
 import { ResizableTitle } from './components/ResizableTitle'
 import { defaultLayoutFor, useTableLayout } from './hooks/useTableLayout'
 import { detectLocale, I18N } from './i18n'
-import { AddDownloadPage } from './pages/AddDownloadPage'
 import { DownloadedPage } from './pages/DownloadedPage'
 import { DownloadingPage } from './pages/DownloadingPage'
-import { SettingsPage } from './pages/SettingsPage'
-import { TaskDetailPage } from './pages/TaskDetailPage'
 import { useUiViewStore } from './stores/uiViewStore'
 import type {
   AddFormValues,
@@ -100,6 +97,16 @@ import {
 } from './utils/format'
 import './App.css'
 import 'react-resizable/css/styles.css'
+
+const AddDownloadPage = lazy(() =>
+  import('./pages/AddDownloadPage').then((module) => ({ default: module.AddDownloadPage })),
+)
+const TaskDetailPage = lazy(() =>
+  import('./pages/TaskDetailPage').then((module) => ({ default: module.TaskDetailPage })),
+)
+const SettingsPage = lazy(() =>
+  import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })),
+)
 
 const LOCALE_KEY = 'flamingo.locale'
 
@@ -2353,6 +2360,8 @@ export default function App() {
           </Layout>
         </Layout>
 
+        {addOpen && (
+          <Suspense fallback={null}>
         <AddDownloadPage>
           <Modal
             title={addType === 'url' ? t('addUrlTitle') : addType === 'magnet' ? t('addMagnetTitle') : t('addTorrentTitle')}
@@ -2554,6 +2563,8 @@ export default function App() {
             </div>
           </Modal>
         </AddDownloadPage>
+          </Suspense>
+        )}
 
         <Modal
           title={t('presetJsonTitle')}
@@ -2630,6 +2641,8 @@ export default function App() {
           </Space>
         </Modal>
 
+        {detailOpen && (
+          <Suspense fallback={null}>
         <TaskDetailPage>
           <Drawer
             title={t('taskDetails')}
@@ -2813,7 +2826,11 @@ export default function App() {
             </Space>
           </Drawer>
         </TaskDetailPage>
+          </Suspense>
+        )}
 
+        {settingsOpen && (
+          <Suspense fallback={null}>
         <SettingsPage>
           <Modal
             title={t('settingsTitle')}
@@ -3297,6 +3314,8 @@ export default function App() {
             </div>
           </Modal>
         </SettingsPage>
+          </Suspense>
+        )}
 
         <Modal
           title={t('removeConfirm')}
