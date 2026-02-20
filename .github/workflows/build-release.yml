@@ -51,17 +51,10 @@ jobs:
       - name: UI lint
         run: npm --prefix ui run lint
 
-      - name: UI build
-        run: npm --prefix ui run build
-
-      - name: Verify frontendDist (validate)
+      - name: Preflight (validate)
         shell: bash
         run: |
-          set -euo pipefail
-          if [ ! -d "ui/dist" ] || [ ! -f "ui/dist/index.html" ]; then
-            echo "Missing ui/dist build output before rust checks."
-            exit 1
-          fi
+          bash scripts/preflight.sh build-ui
 
       - name: Rust clippy check
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets
@@ -116,30 +109,17 @@ jobs:
         working-directory: ui
         run: npm ci
 
-      - name: Preflight frontend workspace
+      - name: Preflight (build)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
-          set -euo pipefail
-          if [ ! -f "ui/package.json" ]; then
-            echo "Missing ui/package.json"
-            echo "Hint: this workflow expects frontendDist=../ui/dist and a React workspace at ui/."
-            exit 1
-          fi
+          bash scripts/preflight.sh build-ui
 
-      - name: Build frontend assets
-        working-directory: ui
-        run: npm run build
-
-      - name: Verify frontendDist
-        shell: bash
+      - name: Preflight (build Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          set -euo pipefail
-          if [ ! -d "ui/dist" ] || [ ! -f "ui/dist/index.html" ]; then
-            echo "Missing ui/dist build output."
-            echo "Hint: ensure 'npm --prefix ui run build' succeeds and tauri.conf frontendDist points to ../ui/dist."
-            exit 1
-          fi
-          echo "frontendDist is ready: ui/dist"
+          ./scripts/preflight.ps1 -Mode build-ui
 
       - name: Package browser extensions
         if: runner.os == 'Linux'

@@ -177,3 +177,38 @@
 
 - [x] Continue splitting UI into `pages/` + `stores/` (Downloading/Downloaded/Settings/AddDownload/TaskDetail), keep `App.tsx` as shell only
 - [x] i18n: add placeholder coverage checks (e.g. `{tasks}` appears in both locales) and optional key typing generation
+
+## Next Iteration (Roadmap)
+
+### P0 - CI Guardrails
+
+- [x] Add a single `scripts/preflight.sh` (and `scripts/preflight.ps1`) and reuse it in CI to keep checks consistent
+- [ ] Add GitHub Actions concurrency (cancel superseded runs on the same branch/tag)
+- [ ] Make macOS x64 build opt-in (workflow input) and keep it disabled by default unless the runner is supported
+
+### P0 - UI Correctness
+
+- [ ] Fix all `react-hooks/exhaustive-deps` warnings in `ui/src/App.tsx` (stabilize callbacks and dependency arrays)
+- [ ] Switch task list refresh to event-driven updates (`task_update`) with a fallback polling timer
+- [ ] Add a diagnostics field showing resolved aria2 path source (bundled vs system vs manual)
+
+### P1 - Download UX
+
+- [ ] Detect duplicate tasks (same URL/magnet/infohash) and prompt: open existing / create new anyway
+- [ ] Add a per-task “edit options” flow for supported aria2 options (limits, headers, seeding stop rules)
+- [ ] Show a compact header summary (total download speed, active count, free disk space of current save dir)
+
+### P1 - BT Improvements
+
+- [ ] Task detail: show tracker list and peer summary (refresh button)
+- [ ] File selection: show BT file tree (folders) with select all/none and “invert selection”
+
+### P1 - Browser Integration
+
+- [ ] Provide native-messaging host installers + docs for Win/macOS/Linux (to avoid open HTTP port)
+- [ ] Extension: optional downloads interception with allowlist (per-domain) and a clear “why not intercepted” reason
+
+### P2 - Performance and Polish
+
+- [ ] Reduce initial bundle size (Vite `manualChunks` and lazy-load Settings/TaskDetail/Logs)
+- [ ] Add a “What’s new” section in Release notes with grouped changes (feat/fix/ci) instead of raw commit subjects
