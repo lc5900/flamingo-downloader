@@ -275,6 +275,7 @@ export default function App() {
   const [detailCategoryInput, setDetailCategoryInput] = useState('')
   const [detailFiles, setDetailFiles] = useState<TaskFile[]>([])
   const [detailRuntimeText, setDetailRuntimeText] = useState('')
+  const [detailTrackers, setDetailTrackers] = useState<string[]>([])
   const [detailRuntimeOptions, setDetailRuntimeOptions] = useState({
     maxDownloadLimit: '',
     maxUploadLimit: '',
@@ -1053,6 +1054,7 @@ export default function App() {
     setDetailCategoryInput(String(task.category || ''))
     setDetailFiles([])
     setDetailRuntimeText('')
+    setDetailTrackers([])
     setDetailRuntimeOptions({
       maxDownloadLimit: '',
       maxUploadLimit: '',
@@ -1074,11 +1076,17 @@ export default function App() {
         const runtime = await api.call<unknown>('get_task_runtime_status', { taskId: task.id })
         setDetailRuntimeText(JSON.stringify(runtime ?? {}, null, 2))
         const asObj = runtime as {
-          summary?: { peers_count?: number; seeders_count?: number; trackers_count?: number }
+          summary?: { peers_count?: number; seeders_count?: number; trackers_count?: number; trackers?: string[] }
         }
         const peers = Number(asObj?.summary?.peers_count || 0)
         const seeders = Number(asObj?.summary?.seeders_count || 0)
         const trackers = Number(asObj?.summary?.trackers_count || 0)
+        const trackerList = Array.isArray(asObj?.summary?.trackers)
+          ? asObj.summary.trackers
+              .map((value) => String(value || '').trim())
+              .filter((value) => value.length > 0)
+          : []
+        setDetailTrackers(trackerList)
         if (peers > 0 || seeders > 0 || trackers > 0) {
           setDetailBtSummary(
             `${t('btDiagnostics')}: ${t('peers')} ${peers} / ${t('seeders')} ${seeders} / ${t('trackers')} ${trackers}`,
@@ -1089,6 +1097,7 @@ export default function App() {
       } catch {
         setDetailRuntimeText('')
         setDetailBtSummary('')
+        setDetailTrackers([])
       }
       const logs = await api.call<OperationLog[]>('list_operation_logs', { limit: 500 })
       const gid = detail?.task?.aria2_gid || task.aria2_gid || ''
@@ -2695,11 +2704,33 @@ export default function App() {
                 </Button>
               </Space>
             </Card>
-            <Card size="small" title={t('runtimeStatus')} loading={detailLoading}>
+            <Card
+              size="small"
+              title={t('runtimeStatus')}
+              loading={detailLoading}
+              extra={
+                <Button
+                  size="small"
+                  onClick={async () => {
+                    if (!detailTask) return
+                    await onOpenTaskDetail(detailTask)
+                  }}
+                >
+                  {t('refresh')}
+                </Button>
+              }
+            >
               {detailBtSummary && (
                 <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
                   {detailBtSummary}
                 </Typography.Text>
+              )}
+              {detailTrackers.length > 0 && (
+                <Space wrap style={{ marginBottom: 8 }}>
+                  {detailTrackers.map((tracker, idx) => (
+                    <Tag key={`${tracker}-${idx}`}>{tracker}</Tag>
+                  ))}
+                </Space>
               )}
               <Input.TextArea
                 value={detailRuntimeText || t('noRuntimeStatus')}
