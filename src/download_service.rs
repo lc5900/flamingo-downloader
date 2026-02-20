@@ -601,6 +601,55 @@ impl DownloadService {
         Ok(())
     }
 
+    pub async fn set_task_runtime_options(
+        &self,
+        task_id: &str,
+        options: Value,
+    ) -> Result<()> {
+        self.ensure_aria2_ready().await?;
+        let task = self
+            .db
+            .get_task(task_id)?
+            .ok_or_else(|| AppError::TaskNotFound(task_id.to_string()))?;
+        let gid = task
+            .aria2_gid
+            .ok_or_else(|| AppError::InvalidInput("task has no aria2 gid".to_string()))?;
+
+        let allowed = [
+            "max-download-limit",
+            "max-upload-limit",
+            "max-connection-per-server",
+            "split",
+            "seed-ratio",
+            "seed-time",
+        ];
+        let mut sanitized = serde_json::Map::new();
+        if let Some(map) = options.as_object() {
+            for (key, value) in map {
+                if !allowed.contains(&key.as_str()) {
+                    continue;
+                }
+                if value.is_null() {
+                    continue;
+                }
+                let normalized = match value {
+                    Value::String(s) => Value::String(s.trim().to_string()),
+                    Value::Number(n) => Value::String(n.to_string()),
+                    Value::Bool(b) => Value::String(if *b { "true" } else { "false" }.to_string()),
+                    _ => continue,
+                };
+                sanitized.insert(key.clone(), normalized);
+            }
+        }
+        if sanitized.is_empty() {
+            return Err(anyhow!("no valid runtime options provided"));
+        }
+
+        self.aria2.change_option(&gid, Value::Object(sanitized)).await?;
+        self.push_log("set_task_runtime_options", format!("updated task {task_id} runtime options"));
+        Ok(())
+    }
+
     pub async fn set_global_settings(&self, settings: GlobalSettings) -> Result<()> {
         let manual_path = settings
             .aria2_bin_path

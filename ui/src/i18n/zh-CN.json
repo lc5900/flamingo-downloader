@@ -212,6 +212,7 @@
   "clipboardDetectedTitle": "检测到下载链接",
   "clipboardDetectedUse": "是否使用该链接创建新任务？",
   "rulesTitle": "下载目录规则",
+  "taskOptions": "任务运行参数",
   "categoryRulesTitle": "分类自动打标规则",
   "categoryName": "分类名称",
   "importExport": "导入 / 导出",

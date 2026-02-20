@@ -273,6 +273,14 @@ export default function App() {
   const [detailCategoryInput, setDetailCategoryInput] = useState('')
   const [detailFiles, setDetailFiles] = useState<TaskFile[]>([])
   const [detailRuntimeText, setDetailRuntimeText] = useState('')
+  const [detailRuntimeOptions, setDetailRuntimeOptions] = useState({
+    maxDownloadLimit: '',
+    maxUploadLimit: '',
+    maxConnectionPerServer: '',
+    split: '',
+    seedRatio: '',
+    seedTime: '',
+  })
   const [detailBtSummary, setDetailBtSummary] = useState('')
   const [detailRetryLogs, setDetailRetryLogs] = useState<OperationLog[]>([])
   const [dragHover, setDragHover] = useState(false)
@@ -1023,6 +1031,14 @@ export default function App() {
     setDetailCategoryInput(String(task.category || ''))
     setDetailFiles([])
     setDetailRuntimeText('')
+    setDetailRuntimeOptions({
+      maxDownloadLimit: '',
+      maxUploadLimit: '',
+      maxConnectionPerServer: '',
+      split: '',
+      seedRatio: '',
+      seedTime: '',
+    })
     setDetailBtSummary('')
     setDetailRetryLogs([])
     try {
@@ -1081,6 +1097,34 @@ export default function App() {
       setDetailTask((prev) => (prev ? { ...prev, category: value || null } : prev))
       await refresh()
       msg.success(t('settingsSaved'))
+    } catch (err) {
+      msg.error(parseErr(err))
+    }
+  }
+
+  const onApplyTaskRuntimeOptions = async () => {
+    if (!detailTask?.id) return
+    try {
+      const payload: Record<string, string> = {}
+      const pushIfNotEmpty = (key: string, value: string) => {
+        const trimmed = String(value || '').trim()
+        if (!trimmed) return
+        payload[key] = trimmed
+      }
+      pushIfNotEmpty('max-download-limit', detailRuntimeOptions.maxDownloadLimit)
+      pushIfNotEmpty('max-upload-limit', detailRuntimeOptions.maxUploadLimit)
+      pushIfNotEmpty('max-connection-per-server', detailRuntimeOptions.maxConnectionPerServer)
+      pushIfNotEmpty('split', detailRuntimeOptions.split)
+      pushIfNotEmpty('seed-ratio', detailRuntimeOptions.seedRatio)
+      pushIfNotEmpty('seed-time', detailRuntimeOptions.seedTime)
+
+      await api.call('set_task_runtime_options', {
+        taskId: detailTask.id,
+        options: payload,
+      })
+      msg.success(t('settingsSaved'))
+      await onOpenTaskDetail(detailTask)
+      await refresh()
     } catch (err) {
       msg.error(parseErr(err))
     }
@@ -2565,6 +2609,65 @@ export default function App() {
                     </Typography.Text>
                   ))
                 )}
+              </Space>
+            </Card>
+            <Card size="small" title={t('taskOptions')}>
+              <Space direction="vertical" style={{ width: '100%' }} size={10}>
+                <div className="grid-2">
+                  <Form.Item label={t('maxDownloadLimit')} style={{ marginBottom: 8 }}>
+                    <Input
+                      placeholder="0 / 2M / 10M"
+                      value={detailRuntimeOptions.maxDownloadLimit}
+                      onChange={(e) =>
+                        setDetailRuntimeOptions((prev) => ({ ...prev, maxDownloadLimit: e.target.value }))
+                      }
+                    />
+                  </Form.Item>
+                  <Form.Item label={t('taskMaxUploadLimit')} style={{ marginBottom: 8 }}>
+                    <Input
+                      placeholder="0 / 1M / 5M"
+                      value={detailRuntimeOptions.maxUploadLimit}
+                      onChange={(e) =>
+                        setDetailRuntimeOptions((prev) => ({ ...prev, maxUploadLimit: e.target.value }))
+                      }
+                    />
+                  </Form.Item>
+                  <Form.Item label={t('taskMaxConn')} style={{ marginBottom: 8 }}>
+                    <Input
+                      value={detailRuntimeOptions.maxConnectionPerServer}
+                      onChange={(e) =>
+                        setDetailRuntimeOptions((prev) => ({ ...prev, maxConnectionPerServer: e.target.value }))
+                      }
+                    />
+                  </Form.Item>
+                  <Form.Item label={t('taskSplit')} style={{ marginBottom: 8 }}>
+                    <Input
+                      value={detailRuntimeOptions.split}
+                      onChange={(e) =>
+                        setDetailRuntimeOptions((prev) => ({ ...prev, split: e.target.value }))
+                      }
+                    />
+                  </Form.Item>
+                  <Form.Item label={t('seedRatio')} style={{ marginBottom: 8 }}>
+                    <Input
+                      value={detailRuntimeOptions.seedRatio}
+                      onChange={(e) =>
+                        setDetailRuntimeOptions((prev) => ({ ...prev, seedRatio: e.target.value }))
+                      }
+                    />
+                  </Form.Item>
+                  <Form.Item label={t('seedTime')} style={{ marginBottom: 8 }}>
+                    <Input
+                      value={detailRuntimeOptions.seedTime}
+                      onChange={(e) =>
+                        setDetailRuntimeOptions((prev) => ({ ...prev, seedTime: e.target.value }))
+                      }
+                    />
+                  </Form.Item>
+                </div>
+                <Button type="primary" onClick={onApplyTaskRuntimeOptions}>
+                  {t('save')}
+                </Button>
               </Space>
             </Card>
             <Card size="small" title={t('runtimeStatus')} loading={detailLoading}>

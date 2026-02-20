@@ -393,6 +393,19 @@ async fn set_task_file_selection(
 }
 
 #[tauri::command]
+async fn set_task_runtime_options(
+    state: State<'_, AppState>,
+    task_id: String,
+    options: serde_json::Value,
+) -> Result<(), String> {
+    state
+        .service
+        .set_task_runtime_options(&task_id, options)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn set_global_settings(
     state: State<'_, AppState>,
     settings: GlobalSettings,
@@ -894,6 +907,7 @@ fn main() {
             get_task_detail,
             get_task_runtime_status,
             set_task_file_selection,
+            set_task_runtime_options,
             set_global_settings,
             get_global_settings,
             reset_global_settings_to_defaults,

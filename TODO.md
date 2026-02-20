@@ -195,7 +195,7 @@
 ### P1 - Download UX
 
 - [x] Detect duplicate tasks (same URL/magnet/infohash) and prompt: open existing / create new anyway
-- [ ] Add a per-task “edit options” flow for supported aria2 options (limits, headers, seeding stop rules)
+- [x] Add a per-task “edit options” flow for supported aria2 options (limits, headers, seeding stop rules)
 - [ ] Show a compact header summary (total download speed, active count, free disk space of current save dir)
 
 ### P1 - BT Improvements

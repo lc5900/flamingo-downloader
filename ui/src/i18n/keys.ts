@@ -240,6 +240,7 @@ export const I18N_KEYS = [
   "taskIdLabel",
   "taskMaxConn",
   "taskMaxUploadLimit",
+  "taskOptions",
   "taskPresets",
   "taskSplit",
   "themeDark",

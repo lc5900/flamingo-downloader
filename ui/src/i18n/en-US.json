@@ -212,6 +212,7 @@
   "clipboardDetectedTitle": "Clipboard download link detected",
   "clipboardDetectedUse": "Use this link to create a new task?",
   "rulesTitle": "Download Directory Rules",
+  "taskOptions": "Task Runtime Options",
   "categoryRulesTitle": "Category Auto-tag Rules",
   "categoryName": "Category",
   "importExport": "Import / Export",
