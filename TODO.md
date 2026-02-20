@@ -201,7 +201,7 @@
 ### P1 - BT Improvements
 
 - [x] Task detail: show tracker list and peer summary (refresh button)
-- [ ] File selection: show BT file tree (folders) with select all/none and “invert selection”
+- [x] File selection: show BT file tree (folders) with select all/none and “invert selection”
 
 ### P1 - Browser Integration
 

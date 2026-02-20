@@ -2,7 +2,6 @@ import {
   App as AntApp,
   Button,
   Card,
-  Checkbox,
   Collapse,
   ConfigProvider,
   Divider,
@@ -24,6 +23,7 @@ import {
   Table,
   Tabs,
   Tag,
+  Tree,
   Descriptions,
   Typography,
   Upload,
@@ -1173,6 +1173,65 @@ export default function App() {
     } catch (err) {
       msg.error(parseErr(err))
     }
+  }
+
+  const fileSelectTreeData = useMemo(() => {
+    type TreeNode = { title: string; key: string; children?: TreeNode[] }
+    const rootChildren: TreeNode[] = []
+    const folderMap = new Map<string, TreeNode>()
+
+    const ensureFolder = (parts: string[]) => {
+      let currentPath = ''
+      let siblings = rootChildren
+      for (const part of parts) {
+        currentPath = currentPath ? `${currentPath}/${part}` : part
+        let node = folderMap.get(currentPath)
+        if (!node) {
+          node = { title: part, key: `d:${currentPath}`, children: [] }
+          folderMap.set(currentPath, node)
+          siblings.push(node)
+        }
+        siblings = node.children || []
+      }
+      return siblings
+    }
+
+    fileSelectRows.forEach((file, idx) => {
+      const rawPath = String(file.path || '').replace(/\\/g, '/')
+      const parts = rawPath.split('/').filter(Boolean)
+      const fileName = parts.length > 0 ? parts[parts.length - 1] : `file-${idx + 1}`
+      const folderParts = parts.slice(0, -1)
+      const siblings = ensureFolder(folderParts)
+      siblings.push({
+        title: `${fileName} (${fmtBytes(file.length)})`,
+        key: `f:${idx}`,
+      })
+    })
+
+    return rootChildren
+  }, [fileSelectRows])
+  const allFileIndexes = useMemo(() => fileSelectRows.map((_, idx) => idx), [fileSelectRows])
+  const checkedFileTreeKeys = useMemo(
+    () => selectedFileIndexes.map((idx) => `f:${idx}`),
+    [selectedFileIndexes],
+  )
+  const onFileTreeCheck = (checkedKeys: React.Key[] | { checked: React.Key[] }) => {
+    const keys = Array.isArray(checkedKeys) ? checkedKeys : checkedKeys.checked
+    const indexes = keys
+      .map((key) => String(key))
+      .filter((key) => key.startsWith('f:'))
+      .map((key) => Number.parseInt(key.slice(2), 10))
+      .filter((value) => Number.isFinite(value) && value >= 0)
+      .sort((a, b) => a - b)
+    setSelectedFileIndexes(indexes)
+  }
+  const onFileSelectAll = () => setSelectedFileIndexes(allFileIndexes)
+  const onFileSelectNone = () => setSelectedFileIndexes([])
+  const onFileSelectInvert = () => {
+    setSelectedFileIndexes((prev) => {
+      const selected = new Set(prev)
+      return allFileIndexes.filter((idx) => !selected.has(idx))
+    })
   }
 
   const onDropToAdd = async (e: React.DragEvent<HTMLElement>) => {
@@ -3273,20 +3332,22 @@ export default function App() {
         >
           <div style={{ maxHeight: '50vh', overflow: 'auto' }}>
             <Space direction="vertical" style={{ width: '100%' }}>
-              {fileSelectRows.map((f, idx) => (
-                <Checkbox
-                  key={`${idx}-${f.path}`}
-                  checked={selectedFileIndexes.includes(idx)}
-                  onChange={(e) => {
-                    const checked = e.target.checked
-                    setSelectedFileIndexes((prev) =>
-                      checked ? [...prev, idx] : prev.filter((x) => x !== idx),
-                    )
-                  }}
-                >
-                  {f.path} ({fmtBytes(f.length)})
-                </Checkbox>
-              ))}
+              <Space wrap size={8}>
+                <Button size="small" onClick={onFileSelectAll}>{t('selectAll')}</Button>
+                <Button size="small" onClick={onFileSelectNone}>{t('selectNone')}</Button>
+                <Button size="small" onClick={onFileSelectInvert}>{t('invertSelection')}</Button>
+                <Typography.Text type="secondary">
+                  {t('selectedCount')}: {selectedFileIndexes.length} / {fileSelectRows.length}
+                </Typography.Text>
+              </Space>
+              <Tree
+                checkable
+                defaultExpandAll
+                selectable={false}
+                checkedKeys={checkedFileTreeKeys}
+                onCheck={onFileTreeCheck}
+                treeData={fileSelectTreeData}
+              />
             </Space>
           </div>
         </Modal>
