@@ -347,6 +347,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -436,9 +438,27 @@ jobs:
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME:-${GITHUB_REF##*/}}"
+
+          git fetch --tags --force >/dev/null 2>&1 || true
+
+          previous_tag="$(git tag --sort=-version:refname | grep -v "^${tag}$" | head -n 1 || true)"
+          if [ -n "${previous_tag}" ]; then
+            commit_range="${previous_tag}..${tag}"
+          else
+            commit_range="${tag}"
+          fi
+
+          changelog="$(git log --no-merges --pretty='- %s (%h)' ${commit_range} | head -n 20 || true)"
+          if [ -z "${changelog}" ]; then
+            changelog="- Maintenance updates."
+          fi
+
           cp .github/RELEASE_TEMPLATE.md release-notes.md
           sed -i "s/__VERSION__/${tag}/g" release-notes.md
           {
+            echo ""
+            echo "## Changelog"
+            echo "${changelog}"
             echo ""
             echo "## Artifacts"
             find release-assets-flat -maxdepth 1 -type f \
