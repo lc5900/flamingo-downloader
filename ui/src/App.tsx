@@ -1004,7 +1004,9 @@ export default function App() {
     })
     try {
       await suggestAndSetSaveDir('http', null)
-    } catch {}
+    } catch {
+      setAddMatchedRule(null)
+    }
   }
 
   const openAddFromDetected = async (inferred: { kind: 'url' | 'magnet'; value: string }) => {
@@ -1014,13 +1016,17 @@ export default function App() {
       addForm.setFieldValue('magnet', inferred.value)
       try {
         await suggestAndSetSaveDir('magnet', inferred.value)
-      } catch {}
+      } catch {
+        setAddMatchedRule(null)
+      }
     } else {
       setAddType('url')
       addForm.setFieldValue('url', inferred.value)
       try {
         await suggestAndSetSaveDir('http', inferred.value)
-      } catch {}
+      } catch {
+        setAddMatchedRule(null)
+      }
     }
   }
 
@@ -1036,7 +1042,9 @@ export default function App() {
         setAddTorrentFile(file)
         try {
           await suggestAndSetSaveDir('torrent', file.name)
-        } catch {}
+        } catch {
+          setAddMatchedRule(null)
+        }
       }
       return
     }
@@ -1584,7 +1592,7 @@ export default function App() {
           },
         }))
       },
-    [section],
+    [section, setTableLayouts],
   )
 
   const setLayoutDensity = (density: TableDensity) => {
@@ -2187,7 +2195,9 @@ export default function App() {
                     onChange={async (e) => {
                       try {
                         await suggestAndSetSaveDir('http', e.target.value || null)
-                      } catch {}
+                      } catch {
+                        setAddMatchedRule(null)
+                      }
                     }}
                   />
                 </Form.Item>
@@ -2211,7 +2221,9 @@ export default function App() {
                     onChange={async (e) => {
                       try {
                         await suggestAndSetSaveDir('magnet', e.target.value || null)
-                      } catch {}
+                      } catch {
+                        setAddMatchedRule(null)
+                      }
                     }}
                   />
                 </Form.Item>
@@ -2223,7 +2235,9 @@ export default function App() {
                     beforeUpload={(file) => {
                       setAddTorrentFile(file as File)
                       suggestAndSetSaveDir('torrent', file.name)
-                        .catch(() => {})
+                        .catch(() => {
+                          setAddMatchedRule(null)
+                        })
                       return false
                     }}
                     onRemove={() => {

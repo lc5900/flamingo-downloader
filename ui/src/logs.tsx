@@ -22,7 +22,7 @@ function parseErr(err: unknown): string {
   return String((err as Error)?.message || err)
 }
 
-function LogsApp() {
+export default function LogsApp() {
   const [msg, msgCtx] = message.useMessage()
   const [rows, setRows] = useState<OperationLog[]>([])
   const [loading, setLoading] = useState(false)
