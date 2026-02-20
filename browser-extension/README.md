@@ -43,6 +43,25 @@ Open extension options and set:
 - Context menu: right click a link -> `Download with Flamingo`.
 - Native messaging mode (optional): when enabled, extension can send requests via browser native host instead of local HTTP bridge.
 
+## 5) Native messaging host install (recommended)
+
+Use the provided installers in `browser-extension/native-host/` to register host:
+- host name: `com.lc5900.flamingo.bridge`
+- docs: `browser-extension/native-host/README.md`
+
+Quick commands:
+
+```bash
+cd browser-extension/native-host
+./install-host-macos.sh <chromium_extension_id> [firefox_extension_id] [endpoint] [token]
+./install-host-linux.sh <chromium_extension_id> [firefox_extension_id] [endpoint] [token]
+```
+
+```powershell
+cd browser-extension\native-host
+.\install-host-windows.ps1 -ChromiumExtensionId <extension_id> -FirefoxExtensionId flamingo-downloader@lc5900 -Endpoint http://127.0.0.1:16789/add -Token YOUR_TOKEN
+```
+
 ## Build notes
 
 - Chromium uses `manifest.json` (MV3 service worker).
