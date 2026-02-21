@@ -1,11 +1,12 @@
 use std::{
+    collections::VecDeque,
     collections::HashMap,
     collections::HashSet,
     fs,
     fs::File,
     io::{Cursor, Read},
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -15,6 +16,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::{Datelike, Local, Timelike};
 use serde_json::{Value, json};
 use tokio::{sync::Mutex as AsyncMutex, time};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use uuid::Uuid;
 use zip::write::SimpleFileOptions;
 
@@ -155,11 +157,12 @@ impl DownloadService {
                 normalized_referer.clone(),
                 user_agent.clone(),
                 normalized_headers.clone(),
-            )?;
+            )
+            .await?;
             return Ok(json!({
                 "ok": true,
                 "mode": "ffmpeg_merge",
-                "job_id": output.0,
+                "task_id": output.0,
                 "output_path": output.1
             }));
         }
@@ -179,7 +182,7 @@ impl DownloadService {
         Ok(json!({ "ok": true, "mode": "aria2", "task_id": task_id }))
     }
 
-    fn spawn_ffmpeg_merge(
+    async fn spawn_ffmpeg_merge(
         &self,
         url: &str,
         save_dir: Option<String>,
@@ -202,16 +205,54 @@ impl DownloadService {
         fs::create_dir_all(&target_dir)?;
         let output_name = stream_output_filename(url);
         let output_path = Path::new(&target_dir).join(output_name);
-        let mut cmd = Command::new(&ffmpeg_bin);
+        let task_id = Uuid::new_v4().to_string();
+        let now = now_ts();
+        let task = Task {
+            id: task_id.clone(),
+            aria2_gid: None,
+            task_type: TaskType::Http,
+            source: url.to_string(),
+            status: TaskStatus::Active,
+            name: output_path
+                .file_name()
+                .map(|v| v.to_string_lossy().to_string()),
+            category: self.resolve_category_for_new_task(TaskType::Http, url, None)?,
+            save_dir: target_dir.clone(),
+            total_length: 1,
+            completed_length: 0,
+            download_speed: 0,
+            upload_speed: 0,
+            connections: 0,
+            error_code: None,
+            error_message: None,
+            created_at: now,
+            updated_at: now,
+        };
+        self.db.upsert_task(&task)?;
+        let initial_files = vec![TaskFile {
+            task_id: task_id.clone(),
+            path: output_path.to_string_lossy().to_string(),
+            length: 0,
+            completed_length: 0,
+            selected: true,
+        }];
+        let _ = self.db.replace_task_files(&task_id, &initial_files);
+
+        let mut cmd = tokio::process::Command::new(&ffmpeg_bin);
         cmd.arg("-y")
             .arg("-nostdin")
             .arg("-loglevel")
-            .arg("error")
+            .arg("warning")
+            .arg("-progress")
+            .arg("pipe:2")
+            .arg("-nostats")
             .arg("-i")
             .arg(url)
             .arg("-c")
             .arg("copy")
-            .arg(&output_path);
+            .arg(&output_path)
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped());
         if let Some(v) = user_agent
             .as_deref()
             .map(str::trim)
@@ -232,19 +273,129 @@ impl DownloadService {
             merged.push_str("\r\n");
             cmd.arg("-headers").arg(merged);
         }
-        match cmd.spawn() {
-            Ok(_child) => {
-                let job_id = Uuid::new_v4().to_string();
-                self.push_log(
-                    "ffmpeg_merge_spawned",
-                    format!("job_id={job_id} output={}", output_path.display()),
-                );
-                Ok((job_id, output_path.to_string_lossy().to_string()))
+        let mut child = cmd.spawn().map_err(|e| {
+            anyhow!("ffmpeg merge start failed: {e}. check ffmpeg_bin_path setting")
+        })?;
+
+        self.push_log(
+            "ffmpeg_merge_spawned",
+            format!("task_id={} output={}", task_id, output_path.display()),
+        );
+
+        let db = self.db.clone();
+        let emitter = self.emitter.clone();
+        let task_id_bg = task_id.clone();
+        let output_path_bg = output_path.clone();
+        tokio::spawn(async move {
+            let mut stderr_tail: VecDeque<String> = VecDeque::with_capacity(24);
+            let mut progress_tick: i64 = 0;
+            if let Some(stderr) = child.stderr.take() {
+                let mut lines = BufReader::new(stderr).lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    let line = line.trim().to_string();
+                    if line.is_empty() {
+                        continue;
+                    }
+                    if line == "progress=continue" {
+                        progress_tick += 1;
+                        if let Ok(Some(mut t)) = db.get_task(&task_id_bg) {
+                            t.updated_at = now_ts();
+                            t.completed_length = progress_tick.max(t.completed_length);
+                            let _ = db.upsert_task(&t);
+                            let _ = emitter.emit_task_update(&[t]);
+                        }
+                        continue;
+                    }
+                    if stderr_tail.len() >= 20 {
+                        stderr_tail.pop_front();
+                    }
+                    stderr_tail.push_back(line);
+                }
             }
-            Err(e) => Err(anyhow!(
-                "ffmpeg merge start failed: {e}. check ffmpeg_bin_path setting"
-            )),
-        }
+
+            let final_status = child.wait().await;
+            match final_status {
+                Ok(exit) if exit.success() => {
+                    if let Ok(Some(mut t)) = db.get_task(&task_id_bg) {
+                        t.status = TaskStatus::Completed;
+                        t.completed_length = t.total_length.max(1);
+                        t.error_code = None;
+                        t.error_message = None;
+                        t.updated_at = now_ts();
+                        let _ = db.upsert_task(&t);
+                        let final_files = vec![TaskFile {
+                            task_id: task_id_bg.clone(),
+                            path: output_path_bg.to_string_lossy().to_string(),
+                            length: 1,
+                            completed_length: 1,
+                            selected: true,
+                        }];
+                        let _ = db.replace_task_files(&task_id_bg, &final_files);
+                        let _ = db.append_operation_logs(&[OperationLog {
+                            ts: now_ts(),
+                            action: "ffmpeg_merge_done".to_string(),
+                            message: format!(
+                                "task={} output={}",
+                                task_id_bg,
+                                output_path_bg.display()
+                            ),
+                        }]);
+                        let _ = emitter.emit_task_update(&[t]);
+                    }
+                }
+                Ok(exit) => {
+                    if let Ok(Some(mut t)) = db.get_task(&task_id_bg) {
+                        let detail = stderr_tail
+                            .iter()
+                            .rev()
+                            .take(4)
+                            .cloned()
+                            .collect::<Vec<_>>()
+                            .into_iter()
+                            .rev()
+                            .collect::<Vec<_>>()
+                            .join(" | ");
+                        t.status = TaskStatus::Error;
+                        t.error_code = Some(format!("FFMPEG_EXIT_{}", exit.code().unwrap_or(-1)));
+                        t.error_message = Some(if detail.is_empty() {
+                            "ffmpeg merge failed with unknown error".to_string()
+                        } else {
+                            detail
+                        });
+                        t.updated_at = now_ts();
+                        let _ = db.upsert_task(&t);
+                        let _ = db.append_operation_logs(&[OperationLog {
+                            ts: now_ts(),
+                            action: "ffmpeg_merge_failed".to_string(),
+                            message: format!(
+                                "task={} exit={:?} err={}",
+                                task_id_bg,
+                                exit.code(),
+                                t.error_message.clone().unwrap_or_default()
+                            ),
+                        }]);
+                        let _ = emitter.emit_task_update(&[t]);
+                    }
+                }
+                Err(e) => {
+                    if let Ok(Some(mut t)) = db.get_task(&task_id_bg) {
+                        t.status = TaskStatus::Error;
+                        t.error_code = Some("FFMPEG_WAIT_ERROR".to_string());
+                        t.error_message = Some(format!("ffmpeg wait failed: {e}"));
+                        t.updated_at = now_ts();
+                        let _ = db.upsert_task(&t);
+                        let _ = db.append_operation_logs(&[OperationLog {
+                            ts: now_ts(),
+                            action: "ffmpeg_merge_wait_failed".to_string(),
+                            message: format!("task={} error={e}", task_id_bg),
+                        }]);
+                        let _ = emitter.emit_task_update(&[t]);
+                    }
+                }
+            }
+        });
+
+        Ok((task_id, output_path.to_string_lossy().to_string()))
     }
 
     pub async fn add_magnet(&self, magnet: &str, options: AddTaskOptions) -> Result<String> {
