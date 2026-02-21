@@ -756,20 +756,14 @@ impl DownloadService {
                 message: "browser bridge is disabled".to_string(),
             });
         }
-        if token.is_empty() {
-            return Ok(BrowserBridgeStatus {
-                enabled,
-                endpoint,
-                token_set: false,
-                connected: false,
-                message: "bridge token is empty".to_string(),
-            });
-        }
-
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(2))
             .build()?;
-        let result = client.get(&endpoint).header("X-Token", token).send().await;
+        let mut req = client.get(&endpoint);
+        if !token.is_empty() {
+            req = req.header("X-Token", token.clone());
+        }
+        let result = req.send().await;
         match result {
             Ok(resp) if resp.status().is_success() => {
                 let body = resp.text().await.unwrap_or_default();
@@ -777,7 +771,7 @@ impl DownloadService {
                     Ok(BrowserBridgeStatus {
                         enabled,
                         endpoint,
-                        token_set: true,
+                        token_set: !token.is_empty(),
                         connected: true,
                         message: "bridge is healthy".to_string(),
                     })
@@ -785,7 +779,7 @@ impl DownloadService {
                     Ok(BrowserBridgeStatus {
                         enabled,
                         endpoint,
-                        token_set: true,
+                        token_set: !token.is_empty(),
                         connected: false,
                         message: "bridge responded but payload is unexpected".to_string(),
                     })
@@ -794,14 +788,14 @@ impl DownloadService {
             Ok(resp) => Ok(BrowserBridgeStatus {
                 enabled,
                 endpoint,
-                token_set: true,
+                token_set: !token.is_empty(),
                 connected: false,
                 message: format!("bridge unhealthy: HTTP {}", resp.status()),
             }),
             Err(e) => Ok(BrowserBridgeStatus {
                 enabled,
                 endpoint,
-                token_set: true,
+                token_set: !token.is_empty(),
                 connected: false,
                 message: format!("bridge request failed: {e}"),
             }),

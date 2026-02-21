@@ -157,13 +157,15 @@ async function sendToFlamingo(url, saveDir = null) {
     }
   }
 
-  if (!cfg.token) return { ok: false, skipped: true, reason: "bridge_token_missing" };
+  const headers = {
+    "Content-Type": "application/json",
+  };
+  if (cfg.token) {
+    headers["X-Token"] = cfg.token;
+  }
   const resp = await fetch(cfg.endpoint, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Token": cfg.token,
-    },
+    headers,
     body: JSON.stringify(body),
   });
   if (!resp.ok) {

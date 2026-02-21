@@ -118,7 +118,8 @@ async fn handle_connection(
         .and_then(|s| s.browser_bridge_allowed_origins.clone())
         .unwrap_or_default();
     let ext_origin = is_extension_origin(&origin);
-    if !origin_allowed(&origin, &allowed_origins) {
+    let relax_origin_check = origin.is_empty() && (path == "/add" || path == "/health");
+    if !relax_origin_check && !origin_allowed(&origin, &allowed_origins) {
         service.append_operation_log(
             "bridge_activity",
             format!("forbidden_origin path={path} origin={origin} ua={user_agent}"),

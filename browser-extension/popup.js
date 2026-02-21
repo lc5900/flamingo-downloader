@@ -71,7 +71,10 @@ async function loadCandidates() {
       try {
         const response = await ask('send_media_candidate', { url: target });
         if (!response?.ok) throw new Error(String(response?.error || response?.reason || 'send failed'));
-        el.status.textContent = `Sent: ${target.slice(0, 80)}`;
+        const taskId = String(response?.task_id || '');
+        el.status.textContent = taskId
+          ? `Sent task: ${taskId}`
+          : `Sent: ${target.slice(0, 80)}`;
       } catch (e) {
         el.status.textContent = String(e?.message || e);
       }

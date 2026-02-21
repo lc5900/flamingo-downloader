@@ -41,7 +41,7 @@ Run Flamingo first. In Settings, check:
 
 Open extension options and set (optional/advanced):
 - Endpoint: `http://127.0.0.1:16789/add`
-- Token: paste from Flamingo settings
+- Token: optional (for strict mode; default extension-origin mode can keep it empty)
 - Enable Flamingo bridge: on
 - Auto-intercept downloads: on/off (optional)
 - Enable media sniffing (experimental): on/off
