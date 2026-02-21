@@ -128,7 +128,13 @@ async function loadCandidates() {
       const target = decodeURIComponent(String(btn.getAttribute('data-url') || ''));
       try {
         const response = await ask('send_media_candidate', { url: target });
-        if (!response?.ok) throw new Error(String(response?.error || response?.reason || 'send failed'));
+        if (!response?.ok) {
+          throw new Error(
+            response?.reason
+              ? `${String(response.reason)}: ${String(response?.error || 'send failed')}`
+              : String(response?.error || 'send failed'),
+          );
+        }
         const taskId = String(response?.task_id || '');
         showStatus(taskId
           ? `Sent task: ${taskId}`

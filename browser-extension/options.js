@@ -125,7 +125,11 @@ function fmtTime(ts) {
 async function sendMedia(url) {
   const response = await ext.runtime.sendMessage({ action: 'send_media_candidate', url });
   if (!response?.ok) {
-    throw new Error(String(response?.error || response?.reason || 'send failed'));
+    throw new Error(
+      response?.reason
+        ? `${String(response.reason)}: ${String(response?.error || 'send failed')}`
+        : String(response?.error || 'send failed'),
+    );
   }
   const taskId = String(response?.task_id || '');
   showStatus(

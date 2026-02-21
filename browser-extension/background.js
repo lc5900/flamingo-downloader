@@ -87,6 +87,29 @@ function detectMediaReason(url, contentType) {
   return "";
 }
 
+function diagnoseBridgeError(message) {
+  const text = String(message || "").toLowerCase();
+  if (text.includes("forbidden origin") || text.includes("cors")) {
+    return "cors_or_origin_blocked";
+  }
+  if (text.includes("401") || text.includes("unauthorized") || text.includes("auth")) {
+    return "auth_required_or_token_invalid";
+  }
+  if (text.includes("403")) {
+    return "access_forbidden";
+  }
+  if (text.includes("404")) {
+    return "resource_not_found_or_expired";
+  }
+  if (text.includes("timed out") || text.includes("timeout")) {
+    return "request_timeout";
+  }
+  if (text.includes("ffmpeg")) {
+    return "ffmpeg_unavailable";
+  }
+  return "unknown_failure";
+}
+
 async function upsertMediaCandidate(item) {
   const local = await ext.storage.local.get(["mediaCandidates"]);
   const list = Array.isArray(local.mediaCandidates) ? local.mediaCandidates.slice() : [];
@@ -187,11 +210,17 @@ async function sendViaNativeMessaging(host, payload) {
 }
 
 async function sendToFlamingo(url, saveDir = null) {
+  return sendToFlamingoWithContext(url, saveDir, "", "");
+}
+
+async function sendToFlamingoWithContext(url, saveDir = null, referer = "", userAgent = "") {
   const cfg = await getConfig();
   if (!cfg.enabled) return { ok: false, skipped: true, reason: "bridge_disabled" };
 
   const body = { url };
   if (saveDir && typeof saveDir === "string") body.save_dir = saveDir;
+  if (referer && typeof referer === "string") body.referer = referer;
+  if (userAgent && typeof userAgent === "string") body.user_agent = userAgent;
 
   if (cfg.useNativeMessaging) {
     if (!cfg.nativeHost) {
@@ -218,7 +247,16 @@ async function sendToFlamingo(url, saveDir = null) {
   });
   if (!resp.ok) {
     const text = await resp.text();
-    throw new Error(`bridge request failed: ${resp.status} ${text}`.slice(0, 400));
+    let error = `bridge request failed: ${resp.status}`;
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed?.error) {
+        error = `${parsed.error}${parsed?.detail ? `: ${parsed.detail}` : ""}`;
+      }
+    } catch {
+      if (text) error = `${error} ${text}`;
+    }
+    throw new Error(error.slice(0, 600));
   }
   return resp.json();
 }
@@ -289,7 +327,10 @@ async function maybeTakeOver(downloadItem) {
     }
   } catch (e) {
     console.error("Flamingo bridge takeover failed", e);
-    await setBridgeActivity({ lastBridgeError: String(e?.message || e || "unknown error") });
+    const msg = String(e?.message || e || "unknown error");
+    await setBridgeActivity({
+      lastBridgeError: `${diagnoseBridgeError(msg)}: ${msg}`,
+    });
   }
 }
 
@@ -359,9 +400,26 @@ ext.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (action === "send_media_candidate") {
     const url = String(message?.url || "").trim();
     const saveDir = message?.saveDir ? String(message.saveDir) : null;
-    sendToFlamingo(url, saveDir)
+    ext.storage.local
+      .get(["mediaCandidates"])
+      .then((local) => {
+        const list = Array.isArray(local.mediaCandidates) ? local.mediaCandidates : [];
+        const matched = list.find((row) => String(row?.url || "") === url) || null;
+        const referer = String(matched?.pageUrl || "").trim();
+        const ua =
+          typeof navigator !== "undefined" && navigator.userAgent
+            ? String(navigator.userAgent)
+            : "";
+        return sendToFlamingoWithContext(url, saveDir, referer, ua);
+      })
       .then((result) => sendResponse(result && typeof result === "object" ? result : { ok: true }))
-      .catch((e) => sendResponse({ ok: false, error: String(e?.message || e) }));
+      .catch((e) =>
+        sendResponse({
+          ok: false,
+          error: String(e?.message || e),
+          reason: diagnoseBridgeError(String(e?.message || e)),
+        }),
+      );
     return true;
   }
   if (action === "get_quick_state") {
@@ -402,7 +460,10 @@ ext.contextMenus.onClicked.addListener(async (info) => {
     await setBridgeActivity({ lastBridgeSuccess: `context menu ok: ${targetUrl}` });
   } catch (e) {
     console.error("Flamingo context menu send failed", e);
-    await setBridgeActivity({ lastBridgeError: String(e?.message || e || "unknown error") });
+    const msg = String(e?.message || e || "unknown error");
+    await setBridgeActivity({
+      lastBridgeError: `${diagnoseBridgeError(msg)}: ${msg}`,
+    });
   }
 });
 
