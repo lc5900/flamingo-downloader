@@ -24,6 +24,28 @@
       .status { font-size: 12px; color: #334155; min-height: 18px; }
       .status.success { color: #047857; }
       .status.error { color: #b91c1c; }
+      .toast-wrap {
+        position: fixed;
+        right: 10px;
+        bottom: 10px;
+        z-index: 99999;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        pointer-events: none;
+      }
+      .toast {
+        max-width: 360px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        border: 1px solid #d1d5db;
+        background: #ffffffee;
+        font-size: 12px;
+        color: #1f2937;
+        box-shadow: 0 8px 18px #0f172a22;
+      }
+      .toast.success { border-color: #34d399; color: #065f46; }
+      .toast.error { border-color: #fca5a5; color: #991b1b; }
     </style>
   </head>
   <body>
@@ -59,6 +81,7 @@
         <span class="hint" data-i18n="popup_footer_hint">Click a video page, then reopen this popup to pick links.</span>
       </div>
     </div>
+    <div id="toastWrap" class="toast-wrap"></div>
     <script src="i18n.js"></script>
     <script src="popup.js"></script>
   </body>

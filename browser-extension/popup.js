@@ -15,6 +15,7 @@ const el = {
   sniffMediaEnabled: document.getElementById('sniffMediaEnabled'),
   autoIntercept: document.getElementById('autoIntercept'),
   currentTabOnly: document.getElementById('currentTabOnly'),
+  toastWrap: document.getElementById('toastWrap'),
 };
 
 let statusTimer = null;
@@ -77,6 +78,39 @@ function showStatus(text, level = 'info') {
   }, 3800);
 }
 
+function shortenTarget(url, max = 72) {
+  const s = String(url || '').trim();
+  if (!s) return '-';
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+function formatSendFailureReason(response, err) {
+  if (response && typeof response === 'object') {
+    const reason = String(response.reason || '').trim();
+    const message = String(response.error || '').trim();
+    if (reason && message) return `${reason}: ${message}`;
+    if (reason) return reason;
+    if (message) return message;
+  }
+  return String(err?.message || err || 'send failed');
+}
+
+function showToast(text, level = 'info') {
+  if (!el.toastWrap) return;
+  const node = document.createElement('div');
+  node.className = `toast ${level === 'success' ? 'success' : level === 'error' ? 'error' : ''}`.trim();
+  node.textContent = String(text || '');
+  el.toastWrap.appendChild(node);
+  if (el.toastWrap.childElementCount > 5) {
+    el.toastWrap.removeChild(el.toastWrap.firstElementChild);
+  }
+  setTimeout(() => {
+    if (node.parentElement) {
+      node.parentElement.removeChild(node);
+    }
+  }, 3200);
+}
+
 async function loadQuickState() {
   const response = await ask('get_quick_state');
   if (!response?.ok) throw new Error(String(response?.error || 'state unavailable'));
@@ -131,13 +165,23 @@ async function loadCandidates() {
       try {
         const response = await ask('send_media_candidate', { url: target });
         if (!response?.ok) {
-          throw new Error(
-            response?.reason
-              ? `${String(response.reason)}: ${String(response?.error || 'send failed')}`
-              : String(response?.error || 'send failed'),
+          const reason = formatSendFailureReason(response, null);
+          showToast(
+            t('popup_toast_send_failed', {
+              target: shortenTarget(target),
+              reason,
+            }),
+            'error',
           );
+          throw new Error(reason);
         }
         const taskId = String(response?.task_id || '');
+        showToast(
+          taskId
+            ? t('popup_toast_sent_task', { taskId, target: shortenTarget(target) })
+            : t('popup_toast_sent', { target: shortenTarget(target) }),
+          'success',
+        );
         showStatus(taskId
           ? t('popup_status_sent_task', { taskId })
           : t('popup_status_sent_short', { target: target.slice(0, 80) }), 'success');
@@ -230,9 +274,32 @@ el.sendSelected.addEventListener('click', async () => {
   for (const url of targets) {
     try {
       const response = await ask('send_media_candidate', { url });
-      if (response?.ok) okCount += 1;
-    } catch {
-      // continue
+      if (response?.ok) {
+        okCount += 1;
+        const taskId = String(response?.task_id || '');
+        showToast(
+          taskId
+            ? t('popup_toast_sent_task', { taskId, target: shortenTarget(url) })
+            : t('popup_toast_sent', { target: shortenTarget(url) }),
+          'success',
+        );
+      } else {
+        showToast(
+          t('popup_toast_send_failed', {
+            target: shortenTarget(url),
+            reason: formatSendFailureReason(response, null),
+          }),
+          'error',
+        );
+      }
+    } catch (e) {
+      showToast(
+        t('popup_toast_send_failed', {
+          target: shortenTarget(url),
+          reason: formatSendFailureReason(null, e),
+        }),
+        'error',
+      );
     }
   }
   if (okCount > 0) showStatus(t('popup_status_sent_batch', { ok: okCount, total: targets.length }), 'success');

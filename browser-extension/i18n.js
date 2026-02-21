@@ -27,6 +27,9 @@
       popup_status_batch_failed: 'Batch send failed',
       popup_status_copied_batch: 'Copied {count} URL(s)',
       popup_summary: 'Media {count} | Last {activity}',
+      popup_toast_sent: 'Sent: {target}',
+      popup_toast_sent_task: 'Sent ({taskId}) {target}',
+      popup_toast_send_failed: 'Failed: {target} | {reason}',
 
       options_title: 'Flamingo Downloader Bridge',
       options_enable_bridge: 'Enable Flamingo bridge',
@@ -87,6 +90,9 @@
       popup_status_batch_failed: '批量发送失败',
       popup_status_copied_batch: '已复制 {count} 个链接',
       popup_summary: '媒体 {count} | 最近 {activity}',
+      popup_toast_sent: '发送成功: {target}',
+      popup_toast_sent_task: '发送成功（{taskId}）{target}',
+      popup_toast_send_failed: '发送失败: {target} | {reason}',
 
       options_title: '火烈鸟下载器桥接设置',
       options_enable_bridge: '启用火烈鸟桥接',
