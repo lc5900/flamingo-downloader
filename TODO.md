@@ -230,6 +230,6 @@
 ### Phase 3 - Product Hardening
 
 - [x] Add optional HLS/DASH merge pipeline (ffmpeg-based) for `.m3u8/.mpd` links
-- [ ] Add backend endpoint validation for media jobs (normalize headers/referer when needed)
+- [x] Add backend endpoint validation for media jobs (normalize headers/referer when needed)
 - [ ] Add diagnostics for sniffer failures (CORS, expired URL, auth-required) with clear reasons
 - [ ] Add docs for DRM limitations and unsupported encrypted streams

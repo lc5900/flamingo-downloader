@@ -140,6 +140,8 @@ impl DownloadService {
         if !clean_url.starts_with("http://") && !clean_url.starts_with("https://") {
             return Err(anyhow!("unsupported url scheme for bridge add"));
         }
+        let normalized_referer = normalize_bridge_referer(referer)?;
+        let normalized_headers = normalize_bridge_headers(headers)?;
 
         let merge_enabled = self
             .db
@@ -147,8 +149,13 @@ impl DownloadService {
             .map(|v| v == "true")
             .unwrap_or(false);
         if merge_enabled && is_stream_manifest_url(clean_url) {
-            let output =
-                self.spawn_ffmpeg_merge(clean_url, save_dir, referer, user_agent, headers)?;
+            let output = self.spawn_ffmpeg_merge(
+                clean_url,
+                save_dir,
+                normalized_referer.clone(),
+                user_agent.clone(),
+                normalized_headers.clone(),
+            )?;
             return Ok(json!({
                 "ok": true,
                 "mode": "ffmpeg_merge",
@@ -162,9 +169,9 @@ impl DownloadService {
                 clean_url,
                 AddTaskOptions {
                     save_dir,
-                    referer,
+                    referer: normalized_referer,
                     user_agent,
-                    headers,
+                    headers: normalized_headers,
                     ..AddTaskOptions::default()
                 },
             )
@@ -1860,6 +1867,52 @@ fn validate_url(url: &str) -> Result<()> {
 fn is_stream_manifest_url(url: &str) -> bool {
     let lower = url.to_lowercase();
     lower.contains(".m3u8") || lower.contains(".mpd")
+}
+
+fn normalize_bridge_referer(referer: Option<String>) -> Result<Option<String>> {
+    let Some(v) = referer
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+    else {
+        return Ok(None);
+    };
+    let parsed = reqwest::Url::parse(&v).map_err(|e| anyhow!("invalid referer: {e}"))?;
+    let scheme = parsed.scheme();
+    if !matches!(scheme, "http" | "https") {
+        return Err(anyhow!("unsupported referer scheme: {scheme}"));
+    }
+    Ok(Some(v))
+}
+
+fn normalize_bridge_headers(headers: Vec<String>) -> Result<Vec<String>> {
+    let allowed = [
+        "accept",
+        "accept-language",
+        "cookie",
+        "origin",
+        "referer",
+        "user-agent",
+    ];
+    let mut out = Vec::new();
+    for line in headers {
+        let clean = line.trim();
+        if clean.is_empty() {
+            continue;
+        }
+        let Some((name, value)) = clean.split_once(':') else {
+            return Err(anyhow!("invalid header format: {clean}"));
+        };
+        let key = name.trim().to_ascii_lowercase();
+        if !allowed.contains(&key.as_str()) {
+            continue;
+        }
+        let val = value.trim();
+        if val.is_empty() {
+            continue;
+        }
+        out.push(format!("{}: {}", name.trim(), val));
+    }
+    Ok(out)
 }
 
 fn stream_output_filename(url: &str) -> String {
