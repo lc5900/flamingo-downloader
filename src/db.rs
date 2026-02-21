@@ -370,6 +370,12 @@ impl Database {
         if let Some(v) = &settings.browser_bridge_allowed_origins {
             self.set_setting("browser_bridge_allowed_origins", v)?;
         }
+        if let Some(v) = &settings.ffmpeg_bin_path {
+            self.set_setting("ffmpeg_bin_path", v)?;
+        }
+        if let Some(v) = settings.media_merge_enabled {
+            self.set_setting("media_merge_enabled", if v { "true" } else { "false" })?;
+        }
         if let Some(v) = settings.clipboard_watch_enabled {
             self.set_setting("clipboard_watch_enabled", if v { "true" } else { "false" })?;
         }
@@ -470,6 +476,14 @@ impl Database {
                 .and_then(|v| v.parse::<u16>().ok()),
             browser_bridge_token: self.get_setting("browser_bridge_token")?,
             browser_bridge_allowed_origins: self.get_setting("browser_bridge_allowed_origins")?,
+            ffmpeg_bin_path: self.get_setting("ffmpeg_bin_path")?,
+            media_merge_enabled: self.get_setting("media_merge_enabled")?.and_then(|v| {
+                match v.as_str() {
+                    "true" => Some(true),
+                    "false" => Some(false),
+                    _ => None,
+                }
+            }),
             clipboard_watch_enabled: self.get_setting("clipboard_watch_enabled")?.and_then(|v| {
                 match v.as_str() {
                     "true" => Some(true),
@@ -859,6 +873,8 @@ mod tests {
             browser_bridge_allowed_origins: Some(
                 "chrome-extension://,moz-extension://".to_string(),
             ),
+            ffmpeg_bin_path: Some("ffmpeg".to_string()),
+            media_merge_enabled: Some(true),
             clipboard_watch_enabled: Some(false),
             ui_theme: Some("dark".to_string()),
             retry_max_attempts: None,
@@ -918,6 +934,8 @@ mod tests {
             loaded.browser_bridge_allowed_origins.as_deref(),
             Some("chrome-extension://,moz-extension://")
         );
+        assert_eq!(loaded.ffmpeg_bin_path.as_deref(), Some("ffmpeg"));
+        assert_eq!(loaded.media_merge_enabled, Some(true));
         assert_eq!(loaded.ui_theme.as_deref(), Some("dark"));
 
         let _ = std::fs::remove_file(db_path);

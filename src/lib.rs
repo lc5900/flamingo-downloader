@@ -74,6 +74,8 @@ pub async fn init_backend(
         "browser_bridge_allowed_origins",
         "chrome-extension://,moz-extension://",
     )?;
+    db.set_setting_if_absent("ffmpeg_bin_path", "ffmpeg")?;
+    db.set_setting_if_absent("media_merge_enabled", "false")?;
     db.set_setting_if_absent("clipboard_watch_enabled", "false")?;
     db.set_setting_if_absent("ui_theme", "system")?;
     db.set_setting_if_absent("retry_max_attempts", "2")?;

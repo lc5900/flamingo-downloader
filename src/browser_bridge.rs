@@ -8,7 +8,7 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 
-use crate::{download_service::DownloadService, models::AddTaskOptions};
+use crate::download_service::DownloadService;
 
 #[derive(Debug, Clone)]
 pub struct BrowserBridgeConfig {
@@ -21,6 +21,9 @@ pub struct BrowserBridgeConfig {
 struct BridgeAddRequest {
     url: String,
     save_dir: Option<String>,
+    referer: Option<String>,
+    user_agent: Option<String>,
+    headers: Option<Vec<String>>,
 }
 
 pub fn start_browser_bridge(service: Arc<DownloadService>, cfg: BrowserBridgeConfig) {
@@ -170,23 +173,53 @@ async fn handle_connection(
 
     if method == "POST" && path == "/add" {
         let payload: BridgeAddRequest = serde_json::from_str(body_raw.trim())?;
-        let opts = AddTaskOptions {
-            save_dir: payload
-                .save_dir
-                .map(|v| v.trim().to_string())
-                .filter(|v| !v.is_empty()),
-            ..AddTaskOptions::default()
-        };
-        let task_id = if payload.url.starts_with("magnet:?") {
-            service.add_magnet(&payload.url, opts).await?
-        } else {
-            service.add_url(&payload.url, opts).await?
-        };
-        service.append_operation_log(
-            "bridge_activity",
-            format!("add_ok task_id={task_id} origin={origin} ua={user_agent}"),
-        );
-        return write_json(&mut stream, 200, &json!({"ok": true, "task_id": task_id})).await;
+        let url = payload.url.trim();
+        if url.is_empty() {
+            return write_json(
+                &mut stream,
+                400,
+                &json!({"ok": false, "error": "empty url"}),
+            )
+            .await;
+        }
+        let save_dir = payload
+            .save_dir
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty());
+        let referer = payload
+            .referer
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty());
+        let ua = payload
+            .user_agent
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty());
+        let headers = payload.headers.unwrap_or_default();
+        match service
+            .add_via_bridge(url, save_dir, referer, ua, headers)
+            .await
+        {
+            Ok(result) => {
+                service.append_operation_log(
+                    "bridge_activity",
+                    format!("add_ok result={} origin={origin} ua={user_agent}", result),
+                );
+                return write_json(&mut stream, 200, &result).await;
+            }
+            Err(e) => {
+                let reason = classify_bridge_error(&e.to_string());
+                service.append_operation_log(
+                    "bridge_activity",
+                    format!("add_failed reason={reason} err={e} origin={origin} ua={user_agent}"),
+                );
+                return write_json(
+                    &mut stream,
+                    400,
+                    &json!({"ok": false, "error": reason, "detail": e.to_string()}),
+                )
+                .await;
+            }
+        }
     }
 
     service.append_operation_log(
@@ -221,6 +254,23 @@ fn origin_allowed(origin: &str, allowlist_raw: &str) -> bool {
 
 fn is_extension_origin(origin: &str) -> bool {
     origin.starts_with("chrome-extension://") || origin.starts_with("moz-extension://")
+}
+
+fn classify_bridge_error(detail: &str) -> &'static str {
+    let lower = detail.to_lowercase();
+    if lower.contains("invalid url") || lower.contains("unsupported scheme") {
+        return "invalid_url";
+    }
+    if lower.contains("ffmpeg") {
+        return "ffmpeg_unavailable";
+    }
+    if lower.contains("unauthorized") {
+        return "unauthorized";
+    }
+    if lower.contains("forbidden origin") {
+        return "forbidden_origin";
+    }
+    "bridge_add_failed"
 }
 
 fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {

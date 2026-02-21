@@ -115,6 +115,131 @@ impl DownloadService {
         Ok(task_id)
     }
 
+    pub async fn add_via_bridge(
+        &self,
+        url: &str,
+        save_dir: Option<String>,
+        referer: Option<String>,
+        user_agent: Option<String>,
+        headers: Vec<String>,
+    ) -> Result<Value> {
+        let clean_url = url.trim();
+        validate_url(clean_url)?;
+        if clean_url.starts_with("magnet:?") {
+            let task_id = self
+                .add_magnet(
+                    clean_url,
+                    AddTaskOptions {
+                        save_dir,
+                        ..AddTaskOptions::default()
+                    },
+                )
+                .await?;
+            return Ok(json!({ "ok": true, "mode": "aria2", "task_id": task_id }));
+        }
+        if !clean_url.starts_with("http://") && !clean_url.starts_with("https://") {
+            return Err(anyhow!("unsupported url scheme for bridge add"));
+        }
+
+        let merge_enabled = self
+            .db
+            .get_setting("media_merge_enabled")?
+            .map(|v| v == "true")
+            .unwrap_or(false);
+        if merge_enabled && is_stream_manifest_url(clean_url) {
+            let output =
+                self.spawn_ffmpeg_merge(clean_url, save_dir, referer, user_agent, headers)?;
+            return Ok(json!({
+                "ok": true,
+                "mode": "ffmpeg_merge",
+                "job_id": output.0,
+                "output_path": output.1
+            }));
+        }
+
+        let task_id = self
+            .add_url(
+                clean_url,
+                AddTaskOptions {
+                    save_dir,
+                    referer,
+                    user_agent,
+                    headers,
+                    ..AddTaskOptions::default()
+                },
+            )
+            .await?;
+        Ok(json!({ "ok": true, "mode": "aria2", "task_id": task_id }))
+    }
+
+    fn spawn_ffmpeg_merge(
+        &self,
+        url: &str,
+        save_dir: Option<String>,
+        referer: Option<String>,
+        user_agent: Option<String>,
+        headers: Vec<String>,
+    ) -> Result<(String, String)> {
+        let ffmpeg_bin = self
+            .db
+            .get_setting("ffmpeg_bin_path")?
+            .unwrap_or_else(|| "ffmpeg".to_string());
+        let target_dir = match save_dir
+            .as_deref()
+            .map(|v| v.trim())
+            .filter(|v| !v.is_empty())
+        {
+            Some(v) => v.to_string(),
+            None => self.configured_download_dir()?,
+        };
+        fs::create_dir_all(&target_dir)?;
+        let output_name = stream_output_filename(url);
+        let output_path = Path::new(&target_dir).join(output_name);
+        let mut cmd = Command::new(&ffmpeg_bin);
+        cmd.arg("-y")
+            .arg("-nostdin")
+            .arg("-loglevel")
+            .arg("error")
+            .arg("-i")
+            .arg(url)
+            .arg("-c")
+            .arg("copy")
+            .arg(&output_path);
+        if let Some(v) = user_agent
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+        {
+            cmd.arg("-user_agent").arg(v);
+        }
+        if let Some(v) = referer.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+            cmd.arg("-referer").arg(v);
+        }
+        let cleaned_headers = headers
+            .into_iter()
+            .map(|h| h.trim().to_string())
+            .filter(|h| !h.is_empty())
+            .collect::<Vec<_>>();
+        if !cleaned_headers.is_empty() {
+            let mut merged = cleaned_headers.join("\r\n");
+            merged.push_str("\r\n");
+            cmd.arg("-headers").arg(merged);
+        }
+        match cmd.spawn() {
+            Ok(_child) => {
+                let job_id = Uuid::new_v4().to_string();
+                self.push_log(
+                    "ffmpeg_merge_spawned",
+                    format!("job_id={job_id} output={}", output_path.display()),
+                );
+                Ok((job_id, output_path.to_string_lossy().to_string()))
+            }
+            Err(e) => Err(anyhow!(
+                "ffmpeg merge start failed: {e}. check ffmpeg_bin_path setting"
+            )),
+        }
+    }
+
     pub async fn add_magnet(&self, magnet: &str, options: AddTaskOptions) -> Result<String> {
         if !magnet.starts_with("magnet:?") {
             return Err(AppError::InvalidInput("invalid magnet link".to_string()).into());
@@ -827,6 +952,12 @@ impl DownloadService {
             browser_bridge_allowed_origins: Some(
                 "chrome-extension://,moz-extension://".to_string(),
             ),
+            ffmpeg_bin_path: Some(
+                current
+                    .ffmpeg_bin_path
+                    .unwrap_or_else(|| "ffmpeg".to_string()),
+            ),
+            media_merge_enabled: Some(false),
             clipboard_watch_enabled: Some(false),
             ui_theme: Some("system".to_string()),
             retry_max_attempts: Some(2),
@@ -1724,6 +1855,24 @@ fn validate_url(url: &str) -> Result<()> {
         return Err(AppError::InvalidInput(format!("unsupported scheme: {scheme}")).into());
     }
     Ok(())
+}
+
+fn is_stream_manifest_url(url: &str) -> bool {
+    let lower = url.to_lowercase();
+    lower.contains(".m3u8") || lower.contains(".mpd")
+}
+
+fn stream_output_filename(url: &str) -> String {
+    let candidate = reqwest::Url::parse(url)
+        .ok()
+        .and_then(|u| {
+            Path::new(u.path())
+                .file_stem()
+                .map(|v| v.to_string_lossy().to_string())
+        })
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| format!("stream-{}", now_ts()));
+    format!("{candidate}.mp4")
 }
 
 fn is_dir_writable(path: &Path) -> bool {
