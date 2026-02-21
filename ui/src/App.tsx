@@ -110,6 +110,7 @@ const SettingsPage = lazy(() =>
 
 const LOCALE_KEY = 'flamingo.locale'
 const SHORTCUT_STORAGE_KEY = 'flamingo.shortcuts.v1'
+const SHORTCUT_DISPLAY_MODE_KEY = 'flamingo.shortcuts.display_mode.v1'
 
 type ShortcutAction =
   | 'new_download'
@@ -240,13 +241,43 @@ function findDuplicateShortcut(bindings: ShortcutBindings): string | null {
   return null
 }
 
-function formatShortcutForDisplay(shortcut: string, isMac: boolean): string {
+type ShortcutDisplayMode = 'text' | 'symbol'
+
+function loadShortcutDisplayMode(): ShortcutDisplayMode {
+  try {
+    const raw = String(localStorage.getItem(SHORTCUT_DISPLAY_MODE_KEY) || '').trim()
+    return raw === 'symbol' ? 'symbol' : 'text'
+  } catch {
+    return 'text'
+  }
+}
+
+function saveShortcutDisplayMode(mode: ShortcutDisplayMode) {
+  localStorage.setItem(SHORTCUT_DISPLAY_MODE_KEY, mode)
+}
+
+function formatShortcutForDisplayWithMode(
+  shortcut: string,
+  isMac: boolean,
+  mode: ShortcutDisplayMode,
+): string {
   const s = normalizeShortcut(shortcut)
   if (!s) return ''
   return s
     .split('+')
     .map((part) => {
-      if (part === 'CmdOrCtrl') return isMac ? 'Cmd' : 'Ctrl'
+      if (part === 'CmdOrCtrl') {
+        if (isMac && mode === 'symbol') return '⌘'
+        return isMac ? 'Cmd' : 'Ctrl'
+      }
+      if (part === 'Shift') {
+        if (isMac && mode === 'symbol') return '⇧'
+        return 'Shift'
+      }
+      if (part === 'Alt') {
+        if (isMac && mode === 'symbol') return '⌥'
+        return isMac ? 'Option' : 'Alt'
+      }
       return part
     })
     .join('+')
@@ -460,6 +491,9 @@ export default function App() {
   const [windowMoving, setWindowMoving] = useState(false)
   const [shortcutBindings, setShortcutBindings] = useState<ShortcutBindings>(() => loadShortcutBindings())
   const [shortcutDraft, setShortcutDraft] = useState<ShortcutBindings>(() => loadShortcutBindings())
+  const [shortcutDisplayMode, setShortcutDisplayMode] = useState<ShortcutDisplayMode>(
+    () => loadShortcutDisplayMode(),
+  )
   const [shortcutEditorOpen, setShortcutEditorOpen] = useState(false)
   const [shortcutEditingAction, setShortcutEditingAction] = useState<ShortcutAction | null>(null)
   const [shortcutCaptured, setShortcutCaptured] = useState('')
@@ -2027,8 +2061,8 @@ export default function App() {
   }
 
   const displayShortcut = useCallback(
-    (value: string) => formatShortcutForDisplay(value, isMac),
-    [isMac],
+    (value: string) => formatShortcutForDisplayWithMode(value, isMac, shortcutDisplayMode),
+    [isMac, shortcutDisplayMode],
   )
 
   const openShortcutEditor = (action: ShortcutAction) => {
@@ -2913,6 +2947,22 @@ export default function App() {
                       {t('shortcutHint')}
                     </Typography.Text>
                     <Typography.Title level={5}>{t('grpShortcuts')}</Typography.Title>
+                    {isMac && (
+                      <Form.Item label={t('shortcutDisplayMode')} style={{ maxWidth: 260, marginBottom: 10 }}>
+                        <Select
+                          value={shortcutDisplayMode}
+                          onChange={(v) => {
+                            const mode = (v === 'symbol' ? 'symbol' : 'text') as ShortcutDisplayMode
+                            setShortcutDisplayMode(mode)
+                            saveShortcutDisplayMode(mode)
+                          }}
+                          options={[
+                            { label: t('shortcutDisplayText'), value: 'text' },
+                            { label: t('shortcutDisplaySymbol'), value: 'symbol' },
+                          ]}
+                        />
+                      </Form.Item>
+                    )}
                     <Space direction="vertical" style={{ width: '100%' }}>
                       {shortcutItems.map((item) => (
                         <div key={item.key} className="grid-2" style={{ alignItems: 'center' }}>

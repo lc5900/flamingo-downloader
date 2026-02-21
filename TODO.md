@@ -11,7 +11,7 @@
 
 ### P1 - UX and Productivity
 
-- [ ] Shortcuts: show macOS symbols (⌘ ⌥ ⇧) as an optional display mode
+- [x] Shortcuts: show macOS symbols (⌘ ⌥ ⇧) as an optional display mode
 - [ ] Shortcuts editor: live conflict warnings inside the edit modal (show which action already uses the combo)
 - [ ] Add a “Keyboard Shortcuts” help/cheatsheet modal (read-only list + search)
 - [ ] Progress-row background: add a Settings toggle (some users prefer the classic progress bar)
