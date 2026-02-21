@@ -26,4 +26,19 @@ if [[ ! -d "ui/dist" || ! -f "ui/dist/index.html" ]]; then
   exit 1
 fi
 
+if ! rg -n "\"devtools\"\\s*:\\s*false" src-tauri/tauri.conf.json >/dev/null; then
+  echo "Release hardening check failed: src-tauri/tauri.conf.json must set devtools=false."
+  exit 1
+fi
+
+if ! rg -n "addEventListener\\('contextmenu'" ui/src/App.tsx >/dev/null; then
+  echo "Release hardening check failed: ui/src/App.tsx must block context menu in production."
+  exit 1
+fi
+
+if ! rg -n "F12|shiftKey.*\\(key === 'i' \\|\\| key === 'j' \\|\\| key === 'c'\\)" ui/src/App.tsx >/dev/null; then
+  echo "Release hardening check failed: ui/src/App.tsx must block DevTools hotkeys in production."
+  exit 1
+fi
+
 echo "preflight ok: ui/dist is ready"
