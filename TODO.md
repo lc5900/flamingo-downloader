@@ -13,7 +13,7 @@
 
 - [x] Shortcuts: show macOS symbols (⌘ ⌥ ⇧) as an optional display mode
 - [x] Shortcuts editor: live conflict warnings inside the edit modal (show which action already uses the combo)
-- [ ] Add a “Keyboard Shortcuts” help/cheatsheet modal (read-only list + search)
+- [x] Add a “Keyboard Shortcuts” help/cheatsheet modal (read-only list + search)
 - [ ] Progress-row background: add a Settings toggle (some users prefer the classic progress bar)
 
 ### P1 - Browser Integration

@@ -151,6 +151,8 @@
   "shortcutDisplayMode": "Display Mode",
   "shortcutDisplayText": "Text",
   "shortcutDisplaySymbol": "macOS Symbols",
+  "shortcutCheatsheet": "Shortcut Cheatsheet",
+  "shortcutSearchPlaceholder": "Search action or shortcut",
   "shortcutPress": "Press shortcut...",
   "shortcutEdit": "Edit",
   "shortcutEditTitle": "Edit Shortcut",

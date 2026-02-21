@@ -151,6 +151,8 @@
   "shortcutDisplayMode": "显示模式",
   "shortcutDisplayText": "文字",
   "shortcutDisplaySymbol": "macOS 符号",
+  "shortcutCheatsheet": "快捷键一览",
+  "shortcutSearchPlaceholder": "搜索操作或快捷键",
   "shortcutPress": "按下快捷键...",
   "shortcutEdit": "编辑",
   "shortcutEditTitle": "编辑快捷键",

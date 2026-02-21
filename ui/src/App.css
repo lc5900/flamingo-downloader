@@ -735,6 +735,31 @@ body.app-theme-dark .ant-dropdown .ant-dropdown-menu-item-selected {
   margin-bottom: 10px;
 }
 
+.shortcut-help-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 48vh;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.shortcut-help-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid rgba(126, 148, 186, 0.22);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(120, 146, 186, 0.08);
+}
+
+.root-layout.theme-dark .shortcut-help-row {
+  border-color: rgba(146, 174, 226, 0.28);
+  background: rgba(60, 86, 128, 0.22);
+}
+
 .add-modal-root .ant-modal-wrap {
   overflow: hidden;
 }

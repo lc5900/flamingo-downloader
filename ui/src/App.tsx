@@ -511,6 +511,8 @@ export default function App() {
   const [shortcutEditorOpen, setShortcutEditorOpen] = useState(false)
   const [shortcutEditingAction, setShortcutEditingAction] = useState<ShortcutAction | null>(null)
   const [shortcutCaptured, setShortcutCaptured] = useState('')
+  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false)
+  const [shortcutHelpQuery, setShortcutHelpQuery] = useState('')
   const [settingsTab, setSettingsTab] = useState('basic')
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [siderCollapsed, setSiderCollapsed] = useState(false)
@@ -2069,6 +2071,19 @@ export default function App() {
       ] as Array<{ key: ShortcutAction; label: string }>,
     [t],
   )
+  const filteredShortcutItems = useMemo(() => {
+    const q = shortcutHelpQuery.trim().toLowerCase()
+    if (!q) return shortcutItems
+    return shortcutItems.filter((item) => {
+      const label = item.label.toLowerCase()
+      const binding = formatShortcutForDisplayWithMode(
+        shortcutDraft[item.key] || '',
+        isMac,
+        shortcutDisplayMode,
+      ).toLowerCase()
+      return label.includes(q) || binding.includes(q)
+    })
+  }, [isMac, shortcutDisplayMode, shortcutDraft, shortcutHelpQuery, shortcutItems])
   const shortcutLabelMap = useMemo(
     () =>
       new Map<ShortcutAction, string>(
@@ -3005,6 +3020,7 @@ export default function App() {
                         </div>
                       ))}
                       <Space>
+                        <Button onClick={() => setShortcutHelpOpen(true)}>{t('shortcutCheatsheet')}</Button>
                         <Button
                           onClick={() => {
                             setShortcutDraft({ ...DEFAULT_SHORTCUT_BINDINGS })
@@ -3493,6 +3509,33 @@ export default function App() {
               </Typography.Text>
             )}
             <Typography.Text type="secondary">{t('shortcutRecording')}</Typography.Text>
+          </Space>
+        </Modal>
+
+        <Modal
+          title={t('shortcutCheatsheet')}
+          open={shortcutHelpOpen}
+          onCancel={() => setShortcutHelpOpen(false)}
+          footer={null}
+          width={680}
+        >
+          <Space direction="vertical" style={{ width: '100%' }} size={10}>
+            <Input
+              allowClear
+              value={shortcutHelpQuery}
+              onChange={(e) => setShortcutHelpQuery(e.target.value)}
+              placeholder={t('shortcutSearchPlaceholder')}
+            />
+            <div className="shortcut-help-list">
+              {filteredShortcutItems.map((item) => (
+                <div key={item.key} className="shortcut-help-row">
+                  <Typography.Text>{item.label}</Typography.Text>
+                  <Typography.Text code>
+                    {displayShortcut(shortcutDraft[item.key]) || '-'}
+                  </Typography.Text>
+                </div>
+              ))}
+            </div>
           </Space>
         </Modal>
 
