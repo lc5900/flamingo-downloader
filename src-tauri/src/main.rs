@@ -14,8 +14,6 @@ use flamingo_downloader::{
 use serde::Serialize;
 #[cfg(target_os = "macos")]
 use tauri::ActivationPolicy;
-#[cfg(target_os = "macos")]
-use tauri_plugin_liquid_glass::{GlassMaterialVariant, LiquidGlassConfig, LiquidGlassExt};
 #[cfg(not(target_os = "macos"))]
 use tauri::include_image;
 #[cfg(not(target_os = "macos"))]
@@ -23,6 +21,8 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder};
 #[cfg(not(target_os = "macos"))]
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, LogicalSize, Manager, Size, State};
+#[cfg(target_os = "macos")]
+use tauri_plugin_liquid_glass::{GlassMaterialVariant, LiquidGlassConfig, LiquidGlassExt};
 
 #[derive(Default)]
 struct TauriEventEmitter {
@@ -235,7 +235,10 @@ fn ensure_main_window_bounds(win: &tauri::WebviewWindow) {
 }
 
 #[cfg(target_os = "macos")]
-fn try_apply_liquid_glass(app: &tauri::AppHandle, win: &tauri::WebviewWindow) -> Result<(), String> {
+fn try_apply_liquid_glass(
+    app: &tauri::AppHandle,
+    win: &tauri::WebviewWindow,
+) -> Result<(), String> {
     let lg = app.liquid_glass();
     if !lg.is_supported() {
         return Err("liquid glass is not supported on this macOS version".to_string());
