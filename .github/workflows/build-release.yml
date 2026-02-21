@@ -64,6 +64,9 @@ jobs:
       - name: UI lint
         run: npm --prefix ui run lint
 
+      - name: UI unit tests
+        run: npm --prefix ui run test:unit
+
       - name: Preflight (validate)
         shell: bash
         run: |
