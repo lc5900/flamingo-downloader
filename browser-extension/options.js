@@ -19,9 +19,9 @@ const el = {
 const ext = typeof browser !== 'undefined' ? browser : chrome;
 
 const DEFAULTS = {
-  enabled: false,
+  enabled: true,
   useNativeMessaging: false,
-  autoIntercept: true,
+  autoIntercept: false,
   sniffMediaEnabled: true,
   interceptAllowlist: '',
   nativeHost: 'com.lc5900.flamingo.bridge',

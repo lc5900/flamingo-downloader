@@ -12,6 +12,7 @@
   },
   "options_page": "options.html",
   "action": {
-    "default_title": "Flamingo Bridge"
+    "default_title": "Flamingo Bridge",
+    "default_popup": "popup.html"
   }
 }

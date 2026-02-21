@@ -2,6 +2,16 @@
 
 This extension forwards browser downloads to Flamingo Downloader through a local HTTP bridge.
 
+## Quick usage (zero-config path)
+
+1. Start Flamingo app.
+2. Load extension (`browser-extension/`) in browser.
+3. Open a page that plays video.
+4. Click extension icon.
+5. Pick a detected media URL and click `Send`.
+
+No token input is required for the default extension-origin flow.
+
 ## 1) Start Flamingo
 
 Run Flamingo first. In Settings, check:
@@ -29,7 +39,7 @@ Run Flamingo first. In Settings, check:
 
 ## 3) Configure extension
 
-Open extension options and set:
+Open extension options and set (optional/advanced):
 - Endpoint: `http://127.0.0.1:16789/add`
 - Token: paste from Flamingo settings
 - Enable Flamingo bridge: on
@@ -47,6 +57,7 @@ Open extension options and set:
 - Native messaging mode (optional): when enabled, extension can send requests via browser native host instead of local HTTP bridge.
 - Troubleshooting: options page shows `Last Skipped` reason when a download is not intercepted.
 - Media sniffer (experimental): options page includes `Detected Media Candidates`, with one-click `Send to Flamingo`.
+- Fast media picker: click extension icon to open popup and send detected media directly.
 
 ## 5) Native messaging host install (recommended)
 

@@ -1,7 +1,7 @@
 const DEFAULTS = {
-  enabled: false,
+  enabled: true,
   useNativeMessaging: false,
-  autoIntercept: true,
+  autoIntercept: false,
   sniffMediaEnabled: true,
   interceptAllowlist: "",
   nativeHost: "com.lc5900.flamingo.bridge",
@@ -181,6 +181,28 @@ async function setBridgeActivity(entry) {
   await ext.storage.local.set(payload);
 }
 
+async function getQuickState() {
+  const cfg = await getConfig();
+  const local = await ext.storage.local.get([
+    "lastBridgeError",
+    "lastBridgeSuccess",
+    "lastBridgeSkip",
+    "lastBridgeActivityAt",
+    "mediaCandidates",
+  ]);
+  const mediaCandidates = Array.isArray(local.mediaCandidates) ? local.mediaCandidates : [];
+  return {
+    enabled: !!cfg.enabled,
+    sniffMediaEnabled: !!cfg.sniffMediaEnabled,
+    autoIntercept: !!cfg.autoIntercept,
+    mediaCount: mediaCandidates.length,
+    lastBridgeError: String(local.lastBridgeError || ""),
+    lastBridgeSuccess: String(local.lastBridgeSuccess || ""),
+    lastBridgeSkip: String(local.lastBridgeSkip || ""),
+    lastBridgeActivityAt: Number(local.lastBridgeActivityAt || 0),
+  };
+}
+
 async function maybeTakeOver(downloadItem) {
   try {
     const cfg = await getConfig();
@@ -285,6 +307,24 @@ ext.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const saveDir = message?.saveDir ? String(message.saveDir) : null;
     sendToFlamingo(url, saveDir)
       .then((result) => sendResponse(result && typeof result === "object" ? result : { ok: true }))
+      .catch((e) => sendResponse({ ok: false, error: String(e?.message || e) }));
+    return true;
+  }
+  if (action === "get_quick_state") {
+    getQuickState()
+      .then((state) => sendResponse({ ok: true, state }))
+      .catch((e) => sendResponse({ ok: false, error: String(e?.message || e) }));
+    return true;
+  }
+  if (action === "set_quick_flags") {
+    const patch = {};
+    if (typeof message?.enabled === "boolean") patch.enabled = !!message.enabled;
+    if (typeof message?.sniffMediaEnabled === "boolean")
+      patch.sniffMediaEnabled = !!message.sniffMediaEnabled;
+    if (typeof message?.autoIntercept === "boolean") patch.autoIntercept = !!message.autoIntercept;
+    ext.storage.sync
+      .set(patch)
+      .then(() => sendResponse({ ok: true }))
       .catch((e) => sendResponse({ ok: false, error: String(e?.message || e) }));
     return true;
   }

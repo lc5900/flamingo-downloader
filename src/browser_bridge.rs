@@ -113,26 +113,11 @@ async fn handle_connection(
         }
     }
     let settings = service.get_global_settings().ok();
-    let effective_token = settings
-        .as_ref()
-        .and_then(|s| s.browser_bridge_token.clone())
-        .unwrap_or_else(|| default_token.to_string());
-    if req_token != effective_token {
-        service.append_operation_log(
-            "bridge_activity",
-            format!("unauthorized path={path} origin={origin} ua={user_agent}"),
-        );
-        return write_json(
-            &mut stream,
-            401,
-            &json!({"ok": false, "error": "unauthorized"}),
-        )
-        .await;
-    }
     let allowed_origins = settings
         .as_ref()
         .and_then(|s| s.browser_bridge_allowed_origins.clone())
         .unwrap_or_default();
+    let ext_origin = is_extension_origin(&origin);
     if !origin_allowed(&origin, &allowed_origins) {
         service.append_operation_log(
             "bridge_activity",
@@ -142,6 +127,24 @@ async fn handle_connection(
             &mut stream,
             401,
             &json!({"ok": false, "error": "forbidden origin"}),
+        )
+        .await;
+    }
+    let effective_token = settings
+        .as_ref()
+        .and_then(|s| s.browser_bridge_token.clone())
+        .unwrap_or_else(|| default_token.to_string());
+    let token_ok =
+        req_token == effective_token || (req_token.is_empty() && ext_origin && path == "/add");
+    if !token_ok {
+        service.append_operation_log(
+            "bridge_activity",
+            format!("unauthorized path={path} origin={origin} ua={user_agent}"),
+        );
+        return write_json(
+            &mut stream,
+            401,
+            &json!({"ok": false, "error": "unauthorized"}),
         )
         .await;
     }
@@ -213,6 +216,10 @@ fn origin_allowed(origin: &str, allowlist_raw: &str) -> bool {
         return true;
     }
     rules.iter().any(|rule| origin.starts_with(rule))
+}
+
+fn is_extension_origin(origin: &str) -> bool {
+    origin.starts_with("chrome-extension://") || origin.starts_with("moz-extension://")
 }
 
 fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {

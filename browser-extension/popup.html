@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flamingo</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 0; background: #f8fafc; }
+      .wrap { width: 420px; max-height: 620px; overflow: auto; padding: 12px; box-sizing: border-box; }
+      .header { display:flex; align-items:center; justify-content:space-between; margin-bottom: 8px; }
+      .title { font-weight: 700; color: #0f172a; }
+      .meta { font-size: 12px; color: #64748b; }
+      .toolbar { display:flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+      button { border: 1px solid #cbd5e1; background: #fff; border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 12px; }
+      button.primary { background: #0ea5e9; border-color: #0ea5e9; color: #fff; }
+      .row { display:flex; align-items:center; justify-content:space-between; gap: 10px; margin: 6px 0; }
+      .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px; margin-top: 8px; }
+      .url { font-size: 12px; color: #0f172a; word-break: break-all; }
+      .hint { font-size: 11px; color: #64748b; }
+      .muted { color: #94a3b8; }
+      .switch { display:flex; gap:6px; align-items:center; font-size:12px; color:#334155; }
+      .footer { margin-top: 10px; display:flex; justify-content:space-between; align-items:center; }
+      .status { font-size: 12px; color: #334155; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="header">
+        <div>
+          <div class="title">🦩 Flamingo</div>
+          <div id="summary" class="meta">Loading...</div>
+        </div>
+        <button id="openOptions" type="button">Advanced</button>
+      </div>
+
+      <div class="toolbar">
+        <button id="refresh" type="button">Refresh</button>
+        <button id="clear" type="button">Clear</button>
+      </div>
+
+      <div class="row">
+        <label class="switch"><input id="enabled" type="checkbox" />Bridge</label>
+        <label class="switch"><input id="sniffMediaEnabled" type="checkbox" />Sniffer</label>
+        <label class="switch"><input id="autoIntercept" type="checkbox" />Auto</label>
+      </div>
+
+      <div id="status" class="status"></div>
+      <div id="list"></div>
+
+      <div class="footer">
+        <span class="hint">Click a video page, then reopen this popup to pick links.</span>
+      </div>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>
