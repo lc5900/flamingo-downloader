@@ -2219,77 +2219,84 @@ export default function App() {
                   className="main-card"
                   title={section === 'downloaded' ? t('downloadedList') : t('currentDownloads')}
                 >
-                <Space wrap style={{ marginBottom: 12 }}>
-                  <Input
-                    id="task-search-input"
-                    allowClear
-                    value={searchText}
-                    onChange={(e) => setSearchText(e.target.value)}
-                    style={{ width: 300 }}
-                    placeholder={t('searchPlaceholder')}
-                    addonBefore={t('search')}
-                  />
-                  <Select
-                    style={{ width: 170 }}
-                    value={statusFilter}
-                    onChange={setStatusFilter}
-                    options={[
-                      { value: 'all', label: `${t('statusFilter')}: ${t('filterAll')}` },
-                      { value: 'active', label: `${t('statusFilter')}: ${t('filterActive')}` },
-                      { value: 'paused', label: `${t('statusFilter')}: ${t('filterPaused')}` },
-                      { value: 'queued', label: `${t('statusFilter')}: ${t('filterQueued')}` },
-                      { value: 'error', label: `${t('statusFilter')}: ${t('filterError')}` },
-                      { value: 'metadata', label: `${t('statusFilter')}: ${t('filterMetadata')}` },
-                      { value: 'completed', label: `${t('statusFilter')}: ${t('filterCompleted')}` },
-                    ]}
-                  />
-                  <Select
-                    style={{ width: 200 }}
-                    value={categoryFilter}
-                    onChange={setCategoryFilter}
-                    options={[
-                      { value: 'all', label: `${t('categoryFilter')}: ${t('filterAll')}` },
-                      { value: '__uncategorized__', label: `${t('categoryFilter')}: ${t('uncategorized')}` },
-                      ...categoryOptions.map((c) => ({ value: c, label: `${t('categoryFilter')}: ${c}` })),
-                    ]}
-                  />
-                  <Select
-                    style={{ width: 220 }}
-                    value={sortBy}
-                    onChange={(v) => setSortBy(v as TaskSortKey)}
-                    options={[
-                      { value: 'updated_desc', label: `${t('sortBy')}: ${t('sortUpdated')}` },
-                      { value: 'speed_desc', label: `${t('sortBy')}: ${t('sortSpeed')}` },
-                      { value: 'progress_desc', label: `${t('sortBy')}: ${t('sortProgress')}` },
-                      { value: 'name_asc', label: `${t('sortBy')}: ${t('sortName')}` },
-                    ]}
-                  />
-                  <Button icon={<SlidersOutlined />} onClick={() => setLayoutOpen(true)}>
-                    {t('layoutSettings')}
-                  </Button>
-                  {section === 'downloading' && (
-                    <>
-                      <Button size="small" onClick={onGlobalPauseAll}>{t('pauseAll')}</Button>
-                      <Button size="small" onClick={onGlobalResumeAll}>{t('resumeAll')}</Button>
-                      <Button size="small" onClick={onGlobalRetryFailed}>{t('retryFailed')}</Button>
-                    </>
-                  )}
-                  {section === 'downloaded' && (
-                    <Button size="small" danger onClick={onGlobalClearCompleted}>
-                      {t('clearCompleted')}
+                <div className="list-toolbar">
+                  <Space wrap className="list-toolbar-row">
+                    <Input
+                      id="task-search-input"
+                      allowClear
+                      value={searchText}
+                      onChange={(e) => setSearchText(e.target.value)}
+                      style={{ width: 300 }}
+                      placeholder={t('searchPlaceholder')}
+                      addonBefore={t('search')}
+                    />
+                    <Select
+                      style={{ width: 170 }}
+                      value={statusFilter}
+                      onChange={setStatusFilter}
+                      options={[
+                        { value: 'all', label: `${t('statusFilter')}: ${t('filterAll')}` },
+                        { value: 'active', label: `${t('statusFilter')}: ${t('filterActive')}` },
+                        { value: 'paused', label: `${t('statusFilter')}: ${t('filterPaused')}` },
+                        { value: 'queued', label: `${t('statusFilter')}: ${t('filterQueued')}` },
+                        { value: 'error', label: `${t('statusFilter')}: ${t('filterError')}` },
+                        { value: 'metadata', label: `${t('statusFilter')}: ${t('filterMetadata')}` },
+                        { value: 'completed', label: `${t('statusFilter')}: ${t('filterCompleted')}` },
+                      ]}
+                    />
+                    <Select
+                      style={{ width: 200 }}
+                      value={categoryFilter}
+                      onChange={setCategoryFilter}
+                      options={[
+                        { value: 'all', label: `${t('categoryFilter')}: ${t('filterAll')}` },
+                        {
+                          value: '__uncategorized__',
+                          label: `${t('categoryFilter')}: ${t('uncategorized')}`,
+                        },
+                        ...categoryOptions.map((c) => ({ value: c, label: `${t('categoryFilter')}: ${c}` })),
+                      ]}
+                    />
+                    <Select
+                      style={{ width: 220 }}
+                      value={sortBy}
+                      onChange={(v) => setSortBy(v as TaskSortKey)}
+                      options={[
+                        { value: 'updated_desc', label: `${t('sortBy')}: ${t('sortUpdated')}` },
+                        { value: 'speed_desc', label: `${t('sortBy')}: ${t('sortSpeed')}` },
+                        { value: 'progress_desc', label: `${t('sortBy')}: ${t('sortProgress')}` },
+                        { value: 'name_asc', label: `${t('sortBy')}: ${t('sortName')}` },
+                      ]}
+                    />
+                    <Button icon={<SlidersOutlined />} onClick={() => setLayoutOpen(true)}>
+                      {t('layoutSettings')}
                     </Button>
-                  )}
-                  <Tag>{`${t('selectedCount')}: ${selectedTaskIds.length}`}</Tag>
-                  <Button size="small" onClick={onBatchPause} disabled={selectedTaskIds.length === 0 || section === 'downloaded'}>
-                    {t('batchPause')}
-                  </Button>
-                  <Button size="small" onClick={onBatchResume} disabled={selectedTaskIds.length === 0 || section === 'downloaded'}>
-                    {t('batchResume')}
-                  </Button>
-                  <Button size="small" danger onClick={onRequestBatchRemove} disabled={selectedTaskIds.length === 0}>
-                    {t('batchRemove')}
-                  </Button>
-                </Space>
+                  </Space>
+                  <Space wrap className="list-toolbar-row">
+                    {section === 'downloading' && (
+                      <>
+                        <Button size="small" onClick={onGlobalPauseAll}>{t('pauseAll')}</Button>
+                        <Button size="small" onClick={onGlobalResumeAll}>{t('resumeAll')}</Button>
+                        <Button size="small" onClick={onGlobalRetryFailed}>{t('retryFailed')}</Button>
+                      </>
+                    )}
+                    {section === 'downloaded' && (
+                      <Button size="small" danger onClick={onGlobalClearCompleted}>
+                        {t('clearCompleted')}
+                      </Button>
+                    )}
+                    <Tag>{`${t('selectedCount')}: ${selectedTaskIds.length}`}</Tag>
+                    <Button size="small" onClick={onBatchPause} disabled={selectedTaskIds.length === 0 || section === 'downloaded'}>
+                      {t('batchPause')}
+                    </Button>
+                    <Button size="small" onClick={onBatchResume} disabled={selectedTaskIds.length === 0 || section === 'downloaded'}>
+                      {t('batchResume')}
+                    </Button>
+                    <Button size="small" danger onClick={onRequestBatchRemove} disabled={selectedTaskIds.length === 0}>
+                      {t('batchRemove')}
+                    </Button>
+                  </Space>
+                </div>
                 <div className="task-table-wrap" ref={tableWrapRef}>
                   {!hasLoadedOnce && loading ? (
                     <div style={{ padding: 8 }}>
@@ -2359,11 +2366,18 @@ export default function App() {
                 </div>
                 </Card>
               </TaskPageShell>
-              <div className="content-status">
-                <Space size={8}>
-                  <Tag>{`${t('navDownloading')}: ${activeTaskCount}`}</Tag>
-                  <Tag>{`${t('colSpeed')}: ${fmtBytes(totalDownloadSpeed)}/s`}</Tag>
-                  <Tag>{`${t('freeSpace')}: ${fmtBytes(Number(storageSummary?.free_bytes || 0))}`}</Tag>
+              <div className="content-status-bar">
+                <Space size={16}>
+                  <Typography.Text type="secondary">
+                    {t('navDownloading')}: <Typography.Text strong>{activeTaskCount}</Typography.Text>
+                  </Typography.Text>
+                  <Typography.Text type="secondary">
+                    {t('colSpeed')}: <Typography.Text strong>{fmtBytes(totalDownloadSpeed)}/s</Typography.Text>
+                  </Typography.Text>
+                  <Typography.Text type="secondary">
+                    {t('freeSpace')}:{' '}
+                    <Typography.Text strong>{fmtBytes(Number(storageSummary?.free_bytes || 0))}</Typography.Text>
+                  </Typography.Text>
                 </Space>
               </div>
             </Layout.Content>
