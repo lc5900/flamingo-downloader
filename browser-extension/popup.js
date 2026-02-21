@@ -15,6 +15,8 @@ const el = {
   sniffMediaEnabled: document.getElementById('sniffMediaEnabled'),
   autoIntercept: document.getElementById('autoIntercept'),
   currentTabOnly: document.getElementById('currentTabOnly'),
+  probeBridge: document.getElementById('probeBridge'),
+  bridgeState: document.getElementById('bridgeState'),
   toastWrap: document.getElementById('toastWrap'),
 };
 
@@ -109,6 +111,33 @@ function showToast(text, level = 'info') {
       node.parentElement.removeChild(node);
     }
   }, 3200);
+}
+
+function bridgeGuideText(guide) {
+  const key = String(guide || '').trim();
+  if (!key) return '';
+  return t(`popup_bridge_guide_${key}`);
+}
+
+function renderBridgeProbe(probe) {
+  if (!el.bridgeState) return;
+  const ok = !!probe?.ok;
+  el.bridgeState.className = `bridge-pill ${ok ? 'ok' : 'fail'}`.trim();
+  el.bridgeState.textContent = ok ? t('popup_bridge_status_ok') : t('popup_bridge_status_fail');
+  if (!ok) {
+    const guide = bridgeGuideText(probe?.guide);
+    const detail = String(probe?.detail || '').trim();
+    if (guide || detail) {
+      const msg = detail ? `${guide} ${detail}`.trim() : guide;
+      if (msg) showStatus(msg, 'error');
+    }
+  }
+}
+
+async function probeBridgeState() {
+  const response = await ask('probe_bridge');
+  if (!response?.ok) throw new Error(String(response?.error || 'probe bridge failed'));
+  renderBridgeProbe(response.probe || {});
 }
 
 async function loadQuickState() {
@@ -236,6 +265,7 @@ async function setQuickFlags() {
       autoIntercept: !!el.autoIntercept.checked,
     });
     await loadQuickState();
+    await probeBridgeState();
   } catch (e) {
     showStatus(String(e?.message || e), 'error');
   }
@@ -244,6 +274,7 @@ async function setQuickFlags() {
 async function refreshAll() {
   await resolveCurrentTab();
   await loadQuickState();
+  await probeBridgeState();
   await loadCandidates();
 }
 
@@ -329,6 +360,11 @@ el.openOptions.addEventListener('click', () => {
 el.enabled.addEventListener('change', () => { void setQuickFlags(); });
 el.sniffMediaEnabled.addEventListener('change', () => { void setQuickFlags(); });
 el.autoIntercept.addEventListener('change', () => { void setQuickFlags(); });
+if (el.probeBridge) {
+  el.probeBridge.addEventListener('click', () => {
+    void probeBridgeState().catch((e) => showStatus(String(e?.message || e), 'error'));
+  });
+}
 el.currentTabOnly.addEventListener('change', () => {
   void loadCandidates().catch((e) => showStatus(String(e?.message || e), 'error'));
 });

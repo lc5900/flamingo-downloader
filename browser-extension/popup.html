@@ -19,6 +19,17 @@
       .hint { font-size: 11px; color: #64748b; }
       .muted { color: #94a3b8; }
       .switch { display:flex; gap:6px; align-items:center; font-size:12px; color:#334155; }
+      .bridge-row { display:flex; align-items:center; justify-content:space-between; gap:8px; margin: 8px 0; }
+      .bridge-pill {
+        font-size: 11px;
+        border: 1px solid #cbd5e1;
+        color: #334155;
+        background: #f8fafc;
+        border-radius: 999px;
+        padding: 2px 8px;
+      }
+      .bridge-pill.ok { border-color: #34d399; color: #065f46; background: #ecfdf5; }
+      .bridge-pill.fail { border-color: #fca5a5; color: #991b1b; background: #fef2f2; }
       .chip { display:inline-block; font-size:11px; color:#334155; background:#e2e8f0; border-radius:999px; padding:2px 8px; margin-right:4px; }
       .footer { margin-top: 10px; display:flex; justify-content:space-between; align-items:center; }
       .status { font-size: 12px; color: #334155; min-height: 18px; }
@@ -72,6 +83,10 @@
       </div>
       <div class="row">
         <label class="switch"><input id="currentTabOnly" type="checkbox" /><span data-i18n="popup_current_tab_only">Current tab only</span></label>
+      </div>
+      <div class="bridge-row">
+        <span id="bridgeState" class="bridge-pill">Bridge: --</span>
+        <button id="probeBridge" type="button" data-i18n="popup_bridge_check">Check Bridge</button>
       </div>
 
       <div id="status" class="status"></div>

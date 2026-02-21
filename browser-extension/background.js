@@ -209,6 +209,105 @@ async function sendViaNativeMessaging(host, payload) {
   return ext.runtime.sendNativeMessage(host, payload);
 }
 
+function toHealthEndpoint(addEndpoint) {
+  const raw = String(addEndpoint || "").trim();
+  if (!raw) return "http://127.0.0.1:16789/health";
+  try {
+    const u = new URL(raw);
+    if (u.pathname.endsWith("/add")) {
+      u.pathname = u.pathname.slice(0, -4) + "/health";
+    } else if (!u.pathname.endsWith("/health")) {
+      u.pathname = `${u.pathname.replace(/\/+$/, "")}/health`;
+    }
+    u.search = "";
+    return u.toString();
+  } catch {
+    return "http://127.0.0.1:16789/health";
+  }
+}
+
+async function probeBridge() {
+  const cfg = await getConfig();
+  if (!cfg.enabled) {
+    return { ok: false, mode: "disabled", state: "disabled", guide: "enable_bridge_first" };
+  }
+  if (cfg.useNativeMessaging) {
+    if (!cfg.nativeHost) {
+      return { ok: false, mode: "native", state: "native_host_missing", guide: "set_native_host" };
+    }
+    try {
+      const res = await sendViaNativeMessaging(cfg.nativeHost, { action: "ping" });
+      if (res && res.ok) {
+        return { ok: true, mode: "native", state: "healthy", guide: "", host: cfg.nativeHost };
+      }
+      return {
+        ok: false,
+        mode: "native",
+        state: "native_unhealthy",
+        guide: "install_native_host",
+        detail: String(res?.error || "native host returned unhealthy"),
+      };
+    } catch (e) {
+      return {
+        ok: false,
+        mode: "native",
+        state: "native_unreachable",
+        guide: "install_native_host",
+        detail: String(e?.message || e || ""),
+      };
+    }
+  }
+
+  const endpoint = toHealthEndpoint(cfg.endpoint);
+  const headers = {};
+  if (cfg.token) headers["X-Token"] = cfg.token;
+  try {
+    const resp = await fetch(endpoint, { method: "GET", headers });
+    const raw = await resp.text();
+    if (resp.ok) {
+      return { ok: true, mode: "http", state: "healthy", guide: "", endpoint };
+    }
+    const detail = raw.slice(0, 300);
+    if (resp.status === 401 || resp.status === 403) {
+      return {
+        ok: false,
+        mode: "http",
+        state: "token_invalid",
+        guide: "check_token",
+        endpoint,
+        detail,
+      };
+    }
+    if (resp.status === 404) {
+      return {
+        ok: false,
+        mode: "http",
+        state: "endpoint_invalid",
+        guide: "check_endpoint",
+        endpoint,
+        detail,
+      };
+    }
+    return {
+      ok: false,
+      mode: "http",
+      state: "http_unhealthy",
+      guide: "start_flamingo_app",
+      endpoint,
+      detail: `HTTP ${resp.status} ${detail}`,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      mode: "http",
+      state: "http_unreachable",
+      guide: "start_flamingo_app",
+      endpoint,
+      detail: String(e?.message || e || ""),
+    };
+  }
+}
+
 async function sendToFlamingo(url, saveDir = null) {
   return sendToFlamingoWithContext(url, saveDir, "", "");
 }
@@ -441,6 +540,12 @@ ext.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     ext.storage.sync
       .set(patch)
       .then(() => sendResponse({ ok: true }))
+      .catch((e) => sendResponse({ ok: false, error: String(e?.message || e) }));
+    return true;
+  }
+  if (action === "probe_bridge") {
+    probeBridge()
+      .then((probe) => sendResponse({ ok: true, probe }))
       .catch((e) => sendResponse({ ok: false, error: String(e?.message || e) }));
     return true;
   }
