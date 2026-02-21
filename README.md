@@ -1,56 +1,84 @@
 # 🦩 Flamingo Downloader
 
-A cross-platform desktop downloader built with Tauri + Rust + aria2.  
-This project focuses on building a reliable **download product**, not a custom protocol stack.
+[![Build](https://github.com/lc5900/flamingo-downloader/actions/workflows/build-release.yml/badge.svg)](https://github.com/lc5900/flamingo-downloader/actions/workflows/build-release.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Tauri](https://img.shields.io/badge/Tauri-2.x-24C8DB)](https://tauri.app)
+[![Rust](https://img.shields.io/badge/Rust-stable-orange)](https://www.rust-lang.org)
+
+A cross-platform desktop downloader built with **Tauri + Rust + aria2**.
+
+Flamingo focuses on delivering a stable **download product** (task UX, persistence, diagnostics, rules), while aria2 handles protocol-level downloading.
 
 中文说明请看：[`README_zh.md`](README_zh.md)
 
-## Current Features
+## Table of Contents
 
-- URL downloads (HTTP/HTTPS) through aria2 JSON-RPC
-- Magnet and torrent support
-- Two main sections: Downloading / Downloaded
-- Pause, resume, remove tasks
-- Downloaded task actions: open file, open folder, remove record (optionally delete files)
-- Per-task save directory in Add dialog (with smart default suggestion)
-- Multi-directory routing rules by `ext/domain/type`
-- Dedicated logs window
-- Dedicated full-page settings UI
-- Theme modes: `system / light / dark` + quick toolbar toggle
-- i18n support (`en-US`, `zh-CN`) with system language detection and English fallback
-- SQLite persistence for tasks and settings
-- Manual aria2 binary path configuration with path detection
-- Local browser bridge (`127.0.0.1` + token) for browser takeover
-- Browser extension template in `browser-extension/` (Chromium + Firefox, auto takeover + context menu send)
+- [Highlights](#highlights)
+- [Screenshots](#screenshots)
+- [Architecture](#architecture)
+- [Quick Start](#quick-start)
+- [Build and Release](#build-and-release)
+- [Browser Integration](#browser-integration)
+- [Project Layout](#project-layout)
+- [License](#license)
+
+## Highlights
+
+- HTTP/HTTPS/FTP, magnet, torrent via aria2 JSON-RPC
+- Downloading / Downloaded views with modern task actions
+- Per-task options + runtime updates (speed, split, seeding)
+- Multi-rule download directories by `ext/domain/type`
+- Category rules and grouped filtering
+- Full settings page + diagnostics + operation logs window
+- i18n (`en-US`, `zh-CN`), theme mode (`system/light/dark`)
+- Browser bridge + extension template (Chromium + Firefox)
+- Native messaging host installer scripts for Win/macOS/Linux
+- SQLite persistence + session recovery + startup self-check
+
+## Screenshots
+
+> Real screenshots are stored in `docs/screenshots/`.
+
+### Main Window
+
+![Main Window](docs/screenshots/main-overview.png)
+
+### New Download Dialog
+
+![Add Download](docs/screenshots/add-download-modal.png)
+
+### Settings and Diagnostics
+
+![Settings](docs/screenshots/settings-page.png)
 
 ## Architecture
 
-- UI layer (Tauri WebView): task list, settings, logs, interactions
-- Rust service layer: aria2 process lifecycle, RPC wrapper, state sync, persistence
-- aria2c process: actual download executor
+- **UI layer (Tauri WebView)**: task list, settings, dialogs, logs
+- **Rust service layer**: aria2 lifecycle, RPC wrapper, validation, state sync, DB
+- **aria2 process**: protocol executor and transfer engine
 
 Core principles:
-- UI never calls aria2 RPC directly
-- aria2 RPC listens on localhost with secret token
+
+- UI never talks to aria2 RPC directly
+- aria2 RPC only listens on localhost with token
 - App-level task model is the source of truth
 
-## Run Locally
+## Quick Start
 
-### 1. Prerequisites
+### 1) Prerequisites
 
-- Rust (stable recommended)
+- Rust (stable)
 - Tauri 2 build dependencies for your OS
-- A working `aria2c` binary (current mode: user-specified path)
+- `aria2c` binary (manual path mode currently enabled)
+- Node.js 20+ for UI build
 
-### 2. Start the app
+### 2) Run in development
 
 ```bash
 cargo run --manifest-path src-tauri/Cargo.toml
 ```
 
-### React + Ant Design migration workspace (WIP)
-
-A new React UI workspace is added under `ui/` and currently in staged migration:
+### 3) UI workspace (React + Ant Design)
 
 ```bash
 cd ui
@@ -58,116 +86,59 @@ npm install
 npm run dev
 ```
 
-This repo standardizes on `npm` (`ui/package-lock.json`) for deterministic CI builds.
+### 4) First-time setup
 
-Build React UI into app static assets:
+In **Settings**:
 
-```bash
-cd ui
-npm run build
-cp -R dist/* ../dist/
-```
+1. Configure `aria2 Binary Path`
+2. (Optional) click `Detect aria2 Path`
+3. Save
+4. Click `Restart aria2`
+5. Click `RPC Ping`
 
-### 3. First-time setup
+## Build and Release
 
-In Settings:
-1. Set `aria2 Binary Path`
-2. Click `Detect aria2 Path` (optional)
-3. Save settings
-4. Click `Restart aria2` and then `RPC Ping` to verify
-
-Optional browser takeover setup:
-1. In Settings, keep `Browser Bridge Enabled` on
-2. Check bridge port/token
-3. Load `browser-extension/` as unpacked extension in Chrome/Edge
-4. For Firefox testing, use `browser-extension/manifest.firefox.json` (see `browser-extension/README.md`)
-5. Fill endpoint/token in extension options
-
-## Build (Optional)
+### Local bundle build
 
 ```bash
-# 1) build frontend assets for frontendDist=../ui/dist
+# Build UI assets first (frontendDist = ../ui/dist)
 npm --prefix ui run build
 
-# 2) build tauri bundle
+# Build tauri bundles
 cd src-tauri
 cargo tauri build
 ```
 
-## GitHub Actions (Build All Platforms)
+### GitHub Actions
 
-This repository includes CI workflow:
-- `.github/workflows/build-release.yml`
+Workflow file: `.github/workflows/build-release.yml`
 
-What it does:
-- builds on `Linux`, `Windows`, `macOS Apple Silicon`
-- attempts additional `macOS Intel (macos-13)` build when runner is available
-- installs/stages `aria2c` into `aria2/bin/...` before building
-- builds Tauri bundles
-- uploads build artifacts for each platform
-- packages and publishes browser extension zips (`chromium`/`firefox`) in Release assets
-- creates a GitHub Release automatically when you push a tag like `v0.1.0`
-- supports macOS signing/notarization when Apple secrets are configured
+- Validates Rust + UI (fmt/clippy/lint/build)
+- Builds Linux / Windows / macOS (Apple Silicon)
+- Stages aria2 binaries before bundling
+- Uploads desktop bundles + browser extension zip assets
+- Auto-publishes Release on tags like `v0.1.0`
+- Supports macOS signing/notarization if Apple secrets are provided
 
-Note:
-- `macos-14` (Apple Silicon) is required in CI.
-- `macos-13` (Intel) is configured as best-effort, because availability differs by GitHub plan/region.
+## Browser Integration
 
-How to use:
-1. Push code to `main` to run build checks and produce artifacts.
-2. Create a version tag to publish a release:
-   - `git tag -a v0.1.0 -m "v0.1.0"`
-   - `git push origin v0.1.0`
-3. Open Actions/Release page and download platform bundles.
+- HTTP bridge endpoint: `127.0.0.1 + token`
+- Extension source: [`browser-extension/`](browser-extension)
+- Extension docs: [`browser-extension/README.md`](browser-extension/README.md)
+- Native messaging host scripts: [`browser-extension/native-host/`](browser-extension/native-host)
 
-### macOS note (`"app is damaged"` warning)
+## Project Layout
 
-Unsigned/unnotarized DMG builds may be blocked by Gatekeeper and show a damaged warning.
-For proper public distribution, configure these repository secrets so the macOS job signs + notarizes:
-
-- `APPLE_CERTIFICATE` (`.p12` payload, supports either base64 text or raw PEM/PKCS12 text in GitHub Secret)
-- `APPLE_CERTIFICATE_PASSWORD`
-- `APPLE_SIGNING_IDENTITY`
-- `APPLE_ID`
-- `APPLE_PASSWORD` (app-specific password)
-- `APPLE_TEAM_ID`
-
-Helpful setup commands:
-
-```bash
-# export certificate from Keychain Access first, then encode:
-base64 -i certificate.p12 | pbcopy
+```text
+src/                # Rust core service
+src-tauri/          # Tauri entry and packaging config
+ui/                 # React + Ant Design frontend
+aria2/              # bundled/runtime aria2 binaries
+browser-extension/  # browser extension templates
 ```
-
-```bash
-# check identity name to use for APPLE_SIGNING_IDENTITY
-security find-identity -v -p codesigning
-```
-
-When signing is not configured, CI now emits `UNSIGNED-MACOS-BUILD.txt` in release artifacts as an explicit label that the macOS package is unsigned.
-
-For local testing only, you can remove quarantine manually after install:
-
-```bash
-xattr -dr com.apple.quarantine "/Applications/Flamingo Downloader.app"
-```
-
-## Suggested GitHub Metadata
-
-- Repository name: `flamingo-downloader`
-- Topics:
-  - `tauri`
-  - `rust`
-  - `aria2`
-  - `downloader`
-  - `cross-platform`
-  - `desktop-app`
-
-## Third-Party Notice
-
-- This project integrates `aria2` as its download engine.
-- `aria2` is distributed under its own license; make sure your distribution follows its requirements.
 
 ## License
 
-This project is licensed under the MIT License. See `LICENSE`.
+MIT License, see [`LICENSE`](LICENSE).
+
+Third-party note: aria2 is distributed under its own license terms.
