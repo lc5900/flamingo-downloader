@@ -126,6 +126,7 @@ cargo tauri build
 - 扩展目录：[`browser-extension/`](browser-extension)
 - 扩展文档：[`browser-extension/README.md`](browser-extension/README.md)
 - 原生消息宿主：[`browser-extension/native-host/`](browser-extension/native-host)
+- DRM 说明：受 DRM 保护的加密流（如 Widevine/FairPlay/PlayReady）不支持下载。
 
 ## 项目结构
 

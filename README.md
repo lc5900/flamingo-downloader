@@ -126,6 +126,7 @@ Workflow file: `.github/workflows/build-release.yml`
 - Extension source: [`browser-extension/`](browser-extension)
 - Extension docs: [`browser-extension/README.md`](browser-extension/README.md)
 - Native messaging host scripts: [`browser-extension/native-host/`](browser-extension/native-host)
+- DRM note: encrypted DRM streams (Widevine/FairPlay/PlayReady) are not downloadable.
 
 ## Project Layout
 

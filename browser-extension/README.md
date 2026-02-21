@@ -62,6 +62,21 @@ Open extension options and set (optional/advanced):
 - Fast media picker: click extension icon to open popup and send detected media directly.
 - Popup supports: select multiple candidates, batch send, batch copy URLs, and open source page.
 
+## Stream merge (optional)
+
+For `.m3u8` / `.mpd`, Flamingo backend can optionally use ffmpeg to merge segments:
+
+- setting key `media_merge_enabled=true`
+- setting key `ffmpeg_bin_path=ffmpeg` (or absolute path)
+
+When enabled, bridge add for manifest URLs returns `mode=ffmpeg_merge`.
+
+## Limitations
+
+- DRM-protected streams (Widevine/FairPlay/PlayReady) are not supported.
+- Some signed/expiring URLs may fail (`resource_not_found_or_expired`).
+- Auth/cookie-bound streams may require valid page session context.
+
 ## 5) Native messaging host install (recommended)
 
 Use the provided installers in `browser-extension/native-host/` to register host:
