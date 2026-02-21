@@ -122,18 +122,33 @@
     },
   };
 
+  const SUPPORTED_LOCALES = ['en-US', 'zh-CN'];
+
+  function resolveLocale(raw) {
+    const lower = String(raw || '').trim().toLowerCase();
+    if (!lower) return 'en-US';
+    if (lower.startsWith('zh')) return 'zh-CN';
+    return 'en-US';
+  }
+
   function detectLocale() {
-    let raw = '';
+    const candidates = [];
     try {
       if (typeof chrome !== 'undefined' && chrome.i18n?.getUILanguage) {
-        raw = chrome.i18n.getUILanguage() || '';
+        candidates.push(chrome.i18n.getUILanguage() || '');
       }
     } catch (_) {}
-    if (!raw && typeof navigator !== 'undefined') {
-      raw = navigator.language || '';
+    if (typeof navigator !== 'undefined') {
+      if (Array.isArray(navigator.languages)) {
+        candidates.push(...navigator.languages);
+      }
+      candidates.push(navigator.language || '');
     }
-    raw = String(raw || '').toLowerCase();
-    return raw.startsWith('zh') ? 'zh-CN' : 'en-US';
+    for (const raw of candidates) {
+      const locale = resolveLocale(raw);
+      if (SUPPORTED_LOCALES.includes(locale)) return locale;
+    }
+    return 'en-US';
   }
 
   const locale = detectLocale();
@@ -152,6 +167,9 @@
   }
 
   function apply(root = document) {
+    if (root?.documentElement) {
+      root.documentElement.lang = locale;
+    }
     root.querySelectorAll('[data-i18n]').forEach((node) => {
       const key = node.getAttribute('data-i18n');
       if (!key) return;
@@ -164,7 +182,7 @@
     });
   }
 
-  const api = { t, apply, locale };
+  const api = { t, apply, locale, supportedLocales: SUPPORTED_LOCALES.slice() };
   if (typeof window !== 'undefined') {
     window.FlamingoI18n = api;
   }

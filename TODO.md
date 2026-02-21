@@ -18,7 +18,7 @@
 
 ### P1 - Browser Integration
 
-- [ ] Extension i18n (zh-CN/en-US) + default language detection
+- [x] Extension i18n (zh-CN/en-US) + default language detection
 - [ ] Extension popup: show “Send succeeded/failed” toast per URL with error reason
 - [ ] Extension: auto-bridge discovery UX (detect app running/port/token status and guide user)
 
