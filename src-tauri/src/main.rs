@@ -14,6 +14,8 @@ use flamingo_downloader::{
 use serde::Serialize;
 #[cfg(target_os = "macos")]
 use tauri::ActivationPolicy;
+#[cfg(target_os = "macos")]
+use tauri_plugin_liquid_glass::{GlassMaterialVariant, LiquidGlassConfig, LiquidGlassExt};
 #[cfg(not(target_os = "macos"))]
 use tauri::include_image;
 #[cfg(not(target_os = "macos"))]
@@ -154,19 +156,41 @@ fn restore_main_window(app: &tauri::AppHandle) {
             let _ = h_for_closure.show();
 
             if h_for_closure.get_webview_window("main").is_none() {
-                let _ = tauri::WebviewWindowBuilder::new(
-                    &h_for_closure,
-                    "main",
-                    tauri::WebviewUrl::App("index.html".into()),
-                )
-                .title("Flamingo Downloader")
-                .inner_size(1260.0, 820.0)
-                .resizable(true)
-                .build();
+                let window_conf = h_for_closure
+                    .config()
+                    .app
+                    .windows
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| tauri::utils::config::WindowConfig {
+                        label: "main".to_string(),
+                        title: "Flamingo Downloader".to_string(),
+                        width: 1260.0,
+                        height: 820.0,
+                        min_width: Some(1080.0),
+                        min_height: Some(700.0),
+                        resizable: true,
+                        ..Default::default()
+                    });
+                let _ = tauri::WebviewWindowBuilder::from_config(&h_for_closure, &window_conf)
+                    .and_then(|builder| builder.build());
             }
 
             if let Some(win) = h_for_closure.get_webview_window("main") {
                 ensure_main_window_bounds(&win);
+                #[cfg(target_os = "macos")]
+                if let Some(state) = h_for_closure.try_state::<AppState>() {
+                    match try_apply_liquid_glass(&h_for_closure, &win) {
+                        Ok(_) => state.service.append_operation_log(
+                            "liquid_glass",
+                            "applied liquid glass effect on restore",
+                        ),
+                        Err(e) => state.service.append_operation_log(
+                            "liquid_glass",
+                            format!("liquid glass unavailable on restore: {e}"),
+                        ),
+                    }
+                }
                 let _ = win.set_skip_taskbar(false);
                 let _ = win.show();
                 let _ = win.unminimize();
@@ -208,6 +232,25 @@ fn ensure_main_window_bounds(win: &tauri::WebviewWindow) {
             let _ = win.center();
         }
     }
+}
+
+#[cfg(target_os = "macos")]
+fn try_apply_liquid_glass(app: &tauri::AppHandle, win: &tauri::WebviewWindow) -> Result<(), String> {
+    let lg = app.liquid_glass();
+    if !lg.is_supported() {
+        return Err("liquid glass is not supported on this macOS version".to_string());
+    }
+    lg.set_effect(
+        win,
+        LiquidGlassConfig {
+            enabled: true,
+            corner_radius: 14.0,
+            tint_color: Some("#0B132333".to_string()),
+            variant: GlassMaterialVariant::Sidebar,
+            ..Default::default()
+        },
+    )
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -698,10 +741,16 @@ fn main() {
     let emitter = Arc::new(TauriEventEmitter::default());
     let emitter_for_setup = emitter.clone();
 
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_window_state::Builder::default().build());
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(tauri_plugin_liquid_glass::init());
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder;
+
+    let app = builder
         .on_window_event(|window, event| {
             if window.label() != "main" {
                 return;
@@ -825,6 +874,19 @@ fn main() {
                 && settings.start_minimized.unwrap_or(false)
             {
                 ensure_main_window_bounds(&main_win);
+                #[cfg(target_os = "macos")]
+                {
+                    match try_apply_liquid_glass(&app.handle().clone(), &main_win) {
+                        Ok(_) => app.state::<AppState>().service.append_operation_log(
+                            "liquid_glass",
+                            "applied liquid glass effect to main window",
+                        ),
+                        Err(e) => app.state::<AppState>().service.append_operation_log(
+                            "liquid_glass",
+                            format!("liquid glass unavailable: {e}"),
+                        ),
+                    }
+                }
                 if settings.minimize_to_tray.unwrap_or(false) {
                     #[cfg(target_os = "macos")]
                     {
@@ -840,6 +902,19 @@ fn main() {
                 }
             } else if let Some(main_win) = app.get_webview_window("main") {
                 ensure_main_window_bounds(&main_win);
+                #[cfg(target_os = "macos")]
+                {
+                    match try_apply_liquid_glass(&app.handle().clone(), &main_win) {
+                        Ok(_) => app.state::<AppState>().service.append_operation_log(
+                            "liquid_glass",
+                            "applied liquid glass effect to main window",
+                        ),
+                        Err(e) => app.state::<AppState>().service.append_operation_log(
+                            "liquid_glass",
+                            format!("liquid glass unavailable: {e}"),
+                        ),
+                    }
+                }
             }
 
             #[cfg(not(target_os = "macos"))]

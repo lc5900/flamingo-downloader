@@ -1346,6 +1346,7 @@ impl DownloadService {
         let mut created = 0usize;
         let mut skipped_deleted = 0usize;
         let mut skipped_terminal_orphans = 0usize;
+        let mut skipped_empty_orphans = 0usize;
         let default_dir = self.configured_download_dir()?;
         for snapshot in snapshots {
             if let Some(existing) = self.db.get_task_by_gid(&snapshot.gid)? {
@@ -1369,6 +1370,13 @@ impl DownloadService {
             }
             if is_terminal_aria2_status(&snapshot.status) {
                 skipped_terminal_orphans += 1;
+                let _ = self.db.mark_deleted_gid(&snapshot.gid, now);
+                let _ = self.aria2.remove(&snapshot.gid, true).await;
+                let _ = self.aria2.remove_download_result(&snapshot.gid).await;
+                continue;
+            }
+            if snapshot.total_length == 0 && snapshot.completed_length == 0 {
+                skipped_empty_orphans += 1;
                 let _ = self.db.mark_deleted_gid(&snapshot.gid, now);
                 let _ = self.aria2.remove(&snapshot.gid, true).await;
                 let _ = self.aria2.remove_download_result(&snapshot.gid).await;
@@ -1419,7 +1427,7 @@ impl DownloadService {
         self.push_log(
             "reconcile_with_aria2",
             format!(
-                "reconciled, recovered {created} orphan task(s), skipped {skipped_deleted} deleted gid(s), skipped {skipped_terminal_orphans} terminal orphan(s)"
+                "reconciled, recovered {created} orphan task(s), skipped {skipped_deleted} deleted gid(s), skipped {skipped_terminal_orphans} terminal orphan(s), skipped {skipped_empty_orphans} empty orphan(s)"
             ),
         );
         Ok(created)

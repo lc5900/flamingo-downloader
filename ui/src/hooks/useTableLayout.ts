@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { SectionKey, TableLayout, TableLayoutStore } from '../types'
 
-const TABLE_LAYOUT_KEY = 'flamingo.table_layout.v2'
+const TABLE_LAYOUT_KEY = 'flamingo.table_layout.v4'
 const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
-  progress: 168,
-  speed: 96,
-  eta: 82,
-  status: 108,
-  actions: 154,
+  progress: 108,
+  speed: 92,
+  eta: 78,
+  status: 80,
+  actions: 144,
   size: 110,
   completed_at: 156,
 }
@@ -42,11 +42,11 @@ function sanitizeLayout(section: SectionKey, raw: unknown): TableLayout {
   const obj = raw as Partial<TableLayout>
   const mergedWidths = { ...base.columnWidths, ...(obj.columnWidths || {}) }
   const widthCaps: Record<string, [number, number]> = {
-    progress: [120, 220],
-    speed: [80, 140],
-    eta: [72, 120],
-    status: [88, 130],
-    actions: [132, 200],
+    progress: [88, 180],
+    speed: [76, 140],
+    eta: [68, 120],
+    status: [70, 96],
+    actions: [120, 200],
     size: [90, 150],
     completed_at: [120, 220],
   }

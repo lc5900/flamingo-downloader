@@ -13,7 +13,6 @@ import {
   InputNumber,
   Layout,
   Modal,
-  Progress,
   Popover,
   Select,
   Skeleton,
@@ -110,6 +109,148 @@ const SettingsPage = lazy(() =>
 )
 
 const LOCALE_KEY = 'flamingo.locale'
+const SHORTCUT_STORAGE_KEY = 'flamingo.shortcuts.v1'
+
+type ShortcutAction =
+  | 'new_download'
+  | 'focus_search'
+  | 'refresh_list'
+  | 'open_settings'
+  | 'open_logs'
+  | 'toggle_theme'
+  | 'pause_all'
+  | 'resume_all'
+  | 'retry_failed'
+  | 'switch_downloading'
+  | 'switch_downloaded'
+
+type ShortcutBindings = Record<ShortcutAction, string>
+
+const DEFAULT_SHORTCUT_BINDINGS: ShortcutBindings = {
+  new_download: 'CmdOrCtrl+N',
+  focus_search: '/',
+  refresh_list: 'CmdOrCtrl+R',
+  open_settings: 'CmdOrCtrl+,',
+  open_logs: 'CmdOrCtrl+L',
+  toggle_theme: 'CmdOrCtrl+Shift+T',
+  pause_all: 'CmdOrCtrl+Shift+P',
+  resume_all: 'CmdOrCtrl+Shift+R',
+  retry_failed: 'CmdOrCtrl+Shift+F',
+  switch_downloading: 'Alt+1',
+  switch_downloaded: 'Alt+2',
+}
+
+function normalizeShortcut(input: string): string {
+  const raw = String(input || '').trim()
+  if (!raw) return ''
+  const parts = raw
+    .split('+')
+    .map((p) => p.trim())
+    .filter(Boolean)
+  if (parts.length === 0) return ''
+  const mods = new Set(parts.map((p) => p.toLowerCase()))
+  const out: string[] = []
+  if (
+    mods.has('cmdorctrl') ||
+    mods.has('cmd') ||
+    mods.has('meta') ||
+    mods.has('ctrl') ||
+    mods.has('control')
+  ) {
+    out.push('CmdOrCtrl')
+  }
+  if (mods.has('shift')) out.push('Shift')
+  if (mods.has('alt') || mods.has('option')) out.push('Alt')
+  const base = parts.find((p) => {
+    const low = p.toLowerCase()
+    return ![
+      'cmdorctrl',
+      'cmd',
+      'meta',
+      'ctrl',
+      'control',
+      'shift',
+      'alt',
+      'option',
+    ].includes(low)
+  })
+  if (base) {
+    if (base.length === 1) out.push(base.toUpperCase())
+    else if (base.toLowerCase() === 'space') out.push('Space')
+    else out.push(base)
+  }
+  return out.join('+')
+}
+
+function parseKeyFromEvent(e: KeyboardEvent): string {
+  const key = String(e.key || '').trim()
+  if (!key) return ''
+  if (key === ' ') return 'Space'
+  if (key === 'Esc') return 'Escape'
+  if (key.length === 1) return key.toUpperCase()
+  return key
+}
+
+function shortcutFromKeyboardEvent(e: KeyboardEvent): string {
+  const key = parseKeyFromEvent(e)
+  if (!key) return ''
+  if (key === 'Control' || key === 'Shift' || key === 'Alt' || key === 'Meta') return ''
+  const parts: string[] = []
+  if (e.metaKey || e.ctrlKey) parts.push('CmdOrCtrl')
+  if (e.shiftKey) parts.push('Shift')
+  if (e.altKey) parts.push('Alt')
+  parts.push(key)
+  return normalizeShortcut(parts.join('+'))
+}
+
+function eventMatchesShortcut(e: KeyboardEvent, binding: string): boolean {
+  const normalized = normalizeShortcut(binding)
+  if (!normalized) return false
+  return shortcutFromKeyboardEvent(e) === normalized
+}
+
+function loadShortcutBindings(): ShortcutBindings {
+  try {
+    const raw = localStorage.getItem(SHORTCUT_STORAGE_KEY)
+    if (!raw) return { ...DEFAULT_SHORTCUT_BINDINGS }
+    const parsed = JSON.parse(raw) as Partial<Record<ShortcutAction, string>>
+    const merged: ShortcutBindings = { ...DEFAULT_SHORTCUT_BINDINGS }
+    for (const key of Object.keys(DEFAULT_SHORTCUT_BINDINGS) as ShortcutAction[]) {
+      const value = normalizeShortcut(String(parsed?.[key] || ''))
+      if (value) merged[key] = value
+    }
+    return merged
+  } catch {
+    return { ...DEFAULT_SHORTCUT_BINDINGS }
+  }
+}
+
+function saveShortcutBindings(bindings: ShortcutBindings) {
+  localStorage.setItem(SHORTCUT_STORAGE_KEY, JSON.stringify(bindings))
+}
+
+function findDuplicateShortcut(bindings: ShortcutBindings): string | null {
+  const seen = new Set<string>()
+  for (const key of Object.keys(bindings) as ShortcutAction[]) {
+    const value = normalizeShortcut(bindings[key])
+    if (!value) continue
+    if (seen.has(value)) return value
+    seen.add(value)
+  }
+  return null
+}
+
+function formatShortcutForDisplay(shortcut: string, isMac: boolean): string {
+  const s = normalizeShortcut(shortcut)
+  if (!s) return ''
+  return s
+    .split('+')
+    .map((part) => {
+      if (part === 'CmdOrCtrl') return isMac ? 'Cmd' : 'Ctrl'
+      return part
+    })
+    .join('+')
+}
 
 function resolveTheme(mode: ThemeMode): 'light' | 'dark' {
   if (mode === 'light' || mode === 'dark') return mode
@@ -205,6 +346,66 @@ function validateSpeedPlanRules(rules: SpeedPlanRuleInput[]): string | null {
   return null
 }
 
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+function shortenText(value: string, max = 56): string {
+  const s = String(value || '').trim()
+  if (s.length <= max) return s
+  return `${s.slice(0, max - 1)}…`
+}
+
+function inferNameFromUrl(raw: string): string {
+  try {
+    const u = new URL(raw)
+    for (const k of ['filename', 'file', 'name']) {
+      const v = u.searchParams.get(k)
+      if (v && v.trim()) return safeDecode(v.trim())
+    }
+    const segs = u.pathname.split('/').filter(Boolean)
+    if (segs.length > 0) return safeDecode(segs[segs.length - 1])
+    return u.hostname
+  } catch {
+    return ''
+  }
+}
+
+function inferDisplayName(task: Task): string {
+  const rawName = String(task.name || '').trim()
+  const source = String(task.source || '').trim()
+  if (rawName) {
+    if (/^https?:\/\//i.test(rawName)) {
+      const byUrl = inferNameFromUrl(rawName)
+      if (byUrl) return shortenText(byUrl)
+    }
+    return shortenText(rawName)
+  }
+  if (/^https?:\/\//i.test(source)) {
+    const byUrl = inferNameFromUrl(source)
+    if (byUrl) return shortenText(byUrl)
+  }
+  if (/^magnet:\?/i.test(source)) {
+    const dn = source.match(/[?&]dn=([^&]+)/i)?.[1]
+    if (dn) return shortenText(safeDecode(dn))
+    const btih = source.match(/btih:([a-zA-Z0-9]+)/i)?.[1]
+    if (btih) return `magnet:${btih.slice(0, 12)}`
+    return 'magnet'
+  }
+  return shortenText(source || task.id || '-')
+}
+
+function taskProgressPercent(task: Task): number {
+  const total = Number(task.total_length || 0)
+  const done = Number(task.completed_length || 0)
+  if (total <= 0) return 0
+  return Math.max(0, Math.min(100, (done / total) * 100))
+}
+
 export default function App() {
   const [msg, msgCtx] = message.useMessage({
     top: 72,
@@ -256,6 +457,12 @@ export default function App() {
   const [removeTask, setRemoveTask] = useState<Task | null>(null)
   const [removeTaskIds, setRemoveTaskIds] = useState<string[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [windowMoving, setWindowMoving] = useState(false)
+  const [shortcutBindings, setShortcutBindings] = useState<ShortcutBindings>(() => loadShortcutBindings())
+  const [shortcutDraft, setShortcutDraft] = useState<ShortcutBindings>(() => loadShortcutBindings())
+  const [shortcutEditorOpen, setShortcutEditorOpen] = useState(false)
+  const [shortcutEditingAction, setShortcutEditingAction] = useState<ShortcutAction | null>(null)
+  const [shortcutCaptured, setShortcutCaptured] = useState('')
   const [settingsTab, setSettingsTab] = useState('basic')
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [siderCollapsed, setSiderCollapsed] = useState(false)
@@ -309,6 +516,7 @@ export default function App() {
   const [fileSelectRows, setFileSelectRows] = useState<TaskFile[]>([])
   const [selectedFileIndexes, setSelectedFileIndexes] = useState<number[]>([])
   const [fileSelectLoading, setFileSelectLoading] = useState(false)
+  const movingTimerRef = useRef<number | null>(null)
 
   const [settingsForm] = Form.useForm<GlobalSettings>()
   const [addForm] = Form.useForm<AddFormValues>()
@@ -407,6 +615,7 @@ export default function App() {
         }
       })()
       setTaskOptionPresets(presets)
+      setShortcutDraft(loadShortcutBindings())
     } catch (err) {
       msg.error(parseErr(err))
     }
@@ -718,6 +927,57 @@ export default function App() {
   }, [])
 
   const effectiveTheme = resolveTheme(themeMode)
+
+  useEffect(() => {
+    const darkCls = 'app-theme-dark'
+    const lightCls = 'app-theme-light'
+    const platformMacCls = 'app-platform-mac'
+    const platformNonMacCls = 'app-platform-nonmac'
+    document.body.classList.remove(darkCls, lightCls, platformMacCls, platformNonMacCls)
+    document.body.classList.add(effectiveTheme === 'dark' ? darkCls : lightCls)
+    document.body.classList.add(isMac ? platformMacCls : platformNonMacCls)
+    return () => {
+      document.body.classList.remove(darkCls, lightCls, platformMacCls, platformNonMacCls)
+    }
+  }, [effectiveTheme, isMac])
+
+  useEffect(() => {
+    const movingCls = 'app-window-moving'
+    if (windowMoving) document.body.classList.add(movingCls)
+    else document.body.classList.remove(movingCls)
+    return () => {
+      document.body.classList.remove(movingCls)
+    }
+  }, [windowMoving])
+
+  useEffect(() => {
+    const win = getCurrentWindow()
+    const pulseMoving = () => {
+      setWindowMoving(true)
+      if (movingTimerRef.current) window.clearTimeout(movingTimerRef.current)
+      movingTimerRef.current = window.setTimeout(() => {
+        setWindowMoving(false)
+      }, 140)
+    }
+
+    let unlistenMoved: (() => void) | null = null
+    let unlistenResized: (() => void) | null = null
+    ;(async () => {
+      try {
+        unlistenMoved = await win.onMoved(() => pulseMoving())
+        unlistenResized = await win.onResized(() => pulseMoving())
+      } catch {
+        // no-op
+      }
+    })()
+
+    return () => {
+      if (movingTimerRef.current) window.clearTimeout(movingTimerRef.current)
+      if (unlistenMoved) unlistenMoved()
+      if (unlistenResized) unlistenResized()
+      setWindowMoving(false)
+    }
+  }, [])
   const categoryOptions = useMemo(() => {
     const set = new Set<string>()
     for (const task of tasks) {
@@ -763,6 +1023,13 @@ export default function App() {
     [categoryFilter, searchText, section, sortBy, statusFilter, tasks],
   )
   const useVirtualTable = list.length > 150
+  const tableScroll = useMemo(
+    () =>
+      useVirtualTable
+        ? { x: section === 'downloaded' ? 720 : 840, y: 'calc(100vh - 360px)' as const }
+        : { x: section === 'downloaded' ? 720 : 840 },
+    [section, useVirtualTable],
+  )
   const onRowSelectionChange = useCallback((keys: React.Key[]) => {
     setSelectedTaskIds(keys.map((k) => String(k)))
   }, [])
@@ -781,7 +1048,7 @@ export default function App() {
     [tasks],
   )
 
-  const quickToggleTheme = async () => {
+  const quickToggleTheme = useCallback(async () => {
     const next = effectiveTheme === 'dark' ? 'light' : 'dark'
     setThemeMode(next)
     settingsForm.setFieldValue('ui_theme', next)
@@ -790,7 +1057,7 @@ export default function App() {
     } catch (err) {
       msg.error(parseErr(err))
     }
-  }
+  }, [effectiveTheme, msg, settingsForm])
 
   const onPauseResume = useCallback(async (task: Task) => {
     try {
@@ -938,25 +1205,25 @@ export default function App() {
     throw new Error(`unsupported retry task type: ${task.task_type}`)
   }
 
-  const onGlobalPauseAll = async () => {
+  const onGlobalPauseAll = useCallback(async () => {
     try {
       await api.call('pause_all')
       await refresh()
     } catch (err) {
       msg.error(parseErr(err))
     }
-  }
+  }, [msg, refresh])
 
-  const onGlobalResumeAll = async () => {
+  const onGlobalResumeAll = useCallback(async () => {
     try {
       await api.call('resume_all')
       await refresh()
     } catch (err) {
       msg.error(parseErr(err))
     }
-  }
+  }, [msg, refresh])
 
-  const onGlobalRetryFailed = async () => {
+  const onGlobalRetryFailed = useCallback(async () => {
     try {
       const failed = tasks.filter((task) => String(task.status).toLowerCase() === 'error' && isRetriableTask(task))
       if (failed.length === 0) {
@@ -977,7 +1244,7 @@ export default function App() {
     } catch (err) {
       msg.error(parseErr(err))
     }
-  }
+  }, [msg, refresh, t, tasks])
 
   const onGlobalClearCompleted = async () => {
     Modal.confirm({
@@ -1476,6 +1743,14 @@ export default function App() {
       return
     }
     const speedPlanJson = JSON.stringify(speedPlanRules)
+    const normalizedShortcuts = Object.fromEntries(
+      (Object.keys(shortcutDraft) as ShortcutAction[]).map((k) => [k, normalizeShortcut(shortcutDraft[k])]),
+    ) as ShortcutBindings
+    const duplicateShortcut = findDuplicateShortcut(normalizedShortcuts)
+    if (duplicateShortcut) {
+      msg.error(i18nFormat(t('shortcutDuplicate'), { key: duplicateShortcut }))
+      return
+    }
     setSettingsSaving(true)
     try {
       const payload: GlobalSettings = {
@@ -1520,6 +1795,9 @@ export default function App() {
           ? payload.post_complete_action
           : 'none',
       )
+      saveShortcutBindings(normalizedShortcuts)
+      setShortcutBindings(normalizedShortcuts)
+      setShortcutDraft(normalizedShortcuts)
       setThemeMode(normalizeThemeMode(payload.ui_theme))
       msg.success(t('settingsSaved'))
       await Promise.all([loadSettings(), loadDiagnostics(), loadUpdateInfo()])
@@ -1726,35 +2004,164 @@ export default function App() {
     }
   }, [msg])
 
+  const shortcutItems = useMemo(
+    () =>
+      [
+        { key: 'new_download', label: t('shortcutNewDownload') },
+        { key: 'focus_search', label: t('shortcutFocusSearch') },
+        { key: 'refresh_list', label: t('shortcutRefreshList') },
+        { key: 'open_settings', label: t('shortcutOpenSettings') },
+        { key: 'open_logs', label: t('shortcutOpenLogs') },
+        { key: 'toggle_theme', label: t('shortcutToggleTheme') },
+        { key: 'pause_all', label: t('shortcutPauseAll') },
+        { key: 'resume_all', label: t('shortcutResumeAll') },
+        { key: 'retry_failed', label: t('shortcutRetryFailed') },
+        { key: 'switch_downloading', label: t('shortcutSwitchDownloading') },
+        { key: 'switch_downloaded', label: t('shortcutSwitchDownloaded') },
+      ] as Array<{ key: ShortcutAction; label: string }>,
+    [t],
+  )
+
+  const setShortcutBinding = (action: ShortcutAction, value: string) => {
+    setShortcutDraft((prev) => ({ ...prev, [action]: normalizeShortcut(value) }))
+  }
+
+  const displayShortcut = useCallback(
+    (value: string) => formatShortcutForDisplay(value, isMac),
+    [isMac],
+  )
+
+  const openShortcutEditor = (action: ShortcutAction) => {
+    setShortcutEditingAction(action)
+    setShortcutCaptured(normalizeShortcut(shortcutDraft[action]))
+    setShortcutEditorOpen(true)
+  }
+
+  const applyShortcutEditor = () => {
+    if (!shortcutEditingAction) return
+    setShortcutBinding(shortcutEditingAction, shortcutCaptured)
+    setShortcutEditorOpen(false)
+    setShortcutEditingAction(null)
+  }
+
+  const performShortcutAction = useCallback(
+    async (action: ShortcutAction) => {
+      switch (action) {
+        case 'new_download':
+          await onOpenAdd()
+          break
+        case 'focus_search': {
+          const el = document.getElementById('task-search-input') as HTMLInputElement | null
+          el?.focus()
+          break
+        }
+        case 'refresh_list':
+          await refresh()
+          break
+        case 'open_settings':
+          await openSettings()
+          break
+        case 'open_logs':
+          await openLogsWindow()
+          break
+        case 'toggle_theme':
+          await quickToggleTheme()
+          break
+        case 'pause_all':
+          await onGlobalPauseAll()
+          break
+        case 'resume_all':
+          await onGlobalResumeAll()
+          break
+        case 'retry_failed':
+          await onGlobalRetryFailed()
+          break
+        case 'switch_downloading':
+          setSettingsOpen(false)
+          setSection('downloading')
+          break
+        case 'switch_downloaded':
+          setSettingsOpen(false)
+          setSection('downloaded')
+          break
+        default:
+          break
+      }
+    },
+    [
+      onOpenAdd,
+      refresh,
+      openSettings,
+      openLogsWindow,
+      quickToggleTheme,
+      onGlobalPauseAll,
+      onGlobalResumeAll,
+      onGlobalRetryFailed,
+      setSection,
+    ],
+  )
+
+  useEffect(() => {
+    if (!shortcutEditorOpen) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') return
+      e.preventDefault()
+      e.stopPropagation()
+      if (e.key === 'Escape') {
+        setShortcutEditorOpen(false)
+        setShortcutEditingAction(null)
+        return
+      }
+      if (e.key === 'Backspace' || e.key === 'Delete') {
+        setShortcutCaptured('')
+        return
+      }
+      const binding = shortcutFromKeyboardEvent(e)
+      if (!binding) return
+      setShortcutCaptured(binding)
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [shortcutEditorOpen])
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (shortcutEditorOpen) return
       const mod = e.metaKey || e.ctrlKey
+      const key = e.key.toLowerCase()
       const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase() || ''
       const editing = tag === 'input' || tag === 'textarea' || (e.target as HTMLElement | null)?.isContentEditable
-      if (mod && e.key.toLowerCase() === 'n') {
-        e.preventDefault()
-        void onOpenAdd()
-        return
+      if (!import.meta.env.DEV) {
+        if (e.key === 'F12') {
+          e.preventDefault()
+          return
+        }
+        if (mod && e.shiftKey && (key === 'i' || key === 'j' || key === 'c')) {
+          e.preventDefault()
+          return
+        }
       }
-      if (mod && e.key === ',') {
-        e.preventDefault()
-        void openSettings()
-        return
-      }
-      if (mod && e.key.toLowerCase() === 'l') {
-        e.preventDefault()
-        void openLogsWindow()
-        return
-      }
-      if (!mod && e.key === '/' && !editing) {
-        e.preventDefault()
-        const el = document.getElementById('task-search-input') as HTMLInputElement | null
-        el?.focus()
+      if (editing) return
+      for (const action of Object.keys(shortcutBindings) as ShortcutAction[]) {
+        if (eventMatchesShortcut(e, shortcutBindings[action])) {
+          e.preventDefault()
+          void performShortcutAction(action)
+          return
+        }
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [onOpenAdd, openSettings, openLogsWindow])
+  }, [performShortcutAction, shortcutBindings, shortcutEditorOpen])
+
+  useEffect(() => {
+    if (import.meta.env.DEV) return
+    const onContextMenu = (e: MouseEvent) => {
+      e.preventDefault()
+    }
+    window.addEventListener('contextmenu', onContextMenu)
+    return () => window.removeEventListener('contextmenu', onContextMenu)
+  }, [])
 
   useEffect(() => {
     if (!addOpen) return
@@ -1875,7 +2282,7 @@ export default function App() {
         ellipsis: true,
         render: (_: unknown, row: Task) => (
           <Space size={6}>
-            <span>{row.name || row.source || row.id}</span>
+            <span>{inferDisplayName(row)}</span>
             {!!String(row.category || '').trim() && <Tag>{String(row.category)}</Tag>}
           </Space>
         ),
@@ -1883,7 +2290,10 @@ export default function App() {
       const actionsCol = {
         key: 'actions',
         title: t('colActions'),
-        width: section === 'downloaded' ? Math.min(146, Number(columnWidths.actions || 146)) : Math.min(154, Number(columnWidths.actions || 154)),
+        width:
+          section === 'downloaded'
+            ? Math.min(136, Number(columnWidths.actions || 136))
+            : Math.min(146, Number(columnWidths.actions || 146)),
         fixed: 'right' as const,
         render: (_: unknown, row: Task) => (
           <Space wrap>
@@ -2007,14 +2417,9 @@ export default function App() {
                 title: t('colProgress'),
                 width: columnWidths.progress,
                 render: (_: unknown, row: Task) => {
-                  const percent = row.total_length > 0 ? Math.min(100, (row.completed_length / row.total_length) * 100) : 0
+                  const percent = taskProgressPercent(row)
                   return (
-                    <Space direction="vertical" size={2} style={{ width: '100%' }}>
-                      <Progress percent={Number(percent.toFixed(1))} size="small" />
-                      <Typography.Text type="secondary">
-                        {fmtBytes(row.completed_length)} / {fmtBytes(row.total_length)}
-                      </Typography.Text>
-                    </Space>
+                    <Typography.Text>{`${Number(percent.toFixed(1))}%`}</Typography.Text>
                   )
                 },
               },
@@ -2041,7 +2446,7 @@ export default function App() {
                 key: 'status',
                 title: t('colStatus'),
                 dataIndex: 'status',
-                width: Math.min(110, Number(columnWidths.status || 110)),
+                width: Math.min(84, Number(columnWidths.status || 84)),
                 render: (v: string, row: Task) => {
                   const status = String(v || '').toLowerCase()
                   const isCompleted = status === 'completed'
@@ -2146,12 +2551,29 @@ export default function App() {
           borderRadius: 12,
           colorPrimary: '#1677ff',
           fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',
+          colorBgLayout: 'transparent',
+          colorBgContainer:
+            effectiveTheme === 'dark'
+              ? 'rgba(16, 22, 32, 0.32)'
+              : 'rgba(246, 250, 255, 0.36)',
+          colorBgElevated:
+            effectiveTheme === 'dark'
+              ? 'rgba(16, 22, 32, 0.4)'
+              : 'rgba(246, 250, 255, 0.44)',
+          colorBgMask:
+            effectiveTheme === 'dark'
+              ? 'rgba(6, 10, 18, 0.2)'
+              : 'rgba(14, 22, 36, 0.12)',
+          boxShadowSecondary:
+            effectiveTheme === 'dark'
+              ? '0 12px 30px rgba(0, 8, 22, 0.24)'
+              : '0 12px 30px rgba(44, 80, 130, 0.14)',
         },
       }}
     >
       <AntApp>
         {msgCtx}
-        <Layout className={`root-layout theme-${effectiveTheme} ${siderCollapsed ? 'sider-collapsed' : ''}`}>
+        <Layout className={`root-layout theme-${effectiveTheme} ${siderCollapsed ? 'sider-collapsed' : ''} ${windowMoving ? 'window-moving' : ''}`}>
           <Layout.Sider
             theme={effectiveTheme}
             width={132}
@@ -2165,7 +2587,7 @@ export default function App() {
               <Tooltip title={siderCollapsed ? `${t('navDownloading')} (${tasks.filter((x) => x.status !== 'completed').length})` : undefined} placement="right">
                 <button
                   type="button"
-                  className={`side-nav-item ${section === 'downloading' ? 'active' : ''}`}
+                  className={`side-nav-item ${!settingsOpen && section === 'downloading' ? 'active' : ''}`}
                   onClick={() => {
                     setSettingsOpen(false)
                     setSection('downloading')
@@ -2183,7 +2605,7 @@ export default function App() {
               <Tooltip title={siderCollapsed ? `${t('navDownloaded')} (${tasks.filter((x) => x.status === 'completed').length})` : undefined} placement="right">
                 <button
                   type="button"
-                  className={`side-nav-item ${section === 'downloaded' ? 'active' : ''}`}
+                  className={`side-nav-item ${!settingsOpen && section === 'downloaded' ? 'active' : ''}`}
                   onClick={() => {
                     setSettingsOpen(false)
                     setSection('downloaded')
@@ -2371,10 +2793,20 @@ export default function App() {
                         cell: ResizableTitle,
                       },
                     }}
-                    scroll={{ x: section === 'downloaded' ? 720 : 840, y: 'calc(100vh - 360px)' }}
+                    scroll={tableScroll}
                     rowSelection={{
                       selectedRowKeys: selectedTaskIds,
                       onChange: onRowSelectionChange,
+                    }}
+                    onRow={(row) => {
+                      if (section === 'downloaded') return {}
+                      const status = String(row.status || '').toLowerCase()
+                      const percent = taskProgressPercent(row)
+                      const className = `progress-row progress-${status}`
+                      const style = {
+                        '--row-progress-pct': `${Number(percent.toFixed(2))}%`,
+                      } as React.CSSProperties
+                      return { className, style }
                     }}
                     expandable={{
                       rowExpandable: (row) => !!row.error_message || !!row.error_code || !!row.source,
@@ -2440,16 +2872,18 @@ export default function App() {
         {settingsOpen && (
           <Suspense fallback={null}>
         <SettingsPage>
-            <div className="settings-inline-panel">
-            <div className="settings-inline-header">
-              <Typography.Title level={4} style={{ margin: 0 }}>{t('settingsTitle')}</Typography.Title>
-              <Space>
-                <Button onClick={() => setSettingsOpen(false)}>{t('cancel')}</Button>
-                <Button type="primary" onClick={saveSettings} loading={settingsSaving}>
-                  {t('save')}
-                </Button>
-              </Space>
-            </div>
+            <Card
+              className="main-card settings-card"
+              title={t('settingsTitle')}
+              extra={
+                <Space>
+                  <Button onClick={() => setSettingsOpen(false)}>{t('cancel')}</Button>
+                  <Button type="primary" onClick={saveSettings} loading={settingsSaving}>
+                    {t('save')}
+                  </Button>
+                </Space>
+              }
+            >
             <div className="settings-inline-body">
             <div className="settings-shell">
             <Tabs
@@ -2475,6 +2909,35 @@ export default function App() {
                         ]}
                       />
                     </Form.Item>
+                    <Typography.Text type="secondary" style={{ display: 'block', marginTop: -6, marginBottom: 8 }}>
+                      {t('shortcutHint')}
+                    </Typography.Text>
+                    <Typography.Title level={5}>{t('grpShortcuts')}</Typography.Title>
+                    <Space direction="vertical" style={{ width: '100%' }}>
+                      {shortcutItems.map((item) => (
+                        <div key={item.key} className="grid-2" style={{ alignItems: 'center' }}>
+                          <Typography.Text>{item.label}</Typography.Text>
+                          <Space.Compact block>
+                            <Input
+                              value={displayShortcut(shortcutDraft[item.key])}
+                              readOnly
+                              placeholder={t('shortcutPress')}
+                            />
+                            <Button onClick={() => openShortcutEditor(item.key)}>{t('shortcutEdit')}</Button>
+                            <Button onClick={() => setShortcutBinding(item.key, '')}>{t('shortcutClear')}</Button>
+                          </Space.Compact>
+                        </div>
+                      ))}
+                      <Space>
+                        <Button
+                          onClick={() => {
+                            setShortcutDraft({ ...DEFAULT_SHORTCUT_BINDINGS })
+                          }}
+                        >
+                          {t('shortcutResetDefaults')}
+                        </Button>
+                      </Space>
+                    </Space>
 
                     <Divider />
                     <Typography.Title level={5}>{t('grpDownload')}</Typography.Title>
@@ -2912,7 +3375,7 @@ export default function App() {
             />
             </div>
             </div>
-            </div>
+            </Card>
         </SettingsPage>
           </Suspense>
         )}
@@ -2920,6 +3383,35 @@ export default function App() {
             </Layout.Content>
           </Layout>
         </Layout>
+
+        <Modal
+          title={t('shortcutEditTitle')}
+          open={shortcutEditorOpen}
+          onCancel={() => {
+            setShortcutEditorOpen(false)
+            setShortcutEditingAction(null)
+          }}
+          onOk={applyShortcutEditor}
+          okText={t('save')}
+        >
+          <Space direction="vertical" style={{ width: '100%' }} size={10}>
+            <Typography.Text>
+              {t('shortcutCurrent')}:{' '}
+              <Typography.Text code>
+                {shortcutEditingAction
+                  ? displayShortcut(shortcutDraft[shortcutEditingAction]) || '-'
+                  : '-'}
+              </Typography.Text>
+            </Typography.Text>
+            <Typography.Text>
+              {t('shortcutNew')}:{' '}
+              <Typography.Text code>
+                {displayShortcut(shortcutCaptured) || t('shortcutPress')}
+              </Typography.Text>
+            </Typography.Text>
+            <Typography.Text type="secondary">{t('shortcutRecording')}</Typography.Text>
+          </Space>
+        </Modal>
 
         {addOpen && (
           <Suspense fallback={null}>
@@ -3407,7 +3899,9 @@ export default function App() {
             <Typography.Text>
               {removeTaskIds.length > 1
                 ? `${removeTaskIds.length} task(s)`
-                : removeTask?.name || removeTask?.source || removeTask?.id}
+                : removeTask
+                  ? inferDisplayName(removeTask)
+                  : '-'}
             </Typography.Text>
             <Switch checked={removeDeleteFiles} onChange={setRemoveDeleteFiles} />
             <Typography.Text type="secondary">{t('removeWithFiles')}</Typography.Text>
