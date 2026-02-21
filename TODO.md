@@ -29,7 +29,7 @@
 
 ### P2 - Performance and Maintainability
 
-- [ ] UI bundle size: split vendor chunks (antd), lazy-load heavy panels, and track bundle size in CI
+- [x] UI bundle size: split vendor chunks (antd), lazy-load heavy panels, and track bundle size in CI
 - [ ] Add small unit tests for: shortcut parsing/matching, rule matching, and safe-delete path validation
 
 ## P0 - Usability and Stability

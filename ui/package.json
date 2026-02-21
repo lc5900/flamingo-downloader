@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run check:i18n && tsc -b && vite build",
+    "check:bundle": "node scripts/check-bundle-size.mjs",
     "check:i18n": "node scripts/check-i18n.mjs && npm run gen:i18n-keys",
     "lint": "eslint .",
     "preview": "vite preview",

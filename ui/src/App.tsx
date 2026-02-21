@@ -61,8 +61,6 @@ import * as api from './api/client'
 import { ResizableTitle } from './components/ResizableTitle'
 import { defaultLayoutFor, useTableLayout } from './hooks/useTableLayout'
 import { detectLocale, I18N } from './i18n'
-import { DownloadedPage } from './pages/DownloadedPage'
-import { DownloadingPage } from './pages/DownloadingPage'
 import { useUiViewStore } from './stores/uiViewStore'
 import type {
   AddFormValues,
@@ -100,6 +98,12 @@ import 'react-resizable/css/styles.css'
 
 const AddDownloadPage = lazy(() =>
   import('./pages/AddDownloadPage').then((module) => ({ default: module.AddDownloadPage })),
+)
+const DownloadedPage = lazy(() =>
+  import('./pages/DownloadedPage').then((module) => ({ default: module.DownloadedPage })),
+)
+const DownloadingPage = lazy(() =>
+  import('./pages/DownloadingPage').then((module) => ({ default: module.DownloadingPage })),
 )
 const TaskDetailPage = lazy(() =>
   import('./pages/TaskDetailPage').then((module) => ({ default: module.TaskDetailPage })),
@@ -2784,6 +2788,7 @@ export default function App() {
               {dragHover && <div className="drop-hint">{t('dropHint')}</div>}
               {!settingsOpen && (
               <>
+              <Suspense fallback={null}>
               <TaskPageShell>
                 <Card
                   className="main-card"
@@ -2946,6 +2951,7 @@ export default function App() {
                 </div>
                 </Card>
               </TaskPageShell>
+              </Suspense>
               <div className="content-status-bar">
                 <Space size={16}>
                   <Typography.Text type="secondary">

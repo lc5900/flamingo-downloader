@@ -69,6 +69,17 @@ jobs:
         run: |
           bash scripts/preflight.sh build-ui
 
+      - name: UI bundle size check
+        run: npm --prefix ui run check:bundle
+
+      - name: Upload UI bundle size report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-bundle-size-report
+          path: ui/dist/bundle-size-report.json
+          if-no-files-found: warn
+
       - name: Rust clippy check
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets
 
