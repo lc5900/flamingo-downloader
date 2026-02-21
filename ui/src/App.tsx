@@ -111,6 +111,7 @@ const SettingsPage = lazy(() =>
 const LOCALE_KEY = 'flamingo.locale'
 const SHORTCUT_STORAGE_KEY = 'flamingo.shortcuts.v1'
 const SHORTCUT_DISPLAY_MODE_KEY = 'flamingo.shortcuts.display_mode.v1'
+const PROGRESS_ROW_BG_KEY = 'flamingo.progress_row_bg_enabled.v1'
 
 type ShortcutAction =
   | 'new_download'
@@ -268,6 +269,20 @@ function loadShortcutDisplayMode(): ShortcutDisplayMode {
 
 function saveShortcutDisplayMode(mode: ShortcutDisplayMode) {
   localStorage.setItem(SHORTCUT_DISPLAY_MODE_KEY, mode)
+}
+
+function loadProgressRowBackgroundEnabled(): boolean {
+  try {
+    const raw = String(localStorage.getItem(PROGRESS_ROW_BG_KEY) || '').trim().toLowerCase()
+    if (raw === 'false' || raw === '0' || raw === 'off') return false
+    return true
+  } catch {
+    return true
+  }
+}
+
+function saveProgressRowBackgroundEnabled(enabled: boolean) {
+  localStorage.setItem(PROGRESS_ROW_BG_KEY, enabled ? 'true' : 'false')
 }
 
 function formatShortcutForDisplayWithMode(
@@ -507,6 +522,9 @@ export default function App() {
   const [shortcutDraft, setShortcutDraft] = useState<ShortcutBindings>(() => loadShortcutBindings())
   const [shortcutDisplayMode, setShortcutDisplayMode] = useState<ShortcutDisplayMode>(
     () => loadShortcutDisplayMode(),
+  )
+  const [progressRowBackgroundEnabled, setProgressRowBackgroundEnabled] = useState<boolean>(
+    () => loadProgressRowBackgroundEnabled(),
   )
   const [shortcutEditorOpen, setShortcutEditorOpen] = useState(false)
   const [shortcutEditingAction, setShortcutEditingAction] = useState<ShortcutAction | null>(null)
@@ -2874,7 +2892,7 @@ export default function App() {
                       onChange: onRowSelectionChange,
                     }}
                     onRow={(row) => {
-                      if (section === 'downloaded') return {}
+                      if (section === 'downloaded' || !progressRowBackgroundEnabled) return {}
                       const status = String(row.status || '').toLowerCase()
                       const percent = taskProgressPercent(row)
                       const className = `progress-row progress-${status}`
@@ -2982,6 +3000,17 @@ export default function App() {
                           { label: t('themeLight'), value: 'light' },
                           { label: t('themeDark'), value: 'dark' },
                         ]}
+                      />
+                    </Form.Item>
+                    <Form.Item label={t('progressRowBackground')} style={{ marginTop: -2, marginBottom: 8 }}>
+                      <Switch
+                        checked={progressRowBackgroundEnabled}
+                        checkedChildren={t('enabled')}
+                        unCheckedChildren={t('disabled')}
+                        onChange={(checked) => {
+                          setProgressRowBackgroundEnabled(checked)
+                          saveProgressRowBackgroundEnabled(checked)
+                        }}
                       />
                     </Form.Item>
                     <Typography.Text type="secondary" style={{ display: 'block', marginTop: -6, marginBottom: 8 }}>
