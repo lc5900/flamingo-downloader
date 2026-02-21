@@ -6,7 +6,7 @@
 
 - [x] Windows: spawn `aria2c` without a console window (no black CMD flash)
 - [x] CI: assert Release build has devtools disabled (Tauri `devtools=false`) and UI blocks context menu/DevTools hotkeys
-- [ ] Table: fully eliminate the right-edge blank/white strip across virtual/non-virtual modes (AntD `Table` scroll/virtual quirks)
+- [x] Table: fully eliminate the right-edge blank/white strip across virtual/non-virtual modes (AntD `Table` scroll/virtual quirks)
 - [ ] Deletion persistence: ensure removed tasks never resurrect after restart (aria2 session import + DB reconcile edge cases)
 
 ### P1 - UX and Productivity

@@ -601,6 +601,7 @@ body.app-theme-dark .ant-dropdown .ant-dropdown-menu-item-selected {
 }
 
 .task-table .ant-table-cell-scrollbar {
+  display: none !important;
   width: 0 !important;
   min-width: 0 !important;
   padding: 0 !important;
@@ -610,7 +611,10 @@ body.app-theme-dark .ant-dropdown .ant-dropdown-menu-item-selected {
 }
 
 .task-table col.ant-table-cell-scrollbar {
+  display: none !important;
   width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
 }
 
 .task-table .ant-table-container::before,
@@ -640,6 +644,7 @@ body.app-theme-dark .ant-dropdown .ant-dropdown-menu-item-selected {
 .task-table .ant-table-content {
   scrollbar-width: thin;
   scrollbar-color: rgba(126, 148, 186, 0.42) transparent;
+  background: transparent !important;
 }
 
 .task-table .ant-table-body::-webkit-scrollbar,
@@ -668,6 +673,9 @@ body.app-theme-dark .ant-dropdown .ant-dropdown-menu-item-selected {
 
 .task-table .rc-virtual-list-scrollbar {
   display: none !important;
+  width: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
 }
 
 .task-table .rc-virtual-list-scrollbar-thumb {
@@ -677,6 +685,15 @@ body.app-theme-dark .ant-dropdown .ant-dropdown-menu-item-selected {
 
 .root-layout.theme-dark .task-table .rc-virtual-list-scrollbar-thumb {
   background: rgba(146, 174, 226, 0.52) !important;
+}
+
+.task-table .ant-table-body-virtual .ant-table-tbody-virtual-holder {
+  scrollbar-width: none;
+}
+
+.task-table .ant-table-body-virtual .ant-table-tbody-virtual-holder::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
 }
 
 .ant-btn,
