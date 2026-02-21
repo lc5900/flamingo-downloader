@@ -26,18 +26,20 @@ Flamingo focuses on delivering a stable **download product** (task UX, persisten
 
 - HTTP/HTTPS/FTP, magnet, torrent via aria2 JSON-RPC
 - Downloading / Downloaded views with modern task actions
+- Keyboard shortcuts for high-frequency actions (editable in Settings)
 - Per-task options + runtime updates (speed, split, seeding)
 - Multi-rule download directories by `ext/domain/type`
 - Category rules and grouped filtering
 - Full settings page + diagnostics + operation logs window
 - i18n (`en-US`, `zh-CN`), theme mode (`system/light/dark`)
+- Glass-style UI (macOS Liquid Glass where available, fallback blur/glass on other platforms)
 - Browser bridge + extension template (Chromium + Firefox)
 - Native messaging host installer scripts for Win/macOS/Linux
 - SQLite persistence + session recovery + startup self-check
 
 ## Screenshots
 
-> Real screenshots are stored in `docs/screenshots/`.
+> Latest UI screenshots (updated on 2026-02-22) are stored in `docs/screenshots/`.
 
 ### Main Window
 
@@ -71,6 +73,7 @@ Core principles:
 - Tauri 2 build dependencies for your OS
 - `aria2c` binary (manual path mode currently enabled)
 - Node.js 20+ for UI build
+- Optional: `cargo-tauri` CLI for packaging (`cargo install tauri-cli --version "^2.0" --locked`)
 
 ### 2) Run in development
 
@@ -125,6 +128,7 @@ Workflow file: `.github/workflows/build-release.yml`
 - HTTP bridge endpoint: `127.0.0.1 + token`
 - Extension source: [`browser-extension/`](browser-extension)
 - Extension docs: [`browser-extension/README.md`](browser-extension/README.md)
+- Zero-config extension flow is supported by default (token input not required in common local setup)
 - Native messaging host scripts: [`browser-extension/native-host/`](browser-extension/native-host)
 - DRM note: encrypted DRM streams (Widevine/FairPlay/PlayReady) are not downloadable.
 

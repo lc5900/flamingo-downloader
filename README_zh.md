@@ -26,18 +26,20 @@ English README: [`README.md`](README.md)
 
 - 通过 aria2 JSON-RPC 支持 HTTP/HTTPS/FTP、magnet、torrent
 - 下载中 / 已下载双列表，常用操作完整
+- 支持高频操作快捷键（可在设置中自定义）
 - 任务级参数与运行时选项（限速、分片、做种）
 - 按 `ext/domain/type` 规则分流到不同目录
 - 分类规则与筛选
 - 独立设置页、诊断页、操作日志窗口
 - 国际化（`en-US`、`zh-CN`）和主题模式（`system/light/dark`）
+- 玻璃态风格 UI（macOS 支持 Liquid Glass，其它平台使用磨砂/透明回退）
 - 浏览器桥接 + 扩展模板（Chromium + Firefox）
 - Win/macOS/Linux 原生消息宿主安装脚本
 - SQLite 持久化、会话恢复、启动自检
 
 ## 界面截图
 
-> 当前展示为真实截图，文件位于 `docs/screenshots/`。
+> 当前为最新界面截图（更新于 2026-02-22），文件位于 `docs/screenshots/`。
 
 ### 主界面
 
@@ -71,6 +73,7 @@ English README: [`README.md`](README.md)
 - 对应系统的 Tauri 2 构建依赖
 - 可用 `aria2c`（当前为手动路径模式）
 - Node.js 20+（前端构建）
+- 可选：打包时安装 `cargo-tauri`（`cargo install tauri-cli --version "^2.0" --locked`）
 
 ### 2）开发运行
 
@@ -125,6 +128,7 @@ cargo tauri build
 - HTTP 桥接：`127.0.0.1 + token`
 - 扩展目录：[`browser-extension/`](browser-extension)
 - 扩展文档：[`browser-extension/README.md`](browser-extension/README.md)
+- 默认支持开箱即用流程（常见本地场景不需要手动输入 token）
 - 原生消息宿主：[`browser-extension/native-host/`](browser-extension/native-host)
 - DRM 说明：受 DRM 保护的加密流（如 Widevine/FairPlay/PlayReady）不支持下载。
 
