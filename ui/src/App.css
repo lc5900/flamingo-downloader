@@ -40,6 +40,19 @@
   position: relative;
 }
 
+.content-status {
+  position: absolute;
+  right: 22px;
+  bottom: 14px;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.content-status .ant-tag {
+  pointer-events: auto;
+  margin-inline-end: 0;
+}
+
 .drop-hint {
   position: absolute;
   inset: 18px;

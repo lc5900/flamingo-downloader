@@ -2178,20 +2178,11 @@ export default function App() {
                 <Button icon={<FileSearchOutlined />} onClick={openLogsWindow}>
                   {t('logsWindow')}
                 </Button>
-                <Tag>{`${t('navDownloading')}: ${activeTaskCount}`}</Tag>
-                <Tag>{`${t('colSpeed')}: ${fmtBytes(totalDownloadSpeed)}/s`}</Tag>
-                <Tag>{`${t('freeSpace')}: ${fmtBytes(Number(storageSummary?.free_bytes || 0))}`}</Tag>
                 <Button icon={<SyncOutlined />} onClick={quickToggleTheme}>
                   {t('darkLight')}
                 </Button>
                 <Button icon={<ReloadOutlined />} onClick={refresh} loading={loading}>
                   {t('refresh')}
-                </Button>
-                <Button onClick={onGlobalPauseAll}>{t('pauseAll')}</Button>
-                <Button onClick={onGlobalResumeAll}>{t('resumeAll')}</Button>
-                <Button onClick={onGlobalRetryFailed}>{t('retryFailed')}</Button>
-                <Button danger onClick={onGlobalClearCompleted}>
-                  {t('clearCompleted')}
                 </Button>
                 <Dropdown
                   menu={{
@@ -2276,6 +2267,18 @@ export default function App() {
                   <Button icon={<SlidersOutlined />} onClick={() => setLayoutOpen(true)}>
                     {t('layoutSettings')}
                   </Button>
+                  {section === 'downloading' && (
+                    <>
+                      <Button size="small" onClick={onGlobalPauseAll}>{t('pauseAll')}</Button>
+                      <Button size="small" onClick={onGlobalResumeAll}>{t('resumeAll')}</Button>
+                      <Button size="small" onClick={onGlobalRetryFailed}>{t('retryFailed')}</Button>
+                    </>
+                  )}
+                  {section === 'downloaded' && (
+                    <Button size="small" danger onClick={onGlobalClearCompleted}>
+                      {t('clearCompleted')}
+                    </Button>
+                  )}
                   <Tag>{`${t('selectedCount')}: ${selectedTaskIds.length}`}</Tag>
                   <Button size="small" onClick={onBatchPause} disabled={selectedTaskIds.length === 0 || section === 'downloaded'}>
                     {t('batchPause')}
@@ -2356,6 +2359,13 @@ export default function App() {
                 </div>
                 </Card>
               </TaskPageShell>
+              <div className="content-status">
+                <Space size={8}>
+                  <Tag>{`${t('navDownloading')}: ${activeTaskCount}`}</Tag>
+                  <Tag>{`${t('colSpeed')}: ${fmtBytes(totalDownloadSpeed)}/s`}</Tag>
+                  <Tag>{`${t('freeSpace')}: ${fmtBytes(Number(storageSummary?.free_bytes || 0))}`}</Tag>
+                </Space>
+              </div>
             </Layout.Content>
           </Layout>
         </Layout>
