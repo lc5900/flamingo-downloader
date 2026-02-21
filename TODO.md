@@ -1,5 +1,37 @@
 # Flamingo Downloader TODO
 
+## 2026-02-22 Backlog (New)
+
+### P0 - Must Fix / Guardrails
+
+- [x] Windows: spawn `aria2c` without a console window (no black CMD flash)
+- [ ] CI: assert Release build has devtools disabled (Tauri `devtools=false`) and UI blocks context menu/DevTools hotkeys
+- [ ] Table: fully eliminate the right-edge blank/white strip across virtual/non-virtual modes (AntD `Table` scroll/virtual quirks)
+- [ ] Deletion persistence: ensure removed tasks never resurrect after restart (aria2 session import + DB reconcile edge cases)
+
+### P1 - UX and Productivity
+
+- [ ] Shortcuts: show macOS symbols (⌘ ⌥ ⇧) as an optional display mode
+- [ ] Shortcuts editor: live conflict warnings inside the edit modal (show which action already uses the combo)
+- [ ] Add a “Keyboard Shortcuts” help/cheatsheet modal (read-only list + search)
+- [ ] Progress-row background: add a Settings toggle (some users prefer the classic progress bar)
+
+### P1 - Browser Integration
+
+- [ ] Extension i18n (zh-CN/en-US) + default language detection
+- [ ] Extension popup: show “Send succeeded/failed” toast per URL with error reason
+- [ ] Extension: auto-bridge discovery UX (detect app running/port/token status and guide user)
+
+### P2 - Media and Post-processing
+
+- [ ] HLS/DASH merge: make ffmpeg merge a first-class workflow (progress, output path, failure reasons)
+- [ ] Media tasks: persist merge metadata (input URL, output file, ffmpeg args) for diagnostics/export
+
+### P2 - Performance and Maintainability
+
+- [ ] UI bundle size: split vendor chunks (antd), lazy-load heavy panels, and track bundle size in CI
+- [ ] Add small unit tests for: shortcut parsing/matching, rule matching, and safe-delete path validation
+
 ## P0 - Usability and Stability
 
 - [x] Replace blocking `alert/confirm` with unified toast + modal feedback

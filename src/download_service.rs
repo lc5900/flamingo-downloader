@@ -3312,7 +3312,15 @@ fn rollback_aria2_binary(target: &Path, backup: Option<PathBuf>) {
 }
 
 fn verify_aria2_binary(path: &Path) -> Result<()> {
-    let output = std::process::Command::new(path).arg("--version").output()?;
+    let mut command = std::process::Command::new(path);
+    command.arg("--version");
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    let output = command.output()?;
     if !output.status.success() {
         return Err(anyhow!("downloaded aria2 binary failed self-check"));
     }
