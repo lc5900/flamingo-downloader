@@ -19,6 +19,7 @@
       .hint { font-size: 11px; color: #64748b; }
       .muted { color: #94a3b8; }
       .switch { display:flex; gap:6px; align-items:center; font-size:12px; color:#334155; }
+      .chip { display:inline-block; font-size:11px; color:#334155; background:#e2e8f0; border-radius:999px; padding:2px 8px; margin-right:4px; }
       .footer { margin-top: 10px; display:flex; justify-content:space-between; align-items:center; }
       .status { font-size: 12px; color: #334155; min-height: 18px; }
       .status.success { color: #047857; }
@@ -44,6 +45,9 @@
         <label class="switch"><input id="enabled" type="checkbox" />Bridge</label>
         <label class="switch"><input id="sniffMediaEnabled" type="checkbox" />Sniffer</label>
         <label class="switch"><input id="autoIntercept" type="checkbox" />Auto</label>
+      </div>
+      <div class="row">
+        <label class="switch"><input id="currentTabOnly" type="checkbox" />Current tab only</label>
       </div>
 
       <div id="status" class="status"></div>

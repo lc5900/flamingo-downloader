@@ -223,7 +223,7 @@
 
 ### Phase 2 - UX and Filtering
 
-- [ ] Add page-scoped filtering (current tab only) and simple quality/format labels
+- [x] Add page-scoped filtering (current tab only) and simple quality/format labels
 - [ ] Add whitelist/blacklist patterns for sniffer capture (host/path rules)
 - [ ] Add action buttons: copy URL / open source page / batch send selected
 

@@ -3,7 +3,7 @@
   "name": "Flamingo Downloader Bridge",
   "version": "0.1.0",
   "description": "Send browser downloads to Flamingo Downloader",
-  "permissions": ["downloads", "storage", "contextMenus", "webRequest"],
+  "permissions": ["downloads", "storage", "contextMenus", "webRequest", "tabs"],
   "optional_permissions": ["nativeMessaging"],
   "host_permissions": ["http://127.0.0.1/*", "<all_urls>"],
   "background": {

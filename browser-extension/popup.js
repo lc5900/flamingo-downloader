@@ -10,9 +10,11 @@ const el = {
   enabled: document.getElementById('enabled'),
   sniffMediaEnabled: document.getElementById('sniffMediaEnabled'),
   autoIntercept: document.getElementById('autoIntercept'),
+  currentTabOnly: document.getElementById('currentTabOnly'),
 };
 
 let statusTimer = null;
+let currentTabId = -1;
 
 function esc(input) {
   return String(input || '')
@@ -30,6 +32,31 @@ function fmtTs(ts) {
 
 async function ask(action, payload = {}) {
   return await ext.runtime.sendMessage({ action, ...payload });
+}
+
+function detectFormat(item) {
+  const url = String(item?.url || '').toLowerCase();
+  const contentType = String(item?.contentType || '').toLowerCase();
+  if (url.includes('.m3u8') || contentType.includes('mpegurl')) return 'HLS';
+  if (url.includes('.mpd') || contentType.includes('dash+xml')) return 'DASH';
+  const extMatch = url.match(/\.([a-z0-9]{2,5})(?:$|[?#])/i);
+  return extMatch ? extMatch[1].toUpperCase() : (contentType.split('/')[1] || 'MEDIA').toUpperCase();
+}
+
+function detectQuality(item) {
+  const source = `${String(item?.url || '')} ${String(item?.pageUrl || '')}`.toLowerCase();
+  const m = source.match(/(2160p|1440p|1080p|720p|480p|360p)/);
+  return m ? m[1].toUpperCase() : 'Unknown';
+}
+
+async function resolveCurrentTab() {
+  try {
+    const tabs = await ext.tabs.query({ active: true, currentWindow: true });
+    const tab = Array.isArray(tabs) ? tabs[0] : null;
+    currentTabId = Number.isInteger(tab?.id) ? tab.id : -1;
+  } catch {
+    currentTabId = -1;
+  }
 }
 
 function showStatus(text, level = 'info') {
@@ -59,7 +86,10 @@ async function loadQuickState() {
 async function loadCandidates() {
   const response = await ask('list_media_candidates');
   if (!response?.ok) throw new Error(String(response?.error || 'list unavailable'));
-  const items = Array.isArray(response.items) ? response.items : [];
+  const sourceItems = Array.isArray(response.items) ? response.items : [];
+  const items = el.currentTabOnly.checked
+    ? sourceItems.filter((item) => Number(item?.tabId || -1) === currentTabId)
+    : sourceItems;
   if (items.length === 0) {
     el.list.innerHTML = '<div class="card muted">No media detected yet.</div>';
     return;
@@ -68,9 +98,12 @@ async function loadCandidates() {
     .slice(0, 40)
     .map((item, idx) => {
       const url = String(item?.url || '');
+      const fmt = detectFormat(item);
+      const quality = detectQuality(item);
       return `
 <div class="card">
   <div class="hint">#${idx + 1} | ${esc(item?.reason)} | hits ${Number(item?.hits || 0)} | ${esc(fmtTs(item?.lastSeenAt))}</div>
+  <div><span class="chip">${esc(fmt)}</span><span class="chip">${esc(quality)}</span></div>
   <div class="url">${esc(url)}</div>
   <div class="toolbar">
     <button class="send primary" data-url="${encodeURIComponent(url)}" type="button">Send</button>
@@ -123,6 +156,7 @@ async function setQuickFlags() {
 }
 
 async function refreshAll() {
+  await resolveCurrentTab();
   await loadQuickState();
   await loadCandidates();
 }
@@ -150,6 +184,9 @@ el.openOptions.addEventListener('click', () => {
 el.enabled.addEventListener('change', () => { void setQuickFlags(); });
 el.sniffMediaEnabled.addEventListener('change', () => { void setQuickFlags(); });
 el.autoIntercept.addEventListener('change', () => { void setQuickFlags(); });
+el.currentTabOnly.addEventListener('change', () => {
+  void loadCandidates().catch((e) => showStatus(String(e?.message || e), 'error'));
+});
 
 refreshAll().catch((e) => {
   showStatus(String(e?.message || e), 'error');

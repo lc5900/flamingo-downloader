@@ -8,6 +8,7 @@
     "storage",
     "contextMenus",
     "webRequest",
+    "tabs",
     "nativeMessaging",
     "http://127.0.0.1/*",
     "<all_urls>"
