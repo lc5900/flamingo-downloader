@@ -601,11 +601,7 @@ impl DownloadService {
         Ok(())
     }
 
-    pub async fn set_task_runtime_options(
-        &self,
-        task_id: &str,
-        options: Value,
-    ) -> Result<()> {
+    pub async fn set_task_runtime_options(&self, task_id: &str, options: Value) -> Result<()> {
         self.ensure_aria2_ready().await?;
         let task = self
             .db
@@ -645,8 +641,13 @@ impl DownloadService {
             return Err(anyhow!("no valid runtime options provided"));
         }
 
-        self.aria2.change_option(&gid, Value::Object(sanitized)).await?;
-        self.push_log("set_task_runtime_options", format!("updated task {task_id} runtime options"));
+        self.aria2
+            .change_option(&gid, Value::Object(sanitized))
+            .await?;
+        self.push_log(
+            "set_task_runtime_options",
+            format!("updated task {task_id} runtime options"),
+        );
         Ok(())
     }
 
