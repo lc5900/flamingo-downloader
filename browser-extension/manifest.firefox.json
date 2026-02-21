@@ -7,8 +7,10 @@
     "downloads",
     "storage",
     "contextMenus",
+    "webRequest",
     "nativeMessaging",
-    "http://127.0.0.1/*"
+    "http://127.0.0.1/*",
+    "<all_urls>"
   ],
   "background": {
     "scripts": ["background.js"]

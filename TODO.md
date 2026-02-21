@@ -212,3 +212,23 @@
 
 - [x] Reduce initial bundle size (Vite `manualChunks` and lazy-load Settings/TaskDetail/Logs)
 - [x] Add a “What’s new” section in Release notes with grouped changes (feat/fix/ci) instead of raw commit subjects
+
+## Next Iteration (Video Sniffer)
+
+### Phase 1 - Basic Detection (Extension-side)
+
+- [x] Detect media candidates from browser requests (URL extension + response content-type)
+- [x] Add media candidate list in extension options (latest first, dedupe by URL)
+- [x] Support one-click “Send to Flamingo” for each detected candidate
+
+### Phase 2 - UX and Filtering
+
+- [ ] Add page-scoped filtering (current tab only) and simple quality/format labels
+- [ ] Add whitelist/blacklist patterns for sniffer capture (host/path rules)
+- [ ] Add action buttons: copy URL / open source page / batch send selected
+
+### Phase 3 - Product Hardening
+
+- [ ] Add backend endpoint validation for media jobs (normalize headers/referer when needed)
+- [ ] Add diagnostics for sniffer failures (CORS, expired URL, auth-required) with clear reasons
+- [ ] Add docs for DRM limitations and unsupported encrypted streams

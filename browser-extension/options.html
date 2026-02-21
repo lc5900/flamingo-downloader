@@ -30,6 +30,10 @@
         <input id="autoIntercept" type="checkbox" />
         <span>Auto-intercept browser downloads</span>
       </label>
+      <label class="row">
+        <input id="sniffMediaEnabled" type="checkbox" />
+        <span>Enable media sniffing (experimental)</span>
+      </label>
       <label>
         <span>Intercept allowlist (domain per line, empty = all)</span>
         <textarea id="interceptAllowlist" placeholder="example.com&#10;download.example.org"></textarea>
@@ -52,6 +56,14 @@
       </div>
       <div id="status"></div>
       <div id="activity"></div>
+
+      <hr />
+      <h3>Detected Media Candidates</h3>
+      <div class="row">
+        <button id="refreshMedia" type="button">Refresh Media</button>
+        <button id="clearMedia" type="button">Clear Media</button>
+      </div>
+      <div id="mediaList"></div>
     </div>
     <script src="options.js"></script>
   </body>

@@ -2,11 +2,16 @@ const DEFAULTS = {
   enabled: false,
   useNativeMessaging: false,
   autoIntercept: true,
+  sniffMediaEnabled: true,
   interceptAllowlist: "",
   nativeHost: "com.lc5900.flamingo.bridge",
   endpoint: "http://127.0.0.1:16789/add",
   token: "",
 };
+const MAX_MEDIA_CANDIDATES = 200;
+const MEDIA_EXT_RE = /\.(mp4|webm|mkv|mov|m4v|avi|flv|ts|m3u8|mpd)([?#].*)?$/i;
+const MEDIA_MIME_RE =
+  /^(video\/|application\/vnd\.apple\.mpegurl|application\/x-mpegurl|application\/dash\+xml)/i;
 
 const ext = typeof browser !== "undefined" ? browser : chrome;
 
@@ -15,6 +20,7 @@ async function getConfig() {
     "enabled",
     "useNativeMessaging",
     "autoIntercept",
+    "sniffMediaEnabled",
     "interceptAllowlist",
     "nativeHost",
     "endpoint",
@@ -28,6 +34,10 @@ async function getConfig() {
         : DEFAULTS.useNativeMessaging,
     autoIntercept:
       typeof saved.autoIntercept === "boolean" ? saved.autoIntercept : DEFAULTS.autoIntercept,
+    sniffMediaEnabled:
+      typeof saved.sniffMediaEnabled === "boolean"
+        ? saved.sniffMediaEnabled
+        : DEFAULTS.sniffMediaEnabled,
     interceptAllowlist: String(saved.interceptAllowlist || DEFAULTS.interceptAllowlist),
     nativeHost: String(saved.nativeHost || DEFAULTS.nativeHost),
     endpoint: String(saved.endpoint || DEFAULTS.endpoint),
@@ -50,6 +60,77 @@ function hostAllowed(url, rules) {
     return rules.some((rule) => host === rule || host.endsWith(`.${rule}`));
   } catch {
     return false;
+  }
+}
+
+function readHeader(headers, name) {
+  if (!Array.isArray(headers)) return "";
+  const target = String(name || "").toLowerCase();
+  const row = headers.find((header) => String(header?.name || "").toLowerCase() === target);
+  return String(row?.value || "").trim();
+}
+
+function detectMediaReason(url, contentType) {
+  const normalizedUrl = String(url || "");
+  const normalizedType = String(contentType || "")
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
+  if (MEDIA_EXT_RE.test(normalizedUrl)) return "extension";
+  if (MEDIA_MIME_RE.test(normalizedType)) return "content-type";
+  return "";
+}
+
+async function upsertMediaCandidate(item) {
+  const local = await ext.storage.local.get(["mediaCandidates"]);
+  const list = Array.isArray(local.mediaCandidates) ? local.mediaCandidates.slice() : [];
+  const key = String(item.url || "").trim();
+  if (!key) return;
+
+  const idx = list.findIndex((row) => String(row?.url || "") === key);
+  if (idx >= 0) {
+    const prev = list[idx];
+    list[idx] = {
+      ...prev,
+      ...item,
+      hits: Number(prev?.hits || 1) + 1,
+      lastSeenAt: Date.now(),
+    };
+  } else {
+    list.unshift({
+      ...item,
+      hits: 1,
+      firstSeenAt: Date.now(),
+      lastSeenAt: Date.now(),
+    });
+  }
+
+  list.sort((a, b) => Number(b?.lastSeenAt || 0) - Number(a?.lastSeenAt || 0));
+  await ext.storage.local.set({ mediaCandidates: list.slice(0, MAX_MEDIA_CANDIDATES) });
+}
+
+async function maybeCaptureMedia(details) {
+  try {
+    const cfg = await getConfig();
+    if (!cfg.sniffMediaEnabled) return;
+    const url = String(details?.url || "");
+    if (!url.startsWith("http://") && !url.startsWith("https://")) return;
+    const contentType = readHeader(details?.responseHeaders, "content-type");
+    const reason = detectMediaReason(url, contentType);
+    if (!reason) return;
+    await upsertMediaCandidate({
+      url,
+      pageUrl: String(details?.documentUrl || details?.initiator || ""),
+      tabId: Number.isFinite(details?.tabId) ? details.tabId : -1,
+      contentType,
+      reason,
+      statusCode: Number(details?.statusCode || 0),
+      method: String(details?.method || "GET"),
+    });
+  } catch (e) {
+    await setBridgeActivity({
+      lastBridgeError: `sniffer capture failed: ${String(e?.message || e || "unknown error")}`,
+    });
   }
 }
 
@@ -145,6 +226,7 @@ ext.runtime.onInstalled.addListener(async () => {
     "enabled",
     "useNativeMessaging",
     "autoIntercept",
+    "sniffMediaEnabled",
     "interceptAllowlist",
     "nativeHost",
     "endpoint",
@@ -158,6 +240,10 @@ ext.runtime.onInstalled.addListener(async () => {
         : DEFAULTS.useNativeMessaging,
     autoIntercept:
       typeof saved.autoIntercept === "boolean" ? saved.autoIntercept : DEFAULTS.autoIntercept,
+    sniffMediaEnabled:
+      typeof saved.sniffMediaEnabled === "boolean"
+        ? saved.sniffMediaEnabled
+        : DEFAULTS.sniffMediaEnabled,
     interceptAllowlist: String(saved.interceptAllowlist || DEFAULTS.interceptAllowlist),
     nativeHost: String(saved.nativeHost || DEFAULTS.nativeHost),
     endpoint: String(saved.endpoint || DEFAULTS.endpoint),
@@ -173,6 +259,36 @@ ext.runtime.onInstalled.addListener(async () => {
     title: "Download Page URL with Flamingo",
     contexts: ["page"],
   });
+});
+
+ext.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  const action = String(message?.action || "");
+  if (action === "list_media_candidates") {
+    ext.storage.local
+      .get(["mediaCandidates"])
+      .then((local) => {
+        const items = Array.isArray(local.mediaCandidates) ? local.mediaCandidates : [];
+        sendResponse({ ok: true, items });
+      })
+      .catch((e) => sendResponse({ ok: false, error: String(e?.message || e) }));
+    return true;
+  }
+  if (action === "clear_media_candidates") {
+    ext.storage.local
+      .set({ mediaCandidates: [] })
+      .then(() => sendResponse({ ok: true }))
+      .catch((e) => sendResponse({ ok: false, error: String(e?.message || e) }));
+    return true;
+  }
+  if (action === "send_media_candidate") {
+    const url = String(message?.url || "").trim();
+    const saveDir = message?.saveDir ? String(message.saveDir) : null;
+    sendToFlamingo(url, saveDir)
+      .then((result) => sendResponse(result && typeof result === "object" ? result : { ok: true }))
+      .catch((e) => sendResponse({ ok: false, error: String(e?.message || e) }));
+    return true;
+  }
+  return false;
 });
 
 ext.contextMenus.onClicked.addListener(async (info) => {
@@ -195,3 +311,13 @@ ext.contextMenus.onClicked.addListener(async (info) => {
 ext.downloads.onCreated.addListener((downloadItem) => {
   maybeTakeOver(downloadItem);
 });
+
+if (ext.webRequest?.onHeadersReceived) {
+  ext.webRequest.onHeadersReceived.addListener(
+    (details) => {
+      void maybeCaptureMedia(details);
+    },
+    { urls: ["<all_urls>"] },
+    ["responseHeaders"],
+  );
+}

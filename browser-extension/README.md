@@ -34,6 +34,7 @@ Open extension options and set:
 - Token: paste from Flamingo settings
 - Enable Flamingo bridge: on
 - Auto-intercept downloads: on/off (optional)
+- Enable media sniffing (experimental): on/off
 - Intercept allowlist: optional domains (one per line). Empty means intercept all domains.
 - Use native messaging (optional): on/off
 - Native host name (optional): e.g. `com.lc5900.flamingo.bridge`
@@ -45,6 +46,7 @@ Open extension options and set:
 - Context menu: right click a link -> `Download with Flamingo`.
 - Native messaging mode (optional): when enabled, extension can send requests via browser native host instead of local HTTP bridge.
 - Troubleshooting: options page shows `Last Skipped` reason when a download is not intercepted.
+- Media sniffer (experimental): options page includes `Detected Media Candidates`, with one-click `Send to Flamingo`.
 
 ## 5) Native messaging host install (recommended)
 
