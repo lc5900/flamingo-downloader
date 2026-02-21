@@ -12,6 +12,8 @@ const el = {
   autoIntercept: document.getElementById('autoIntercept'),
 };
 
+let statusTimer = null;
+
 function esc(input) {
   return String(input || '')
     .replaceAll('&', '&amp;')
@@ -28,6 +30,19 @@ function fmtTs(ts) {
 
 async function ask(action, payload = {}) {
   return await ext.runtime.sendMessage({ action, ...payload });
+}
+
+function showStatus(text, level = 'info') {
+  if (statusTimer) {
+    clearTimeout(statusTimer);
+    statusTimer = null;
+  }
+  el.status.className = `status ${level === 'success' ? 'success' : level === 'error' ? 'error' : ''}`.trim();
+  el.status.textContent = String(text || '');
+  statusTimer = setTimeout(() => {
+    el.status.textContent = '';
+    el.status.className = 'status';
+  }, 3800);
 }
 
 async function loadQuickState() {
@@ -72,11 +87,11 @@ async function loadCandidates() {
         const response = await ask('send_media_candidate', { url: target });
         if (!response?.ok) throw new Error(String(response?.error || response?.reason || 'send failed'));
         const taskId = String(response?.task_id || '');
-        el.status.textContent = taskId
+        showStatus(taskId
           ? `Sent task: ${taskId}`
-          : `Sent: ${target.slice(0, 80)}`;
+          : `Sent: ${target.slice(0, 80)}`, 'success');
       } catch (e) {
-        el.status.textContent = String(e?.message || e);
+        showStatus(String(e?.message || e), 'error');
       }
     });
   });
@@ -86,9 +101,9 @@ async function loadCandidates() {
       const target = decodeURIComponent(String(btn.getAttribute('data-url') || ''));
       try {
         await navigator.clipboard.writeText(target);
-        el.status.textContent = 'Copied URL';
+        showStatus('Copied URL', 'success');
       } catch (e) {
-        el.status.textContent = String(e?.message || e);
+        showStatus(String(e?.message || e), 'error');
       }
     });
   });
@@ -103,7 +118,7 @@ async function setQuickFlags() {
     });
     await loadQuickState();
   } catch (e) {
-    el.status.textContent = String(e?.message || e);
+    showStatus(String(e?.message || e), 'error');
   }
 }
 
@@ -114,7 +129,7 @@ async function refreshAll() {
 
 el.refresh.addEventListener('click', () => {
   refreshAll().catch((e) => {
-    el.status.textContent = String(e?.message || e);
+    showStatus(String(e?.message || e), 'error');
   });
 });
 
@@ -122,7 +137,7 @@ el.clear.addEventListener('click', () => {
   ask('clear_media_candidates')
     .then(() => refreshAll())
     .catch((e) => {
-      el.status.textContent = String(e?.message || e);
+      showStatus(String(e?.message || e), 'error');
     });
 });
 
@@ -137,5 +152,5 @@ el.sniffMediaEnabled.addEventListener('change', () => { void setQuickFlags(); })
 el.autoIntercept.addEventListener('change', () => { void setQuickFlags(); });
 
 refreshAll().catch((e) => {
-  el.status.textContent = String(e?.message || e);
+  showStatus(String(e?.message || e), 'error');
 });

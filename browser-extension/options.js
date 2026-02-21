@@ -29,6 +29,21 @@ const DEFAULTS = {
   token: '',
 };
 
+let statusTimer = null;
+
+function showStatus(text, level = 'info') {
+  if (statusTimer) {
+    clearTimeout(statusTimer);
+    statusTimer = null;
+  }
+  el.status.className = level === 'success' ? 'success' : level === 'error' ? 'error' : '';
+  el.status.textContent = String(text || '');
+  statusTimer = setTimeout(() => {
+    el.status.textContent = '';
+    el.status.className = '';
+  }, 3800);
+}
+
 async function load() {
   const saved = await ext.storage.sync.get([
     'enabled',
@@ -80,7 +95,7 @@ async function save() {
     endpoint: String(el.endpoint.value || DEFAULTS.endpoint).trim(),
     token: String(el.token.value || '').trim(),
   });
-  el.status.textContent = `Saved at ${new Date().toLocaleTimeString()}`;
+  showStatus(`Saved at ${new Date().toLocaleTimeString()}`, 'success');
 }
 
 function esc(input) {
@@ -102,7 +117,13 @@ async function sendMedia(url) {
   if (!response?.ok) {
     throw new Error(String(response?.error || response?.reason || 'send failed'));
   }
-  el.status.textContent = `Sent media URL at ${new Date().toLocaleTimeString()}`;
+  const taskId = String(response?.task_id || '');
+  showStatus(
+    taskId
+      ? `Sent task ${taskId}`
+      : `Sent media URL at ${new Date().toLocaleTimeString()}`,
+    'success',
+  );
 }
 
 async function loadMedia() {
@@ -132,30 +153,30 @@ async function loadMedia() {
       btn.addEventListener('click', () => {
         const target = decodeURIComponent(String(btn.getAttribute('data-url') || ''));
         sendMedia(target).catch((e) => {
-          el.status.textContent = String(e?.message || e);
+          showStatus(String(e?.message || e), 'error');
         });
       });
     });
   } catch (e) {
-    el.status.textContent = String(e?.message || e);
+    showStatus(String(e?.message || e), 'error');
   }
 }
 
 el.save.addEventListener('click', () => {
   save().catch((e) => {
-    el.status.textContent = String(e?.message || e);
+    showStatus(String(e?.message || e), 'error');
   });
 });
 
 el.refreshState.addEventListener('click', () => {
   loadActivity().catch((e) => {
-    el.status.textContent = String(e?.message || e);
+    showStatus(String(e?.message || e), 'error');
   });
 });
 
 el.refreshMedia.addEventListener('click', () => {
   loadMedia().catch((e) => {
-    el.status.textContent = String(e?.message || e);
+    showStatus(String(e?.message || e), 'error');
   });
 });
 
@@ -164,10 +185,10 @@ el.clearMedia.addEventListener('click', () => {
     .sendMessage({ action: 'clear_media_candidates' })
     .then(() => loadMedia())
     .catch((e) => {
-      el.status.textContent = String(e?.message || e);
+      showStatus(String(e?.message || e), 'error');
     });
 });
 
 load().catch((e) => {
-  el.status.textContent = String(e?.message || e);
+  showStatus(String(e?.message || e), 'error');
 });
