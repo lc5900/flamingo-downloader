@@ -6,6 +6,8 @@ const el = {
   list: document.getElementById('list'),
   refresh: document.getElementById('refresh'),
   clear: document.getElementById('clear'),
+  sendSelected: document.getElementById('sendSelected'),
+  copySelected: document.getElementById('copySelected'),
   openOptions: document.getElementById('openOptions'),
   enabled: document.getElementById('enabled'),
   sniffMediaEnabled: document.getElementById('sniffMediaEnabled'),
@@ -15,6 +17,7 @@ const el = {
 
 let statusTimer = null;
 let currentTabId = -1;
+const selectedUrls = new Set();
 
 function esc(input) {
   return String(input || '')
@@ -91,8 +94,13 @@ async function loadCandidates() {
     ? sourceItems.filter((item) => Number(item?.tabId || -1) === currentTabId)
     : sourceItems;
   if (items.length === 0) {
+    selectedUrls.clear();
     el.list.innerHTML = '<div class="card muted">No media detected yet.</div>';
     return;
+  }
+  const visibleUrls = new Set(items.map((item) => String(item?.url || '').trim()).filter(Boolean));
+  for (const url of Array.from(selectedUrls)) {
+    if (!visibleUrls.has(url)) selectedUrls.delete(url);
   }
   el.list.innerHTML = items
     .slice(0, 40)
@@ -103,11 +111,13 @@ async function loadCandidates() {
       return `
 <div class="card">
   <div class="hint">#${idx + 1} | ${esc(item?.reason)} | hits ${Number(item?.hits || 0)} | ${esc(fmtTs(item?.lastSeenAt))}</div>
+  <label class="switch"><input class="pick" data-url="${encodeURIComponent(url)}" type="checkbox" ${selectedUrls.has(url) ? 'checked' : ''} />Select</label>
   <div><span class="chip">${esc(fmt)}</span><span class="chip">${esc(quality)}</span></div>
   <div class="url">${esc(url)}</div>
   <div class="toolbar">
     <button class="send primary" data-url="${encodeURIComponent(url)}" type="button">Send</button>
     <button class="copy" data-url="${encodeURIComponent(url)}" type="button">Copy</button>
+    <button class="open" data-page="${encodeURIComponent(String(item?.pageUrl || ''))}" type="button">Open Source</button>
   </div>
 </div>`;
     })
@@ -135,6 +145,30 @@ async function loadCandidates() {
       try {
         await navigator.clipboard.writeText(target);
         showStatus('Copied URL', 'success');
+      } catch (e) {
+        showStatus(String(e?.message || e), 'error');
+      }
+    });
+  });
+
+  el.list.querySelectorAll('.pick').forEach((box) => {
+    box.addEventListener('change', () => {
+      const target = decodeURIComponent(String(box.getAttribute('data-url') || ''));
+      if (!target) return;
+      if (box.checked) selectedUrls.add(target);
+      else selectedUrls.delete(target);
+    });
+  });
+
+  el.list.querySelectorAll('.open').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const page = decodeURIComponent(String(btn.getAttribute('data-page') || ''));
+      if (!page) {
+        showStatus('No source page available', 'error');
+        return;
+      }
+      try {
+        await ext.tabs.create({ url: page });
       } catch (e) {
         showStatus(String(e?.message || e), 'error');
       }
@@ -169,10 +203,46 @@ el.refresh.addEventListener('click', () => {
 
 el.clear.addEventListener('click', () => {
   ask('clear_media_candidates')
-    .then(() => refreshAll())
+    .then(() => {
+      selectedUrls.clear();
+      return refreshAll();
+    })
     .catch((e) => {
       showStatus(String(e?.message || e), 'error');
     });
+});
+
+el.sendSelected.addEventListener('click', async () => {
+  const targets = Array.from(selectedUrls);
+  if (targets.length === 0) {
+    showStatus('No selected media', 'error');
+    return;
+  }
+  let okCount = 0;
+  for (const url of targets) {
+    try {
+      const response = await ask('send_media_candidate', { url });
+      if (response?.ok) okCount += 1;
+    } catch {
+      // continue
+    }
+  }
+  if (okCount > 0) showStatus(`Sent ${okCount}/${targets.length}`, 'success');
+  else showStatus('Batch send failed', 'error');
+});
+
+el.copySelected.addEventListener('click', async () => {
+  const targets = Array.from(selectedUrls);
+  if (targets.length === 0) {
+    showStatus('No selected media', 'error');
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(targets.join('\n'));
+    showStatus(`Copied ${targets.length} URL(s)`, 'success');
+  } catch (e) {
+    showStatus(String(e?.message || e), 'error');
+  }
 });
 
 el.openOptions.addEventListener('click', () => {

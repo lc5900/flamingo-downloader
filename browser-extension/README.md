@@ -60,6 +60,7 @@ Open extension options and set (optional/advanced):
 - Troubleshooting: options page shows `Last Skipped` reason when a download is not intercepted.
 - Media sniffer (experimental): options page includes `Detected Media Candidates`, with one-click `Send to Flamingo`.
 - Fast media picker: click extension icon to open popup and send detected media directly.
+- Popup supports: select multiple candidates, batch send, batch copy URLs, and open source page.
 
 ## 5) Native messaging host install (recommended)
 

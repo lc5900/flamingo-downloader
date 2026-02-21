@@ -225,7 +225,7 @@
 
 - [x] Add page-scoped filtering (current tab only) and simple quality/format labels
 - [x] Add whitelist/blacklist patterns for sniffer capture (host/path rules)
-- [ ] Add action buttons: copy URL / open source page / batch send selected
+- [x] Add action buttons: copy URL / open source page / batch send selected
 
 ### Phase 3 - Product Hardening
 
