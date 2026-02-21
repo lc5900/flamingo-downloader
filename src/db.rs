@@ -17,7 +17,7 @@ pub struct Database {
     db_path: PathBuf,
 }
 
-const SCHEMA_VERSION: i64 = 4;
+const SCHEMA_VERSION: i64 = 5;
 
 impl Database {
     pub fn new(path: impl AsRef<Path>) -> Result<Self> {
@@ -556,9 +556,52 @@ impl Database {
         Ok(())
     }
 
+    pub fn mark_deleted_gid(&self, gid: &str, deleted_at: i64) -> Result<()> {
+        if gid.trim().is_empty() {
+            return Ok(());
+        }
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        conn.execute(
+            "INSERT INTO deleted_aria2_gids (gid, deleted_at) VALUES (?1, ?2)
+             ON CONFLICT(gid) DO UPDATE SET deleted_at=excluded.deleted_at",
+            params![gid, deleted_at],
+        )?;
+        Ok(())
+    }
+
+    pub fn is_gid_deleted(&self, gid: &str) -> Result<bool> {
+        if gid.trim().is_empty() {
+            return Ok(false);
+        }
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(1) FROM deleted_aria2_gids WHERE gid = ?1",
+            params![gid],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    pub fn prune_deleted_gids_before(&self, cutoff_ts: i64) -> Result<usize> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        let deleted = conn.execute(
+            "DELETE FROM deleted_aria2_gids WHERE deleted_at < ?1",
+            params![cutoff_ts],
+        )?;
+        Ok(deleted)
+    }
+
     pub fn remove_completed_tasks_before(&self, cutoff_ts: i64) -> Result<usize> {
         let mut conn = self.conn.lock().expect("db mutex poisoned");
         let tx = conn.transaction()?;
+        tx.execute(
+            "INSERT INTO deleted_aria2_gids (gid, deleted_at)
+             SELECT aria2_gid, strftime('%s','now')
+             FROM tasks
+             WHERE status='completed' AND updated_at < ?1 AND aria2_gid IS NOT NULL AND aria2_gid != ''
+             ON CONFLICT(gid) DO UPDATE SET deleted_at=excluded.deleted_at",
+            params![cutoff_ts],
+        )?;
         tx.execute(
             "DELETE FROM task_files WHERE task_id IN (SELECT id FROM tasks WHERE status='completed' AND updated_at < ?1)",
             params![cutoff_ts],
@@ -770,6 +813,18 @@ fn apply_migration(conn: &Connection, version: i64) -> Result<()> {
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_operation_logs_ts ON operation_logs(ts)",
                 [],
+            )?;
+        }
+        5 => {
+            conn.execute_batch(
+                r#"
+                CREATE TABLE IF NOT EXISTS deleted_aria2_gids (
+                  gid TEXT PRIMARY KEY,
+                  deleted_at INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_deleted_aria2_gids_deleted_at
+                ON deleted_aria2_gids(deleted_at);
+                "#,
             )?;
         }
         _ => {}
@@ -1014,6 +1069,21 @@ mod tests {
             err.to_string()
                 .contains("invalid setting max_concurrent_downloads")
         );
+        let _ = std::fs::remove_file(db_path);
+    }
+
+    #[test]
+    fn deleted_gid_tombstone_roundtrip() {
+        let db_path = std::env::temp_dir().join(format!("tarui-db-{}.sqlite", Uuid::new_v4()));
+        let db = Database::new(&db_path).expect("create db");
+        db.mark_deleted_gid("gid-test", 100)
+            .expect("mark deleted gid");
+        assert!(db.is_gid_deleted("gid-test").expect("check deleted gid"));
+        let pruned = db
+            .prune_deleted_gids_before(200)
+            .expect("prune deleted gids");
+        assert_eq!(pruned, 1);
+        assert!(!db.is_gid_deleted("gid-test").expect("check deleted gid"));
         let _ = std::fs::remove_file(db_path);
     }
 }

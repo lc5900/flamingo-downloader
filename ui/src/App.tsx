@@ -12,7 +12,6 @@ import {
   Input,
   InputNumber,
   Layout,
-  Menu,
   Modal,
   Progress,
   Popover,
@@ -23,6 +22,7 @@ import {
   Table,
   Tabs,
   Tag,
+  Tooltip,
   Tree,
   Descriptions,
   Typography,
@@ -42,6 +42,8 @@ import {
   FileSearchOutlined,
   FolderOpenOutlined,
   GlobalOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
   PlusOutlined,
   ReloadOutlined,
   SettingOutlined,
@@ -74,7 +76,6 @@ import type {
   Locale,
   OperationLog,
   SaveDirSuggestion,
-  SectionKey,
   StartupNotice,
   StartupSelfCheck,
   StorageSummary,
@@ -257,6 +258,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState('basic')
   const [settingsSaving, setSettingsSaving] = useState(false)
+  const [siderCollapsed, setSiderCollapsed] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [addType, setAddType] = useState<'url' | 'magnet' | 'torrent'>('url')
   const [addTorrentFile, setAddTorrentFile] = useState<File | null>(null)
@@ -714,15 +716,6 @@ export default function App() {
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
-
-  useEffect(() => {
-    if (!settingsOpen) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = prev
-    }
-  }, [settingsOpen])
 
   const effectiveTheme = resolveTheme(themeMode)
   const categoryOptions = useMemo(() => {
@@ -1869,9 +1862,9 @@ export default function App() {
             Number(columnWidths.actions || 0)
       // Reserve space for selection/expand gutters and paddings.
       const reserved = otherColsTotal + 180
-      const maxNameWidth = section === 'downloaded' ? 170 : 300
-      const dynamicName = Math.max(140, Math.min(maxNameWidth, tableWrapWidth - reserved))
-      const nameWidth = tableWrapWidth > 0 ? dynamicName : 220
+      const maxNameWidth = section === 'downloaded' ? 156 : 230
+      const dynamicName = Math.max(118, Math.min(maxNameWidth, tableWrapWidth - reserved))
+      const nameWidth = tableWrapWidth > 0 ? dynamicName : 180
 
       const nameCol = {
         key: 'name',
@@ -1890,7 +1883,7 @@ export default function App() {
       const actionsCol = {
         key: 'actions',
         title: t('colActions'),
-        width: columnWidths.actions,
+        width: section === 'downloaded' ? Math.min(146, Number(columnWidths.actions || 146)) : Math.min(154, Number(columnWidths.actions || 154)),
         fixed: 'right' as const,
         render: (_: unknown, row: Task) => (
           <Space wrap>
@@ -1907,7 +1900,13 @@ export default function App() {
                   <Space direction="vertical" size={2}>
                     <Typography.Text type="secondary">{t('taskIdLabel')}: {row.id}</Typography.Text>
                     <Typography.Text type="secondary">{t('sourceLabel')}: {row.source || '-'}</Typography.Text>
-                    <Typography.Text type="secondary">{t('colStatus')}: {String(row.status).toUpperCase()}</Typography.Text>
+                    <Typography.Text type="secondary">
+                      {t('colStatus')}: {String(row.status).toLowerCase() === 'completed'
+                        ? t('downloadResultSuccess')
+                        : String(row.status).toLowerCase() === 'error'
+                          ? t('downloadResultFailed')
+                          : t('downloadResultInProgress')}
+                    </Typography.Text>
                     <Typography.Text type="secondary">{t('colSize')}: {fmtBytes(row.total_length)}</Typography.Text>
                     <Typography.Text type="secondary">{t('colCompletedAt')}: {fmtDateTime(row.updated_at)}</Typography.Text>
                   </Space>
@@ -2042,18 +2041,27 @@ export default function App() {
                 key: 'status',
                 title: t('colStatus'),
                 dataIndex: 'status',
-                width: columnWidths.status,
-                render: (v: string, row: Task) => (
-                  <Space size={4}>
-                    <Tag color={statusColor(String(v))}>{String(v).toUpperCase()}</Tag>
-                    {(row.error_message || row.error_code) && String(v).toLowerCase() === 'error' && (
-                      <Typography.Text type="danger" className="error-inline">
-                        {row.error_code ? `[${row.error_code}] ` : ''}
-                        {row.error_message || ''}
-                      </Typography.Text>
-                    )}
-                  </Space>
-                ),
+                width: Math.min(110, Number(columnWidths.status || 110)),
+                render: (v: string, row: Task) => {
+                  const status = String(v || '').toLowerCase()
+                  const isCompleted = status === 'completed'
+                  const isError = status === 'error'
+                  const label = isCompleted
+                    ? t('downloadResultSuccess')
+                    : isError
+                      ? t('downloadResultFailed')
+                      : t('downloadResultInProgress')
+                  const tag = <Tag color={statusColor(String(v))}>{label}</Tag>
+                  if (isError && (row.error_message || row.error_code)) {
+                    const errText = `${row.error_code ? `[${row.error_code}] ` : ''}${row.error_message || ''}`.trim()
+                    return (
+                      <Tooltip title={errText}>
+                        {tag}
+                      </Tooltip>
+                    )
+                  }
+                  return tag
+                },
               },
               actionsCol,
             ] as ColumnsType<Task>)
@@ -2143,27 +2151,75 @@ export default function App() {
     >
       <AntApp>
         {msgCtx}
-        <Layout className="root-layout">
-          <Layout.Sider theme={effectiveTheme} width={228} className="side">
+        <Layout className={`root-layout theme-${effectiveTheme} ${siderCollapsed ? 'sider-collapsed' : ''}`}>
+          <Layout.Sider
+            theme={effectiveTheme}
+            width={132}
+            collapsedWidth={72}
+            collapsed={siderCollapsed}
+            trigger={null}
+            className={`side ${siderCollapsed ? 'side-collapsed' : ''}`}
+          >
             <div className="brand">🦩</div>
-            <Menu
-              mode="inline"
-              theme={effectiveTheme}
-              selectedKeys={[section]}
-              onClick={(e) => setSection(e.key as SectionKey)}
-              items={[
-                {
-                  key: 'downloading',
-                  icon: <DownloadOutlined />,
-                  label: `${t('navDownloading')} (${tasks.filter((x) => x.status !== 'completed').length})`,
-                },
-                {
-                  key: 'downloaded',
-                  icon: <FileDoneOutlined />,
-                  label: `${t('navDownloaded')} (${tasks.filter((x) => x.status === 'completed').length})`,
-                },
-              ]}
-            />
+            <div className="side-nav">
+              <Tooltip title={siderCollapsed ? `${t('navDownloading')} (${tasks.filter((x) => x.status !== 'completed').length})` : undefined} placement="right">
+                <button
+                  type="button"
+                  className={`side-nav-item ${section === 'downloading' ? 'active' : ''}`}
+                  onClick={() => {
+                    setSettingsOpen(false)
+                    setSection('downloading')
+                  }}
+                >
+                  <DownloadOutlined className="side-nav-icon" />
+                  {!siderCollapsed && (
+                    <span className="side-nav-label">
+                      {t('navDownloading')}
+                      <span className="side-nav-count">{tasks.filter((x) => x.status !== 'completed').length}</span>
+                    </span>
+                  )}
+                </button>
+              </Tooltip>
+              <Tooltip title={siderCollapsed ? `${t('navDownloaded')} (${tasks.filter((x) => x.status === 'completed').length})` : undefined} placement="right">
+                <button
+                  type="button"
+                  className={`side-nav-item ${section === 'downloaded' ? 'active' : ''}`}
+                  onClick={() => {
+                    setSettingsOpen(false)
+                    setSection('downloaded')
+                  }}
+                >
+                  <FileDoneOutlined className="side-nav-icon" />
+                  {!siderCollapsed && (
+                    <span className="side-nav-label">
+                      {t('navDownloaded')}
+                      <span className="side-nav-count">{tasks.filter((x) => x.status === 'completed').length}</span>
+                    </span>
+                  )}
+                </button>
+              </Tooltip>
+              <Tooltip title={siderCollapsed ? t('settings') : undefined} placement="right">
+                <button
+                  type="button"
+                  className={`side-nav-item ${settingsOpen ? 'active' : ''}`}
+                  onClick={openSettings}
+                >
+                  <SettingOutlined className="side-nav-icon" />
+                  {!siderCollapsed && <span className="side-nav-label">{t('settings')}</span>}
+                </button>
+              </Tooltip>
+            </div>
+            <div className="side-footer">
+              <Tooltip title={siderCollapsed ? t('expandSidebar') : t('collapseSidebar')} placement="right">
+                <button
+                  type="button"
+                  className="side-collapse-btn"
+                  onClick={() => setSiderCollapsed((v) => !v)}
+                >
+                  {siderCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                </button>
+              </Tooltip>
+            </div>
           </Layout.Sider>
 
           <Layout>
@@ -2171,9 +2227,6 @@ export default function App() {
               <Space wrap>
                 <Button type="primary" icon={<CloudDownloadOutlined />} onClick={onOpenAdd}>
                   {t('newDownload')}
-                </Button>
-                <Button icon={<SettingOutlined />} onClick={openSettings}>
-                  {t('settings')}
                 </Button>
                 <Button icon={<FileSearchOutlined />} onClick={openLogsWindow}>
                   {t('logsWindow')}
@@ -2214,6 +2267,8 @@ export default function App() {
               onDrop={onDropToAdd}
             >
               {dragHover && <div className="drop-hint">{t('dropHint')}</div>}
+              {!settingsOpen && (
+              <>
               <TaskPageShell>
                 <Card
                   className="main-card"
@@ -2316,7 +2371,7 @@ export default function App() {
                         cell: ResizableTitle,
                       },
                     }}
-                    scroll={{ x: 980, y: 'calc(100vh - 360px)' }}
+                    scroll={{ x: section === 'downloaded' ? 720 : 840, y: 'calc(100vh - 360px)' }}
                     rowSelection={{
                       selectedRowKeys: selectedTaskIds,
                       onChange: onRowSelectionChange,
@@ -2380,6 +2435,488 @@ export default function App() {
                   </Typography.Text>
                 </Space>
               </div>
+              </>
+              )}
+        {settingsOpen && (
+          <Suspense fallback={null}>
+        <SettingsPage>
+            <div className="settings-inline-panel">
+            <div className="settings-inline-header">
+              <Typography.Title level={4} style={{ margin: 0 }}>{t('settingsTitle')}</Typography.Title>
+              <Space>
+                <Button onClick={() => setSettingsOpen(false)}>{t('cancel')}</Button>
+                <Button type="primary" onClick={saveSettings} loading={settingsSaving}>
+                  {t('save')}
+                </Button>
+              </Space>
+            </div>
+            <div className="settings-inline-body">
+            <div className="settings-shell">
+            <Tabs
+              className="settings-tabs"
+              activeKey={settingsTab}
+              onChange={setSettingsTab}
+              items={[
+              {
+                key: 'basic',
+                label: t('tabBasic'),
+                children: (
+                  <Form form={settingsForm} layout="vertical" className="settings-form">
+                    <Form.Item name="first_run_done" hidden>
+                      <Input />
+                    </Form.Item>
+                    <Typography.Title level={5}>{t('grpAppearance')}</Typography.Title>
+                    <Form.Item name="ui_theme" label={t('themeMode')}>
+                      <Select
+                        options={[
+                          { label: t('themeSystem'), value: 'system' },
+                          { label: t('themeLight'), value: 'light' },
+                          { label: t('themeDark'), value: 'dark' },
+                        ]}
+                      />
+                    </Form.Item>
+
+                    <Divider />
+                    <Typography.Title level={5}>{t('grpDownload')}</Typography.Title>
+                    <div className="grid-2">
+                      <Form.Item name="download_dir" label={t('downloadDir')}>
+                        <Input />
+                      </Form.Item>
+                      <Form.Item name="max_concurrent_downloads" label={t('maxConcurrent')}>
+                        <InputNumber min={1} style={{ width: '100%' }} />
+                      </Form.Item>
+                      <Form.Item name="max_connection_per_server" label={t('maxConn')}>
+                        <InputNumber min={1} style={{ width: '100%' }} />
+                      </Form.Item>
+                      <Form.Item name="max_overall_download_limit" label={t('maxLimit')}>
+                        <Input placeholder="0 / 10M / 2M" />
+                      </Form.Item>
+                    </div>
+                    <Form.Item name="bt_tracker" label={t('btTracker')}>
+                      <Input.TextArea rows={2} />
+                    </Form.Item>
+                    <Space wrap style={{ marginBottom: 12 }}>
+                      <Typography.Text type="secondary">{t('trackerPresets')}:</Typography.Text>
+                      <Button
+                        size="small"
+                        onClick={() =>
+                          settingsForm.setFieldValue(
+                            'bt_tracker',
+                            'udp://tracker.opentrackr.org:1337/announce,udp://open.demonii.com:1337/announce',
+                          )
+                        }
+                      >
+                        Public A
+                      </Button>
+                      <Button
+                        size="small"
+                        onClick={() =>
+                          settingsForm.setFieldValue(
+                            'bt_tracker',
+                            'udp://tracker.torrent.eu.org:451/announce,udp://tracker.moeking.me:6969/announce',
+                          )
+                        }
+                      >
+                        Public B
+                      </Button>
+                    </Space>
+
+                    <Divider />
+                    <Typography.Title level={5}>{t('grpAria2')}</Typography.Title>
+                    <Form.Item name="aria2_bin_path" label={t('aria2Path')}>
+                      <Input />
+                    </Form.Item>
+                    <Space style={{ marginBottom: 12 }}>
+                      <Button onClick={browseAria2Path}>{t('browse')}</Button>
+                      <Button onClick={detectAria2Path}>{t('detectAria2')}</Button>
+                      <Button onClick={loadSettings}>{t('reload')}</Button>
+                      <Button onClick={openImportExport}>{t('importExport')}</Button>
+                    </Space>
+                    <Form.Item name="enable_upnp" label={t('enableUpnp')} valuePropName="checked">
+                      <Switch />
+                    </Form.Item>
+
+                    <Divider />
+                    <Typography.Title level={5}>{t('grpIntegration')}</Typography.Title>
+                    <div className="grid-2">
+                      <Form.Item name="github_cdn" label={t('githubCdn')}>
+                        <Input />
+                      </Form.Item>
+                      <Form.Item name="github_token" label={t('githubToken')}>
+                        <Input.Password />
+                      </Form.Item>
+                      <Form.Item name="browser_bridge_enabled" label={t('bridgeEnabled')} valuePropName="checked">
+                        <Switch />
+                      </Form.Item>
+                      <Form.Item name="browser_bridge_port" label={t('bridgePort')}>
+                        <InputNumber min={1} max={65535} style={{ width: '100%' }} />
+                      </Form.Item>
+                    </div>
+                    <Form.Item name="browser_bridge_token" label={t('bridgeToken')}>
+                      <Input />
+                    </Form.Item>
+                    <Form.Item name="browser_bridge_allowed_origins" label={t('bridgeAllowedOrigins')}>
+                      <Input placeholder="chrome-extension://,moz-extension://" />
+                    </Form.Item>
+                    <Space wrap style={{ marginBottom: 8 }}>
+                      <Button loading={bridgeChecking} onClick={checkBridgeStatus}>
+                        {t('bridgeCheck')}
+                      </Button>
+                      <Button
+                        onClick={async () => {
+                          try {
+                            const token = await api.call<string>('rotate_browser_bridge_token')
+                            settingsForm.setFieldValue('browser_bridge_token', token)
+                            msg.success(t('settingsSaved'))
+                          } catch (err) {
+                            msg.error(parseErr(err))
+                          }
+                        }}
+                      >
+                        {t('rotateBridgeToken')}
+                      </Button>
+                      <Button
+                        loading={bridgeChecking}
+                        onClick={async () => {
+                          await saveSettings()
+                          await checkBridgeStatus()
+                        }}
+                      >
+                        {t('bridgeReconnect')}
+                      </Button>
+                      <Tag color={bridgeStatus?.connected ? 'green' : 'orange'}>
+                        {t('bridgeStatus')}: {bridgeStatus?.connected ? t('bridgeConnected') : t('bridgeDisconnected')}
+                      </Tag>
+                    </Space>
+                    <Typography.Text type="secondary" style={{ display: 'block', marginTop: -4, marginBottom: 8 }}>
+                      {bridgeStatus?.endpoint ? `${bridgeStatus.endpoint} - ${bridgeStatus.message}` : bridgeStatus?.message || '-'}
+                    </Typography.Text>
+                    <Form.Item name="clipboard_watch_enabled" label={t('clipboardWatchEnabled')} valuePropName="checked">
+                      <Switch />
+                    </Form.Item>
+
+                    <Divider />
+                    <Typography.Title level={5}>{t('grpReliability')}</Typography.Title>
+                    <div className="grid-2">
+                      <Form.Item name="retry_max_attempts" label={t('retryMaxAttempts')}>
+                        <InputNumber min={0} max={20} style={{ width: '100%' }} />
+                      </Form.Item>
+                      <Form.Item name="retry_backoff_secs" label={t('retryBackoff')}>
+                        <InputNumber min={1} max={3600} style={{ width: '100%' }} />
+                      </Form.Item>
+                      <Form.Item name="metadata_timeout_secs" label={t('metadataTimeout')}>
+                        <InputNumber min={30} max={3600} style={{ width: '100%' }} />
+                      </Form.Item>
+                    </div>
+                    <Form.Item name="retry_fallback_mirrors" label={t('retryMirrors')}>
+                      <Input.TextArea rows={2} placeholder="https://mirror1.example.com\nhttps://mirror2.example.com" />
+                    </Form.Item>
+                    <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+                      {t('speedPlan')}
+                    </Typography.Text>
+                    <Space wrap style={{ marginBottom: 10 }}>
+                      <Typography.Text type="secondary">{t('scheduleMode')}</Typography.Text>
+                      <Select
+                        style={{ width: 260 }}
+                        value={speedPlanMode}
+                        onChange={(v) => onSpeedPlanModeChange(v as SpeedPlanMode)}
+                        options={[
+                          { label: t('scheduleManual'), value: 'manual' },
+                          { label: t('scheduleOff'), value: 'off' },
+                          { label: t('scheduleWorkdayLimited'), value: 'workday_limited' },
+                          { label: t('scheduleNightBoost'), value: 'night_boost' },
+                        ]}
+                      />
+                    </Space>
+                    <Form.List name="speed_plan_rules">
+                      {(fields, { add, remove }) => (
+                        <Space direction="vertical" style={{ width: '100%' }}>
+                          {fields.map((field) => (
+                            <Card key={field.key} size="small">
+                              <div className="grid-rule">
+                                <Form.Item name={[field.name, 'days']} label={t('speedDays')}>
+                                  <Input placeholder="1,2,3,4,5 (Mon=1..Sun=7)" />
+                                </Form.Item>
+                                <Form.Item name={[field.name, 'start']} label={t('speedStart')}>
+                                  <Input placeholder="09:00" />
+                                </Form.Item>
+                                <Form.Item name={[field.name, 'end']} label={t('speedEnd')}>
+                                  <Input placeholder="18:00" />
+                                </Form.Item>
+                                <Form.Item name={[field.name, 'limit']} label={t('speedLimit')}>
+                                  <Input placeholder="0 / 2M / 10M" />
+                                </Form.Item>
+                              </div>
+                              <Button danger onClick={() => remove(field.name)}>
+                                {t('removeRule')}
+                              </Button>
+                            </Card>
+                          ))}
+                          <Button
+                            icon={<PlusOutlined />}
+                            onClick={() =>
+                              add({
+                                days: '',
+                                start: '',
+                                end: '',
+                                limit: '0',
+                              })
+                            }
+                          >
+                            {t('addRule')}
+                          </Button>
+                        </Space>
+                      )}
+                    </Form.List>
+                    <Form.Item name="speed_plan" hidden>
+                      <Input />
+                    </Form.Item>
+                    <Form.Item
+                      name="auto_delete_control_files"
+                      label={t('autoDeleteControlFiles')}
+                      valuePropName="checked"
+                    >
+                      <Switch />
+                    </Form.Item>
+                    <Form.Item name="auto_clear_completed_days" label={t('autoClearCompletedDays')}>
+                      <InputNumber min={0} max={3650} style={{ width: '100%' }} />
+                    </Form.Item>
+
+                    <Divider />
+                    <Typography.Title level={5}>{isMac ? t('trayPrefsMac') : t('trayPrefs')}</Typography.Title>
+                    <div className="grid-2">
+                      <Form.Item name="start_minimized" label={t('startMinimized')} valuePropName="checked">
+                        <Switch />
+                      </Form.Item>
+                      <Form.Item
+                        name="minimize_to_tray"
+                        label={isMac ? t('minimizeToTrayMac') : t('minimizeToTray')}
+                        valuePropName="checked"
+                      >
+                        <Switch />
+                      </Form.Item>
+                      {isMac && (
+                        <Typography.Text type="secondary" style={{ display: 'block', marginTop: -8 }}>
+                          {t('trayRecoverHintMac')}
+                        </Typography.Text>
+                      )}
+                      {isMac && (
+                        <Typography.Text type="secondary" style={{ display: 'block', marginTop: 4 }}>
+                          {t('trayDisabledMac')}
+                        </Typography.Text>
+                      )}
+                      <Form.Item name="notify_on_complete" label={t('notifyOnComplete')} valuePropName="checked">
+                        <Switch />
+                      </Form.Item>
+                      <Form.Item name="post_complete_action" label={t('postCompleteAction')}>
+                        <Select
+                          options={[
+                            { label: t('postCompleteNone'), value: 'none' },
+                            { label: t('postCompleteOpenDir'), value: 'open_dir' },
+                            { label: t('postCompleteOpenFile'), value: 'open_file' },
+                          ]}
+                        />
+                      </Form.Item>
+                    </div>
+                    <Space style={{ marginBottom: 8 }}>
+                      <Button onClick={resetUiLayout}>{t('resetUiLayout')}</Button>
+                      <Button danger onClick={resetSettingsToDefaults}>{t('resetSettingsDefaults')}</Button>
+                    </Space>
+
+                    <Divider />
+                    <Typography.Title level={5}>{t('rulesTitle')}</Typography.Title>
+                    <Form.List name="download_dir_rules">
+                      {(fields, { add, remove }) => (
+                        <Space direction="vertical" style={{ width: '100%' }}>
+                          {fields.map((field) => (
+                            <Card key={field.key} size="small">
+                              <div className="grid-rule">
+                                <Form.Item name={[field.name, 'enabled']} label={t('enabled')} valuePropName="checked">
+                                  <Switch />
+                                </Form.Item>
+                                <Form.Item name={[field.name, 'matcher']} label={t('matcher')}>
+                                  <Select
+                                    options={[
+                                      { label: 'ext', value: 'ext' },
+                                      { label: 'domain', value: 'domain' },
+                                      { label: 'type', value: 'type' },
+                                    ]}
+                                  />
+                                </Form.Item>
+                                <Form.Item name={[field.name, 'pattern']} label={t('pattern')}>
+                                  <Input placeholder="mp4,mkv or github.com or torrent" />
+                                </Form.Item>
+                                <Form.Item name={[field.name, 'save_dir']} label={t('saveDir')}>
+                                  <Input placeholder="/path/to/save" />
+                                </Form.Item>
+                                <Form.Item
+                                  name={[field.name, 'subdir_by_domain']}
+                                  label={t('subdirByDomain')}
+                                  valuePropName="checked"
+                                >
+                                  <Switch />
+                                </Form.Item>
+                                <Form.Item
+                                  name={[field.name, 'subdir_by_date']}
+                                  label={t('subdirByDate')}
+                                  valuePropName="checked"
+                                >
+                                  <Switch />
+                                </Form.Item>
+                              </div>
+                              <Button danger onClick={() => remove(field.name)}>
+                                {t('removeRule')}
+                              </Button>
+                            </Card>
+                          ))}
+                          <Button
+                            icon={<PlusOutlined />}
+                            onClick={() =>
+                              add({
+                                enabled: true,
+                                matcher: 'ext',
+                                subdir_by_domain: false,
+                                subdir_by_date: false,
+                              })
+                            }
+                          >
+                            {t('addRule')}
+                          </Button>
+                        </Space>
+                      )}
+                    </Form.List>
+                    <Divider />
+                    <Typography.Title level={5}>{t('categoryRulesTitle')}</Typography.Title>
+                    <Form.List name="category_rules">
+                      {(fields, { add, remove }) => (
+                        <Space direction="vertical" style={{ width: '100%' }}>
+                          {fields.map((field) => (
+                            <Card key={field.key} size="small">
+                              <div className="grid-rule">
+                                <Form.Item name={[field.name, 'enabled']} label={t('enabled')} valuePropName="checked">
+                                  <Switch />
+                                </Form.Item>
+                                <Form.Item name={[field.name, 'matcher']} label={t('matcher')}>
+                                  <Select
+                                    options={[
+                                      { label: 'ext', value: 'ext' },
+                                      { label: 'domain', value: 'domain' },
+                                      { label: 'type', value: 'type' },
+                                    ]}
+                                  />
+                                </Form.Item>
+                                <Form.Item name={[field.name, 'pattern']} label={t('pattern')}>
+                                  <Input placeholder="mp4,mkv or github.com or torrent" />
+                                </Form.Item>
+                                <Form.Item name={[field.name, 'category']} label={t('categoryName')}>
+                                  <Input placeholder="video / docs / work" />
+                                </Form.Item>
+                              </div>
+                              <Button danger onClick={() => remove(field.name)}>
+                                {t('removeRule')}
+                              </Button>
+                            </Card>
+                          ))}
+                          <Button
+                            icon={<PlusOutlined />}
+                            onClick={() =>
+                              add({
+                                enabled: true,
+                                matcher: 'ext',
+                                category: '',
+                              })
+                            }
+                          >
+                            {t('addRule')}
+                          </Button>
+                        </Space>
+                      )}
+                    </Form.List>
+                  </Form>
+                ),
+              },
+              {
+                key: 'diagnostics',
+                label: t('tabDiagnostics'),
+                children: (
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    <Card size="small" title={t('startupSelfCheck')}>
+                      <Space direction="vertical" style={{ width: '100%' }}>
+                        <Typography.Text>
+                          aria2: <Typography.Text code>{startupSummary?.aria2_bin_path || '-'}</Typography.Text>
+                        </Typography.Text>
+                        <Typography.Text>
+                          {t('aria2PathSource')}:{' '}
+                          <Typography.Text code>
+                            {startupSummary?.aria2_path_source === 'manual'
+                              ? t('aria2SourceManual')
+                              : startupSummary?.aria2_path_source === 'bundled'
+                                ? t('aria2SourceBundled')
+                                : t('aria2SourceSystem')}
+                          </Typography.Text>
+                        </Typography.Text>
+                        <Space wrap>
+                          <Tag color={startupSummary?.aria2_bin_exists ? 'green' : 'red'}>
+                            bin {startupSummary?.aria2_bin_exists ? t('statusOk') : t('statusFail')}
+                          </Tag>
+                          <Tag color={startupSummary?.aria2_bin_executable ? 'green' : 'red'}>
+                            exec {startupSummary?.aria2_bin_executable ? t('statusOk') : t('statusFail')}
+                          </Tag>
+                          <Tag color={startupSummary?.download_dir_exists ? 'green' : 'red'}>
+                            dir {startupSummary?.download_dir_exists ? t('statusOk') : t('statusFail')}
+                          </Tag>
+                          <Tag color={startupSummary?.download_dir_writable ? 'green' : 'red'}>
+                            writable {startupSummary?.download_dir_writable ? t('statusOk') : t('statusFail')}
+                          </Tag>
+                          <Tag color={startupSummary?.rpc_ready ? 'green' : 'orange'}>
+                            rpc {startupSummary?.rpc_ready ? t('statusOk') : t('statusFail')}
+                          </Tag>
+                        </Space>
+                        <Typography.Text>
+                          download dir:{' '}
+                          <Typography.Text code>{startupSummary?.download_dir || '-'}</Typography.Text>
+                        </Typography.Text>
+                        <Typography.Text>
+                          rpc endpoint:{' '}
+                          <Typography.Text code>{startupSummary?.rpc_endpoint || '-'}</Typography.Text>
+                        </Typography.Text>
+                      </Space>
+                    </Card>
+                    <Space wrap>
+                      <Button onClick={doRpcPing}>{t('rpcPing')}</Button>
+                      <Button onClick={doRestart}>{t('restartAria2')}</Button>
+                      <Button onClick={doStartupCheck}>{t('startupCheck')}</Button>
+                      <Button onClick={doSaveSession}>{t('saveSession')}</Button>
+                      <Button onClick={doExportDebugBundle}>{t('exportDebug')}</Button>
+                      <Button icon={<ReloadOutlined />} onClick={loadDiagnostics}>{t('refresh')}</Button>
+                    </Space>
+                    <Input.TextArea value={diagnosticsText} autoSize={{ minRows: 12, maxRows: 22 }} readOnly />
+                  </Space>
+                ),
+              },
+              {
+                key: 'updates',
+                label: t('tabUpdates'),
+                children: (
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    <Space wrap>
+                      <Button onClick={loadUpdateInfo}>{t('checkUpdate')}</Button>
+                      <Button type="primary" onClick={doUpdateAria2Now}>{t('updateNow')}</Button>
+                    </Space>
+                    <Input.TextArea value={updateText} autoSize={{ minRows: 10, maxRows: 20 }} readOnly />
+                    <Input.TextArea value={appUpdateStrategyText} autoSize={{ minRows: 4, maxRows: 10 }} readOnly />
+                  </Space>
+                ),
+              },
+              ]}
+            />
+            </div>
+            </div>
+            </div>
+        </SettingsPage>
+          </Suspense>
+        )}
+
             </Layout.Content>
           </Layout>
         </Layout>
@@ -2853,493 +3390,6 @@ export default function App() {
           </Suspense>
         )}
 
-        {settingsOpen && (
-          <Suspense fallback={null}>
-        <SettingsPage>
-          <Modal
-            title={t('settingsTitle')}
-            open={settingsOpen}
-            onCancel={() => setSettingsOpen(false)}
-            width={980}
-            okText={t('save')}
-            onOk={saveSettings}
-            confirmLoading={settingsSaving}
-            className="settings-modal"
-            rootClassName="settings-modal-root"
-            style={{ top: 24 }}
-            styles={{
-              body: {
-                flex: 1,
-                minHeight: 0,
-                overflow: 'hidden',
-                paddingRight: 8,
-              },
-            }}
-          >
-            <div className="settings-shell">
-            <Tabs
-              className="settings-tabs"
-              activeKey={settingsTab}
-              onChange={setSettingsTab}
-              items={[
-              {
-                key: 'basic',
-                label: t('tabBasic'),
-                children: (
-                  <Form form={settingsForm} layout="vertical" className="settings-form">
-                    <Form.Item name="first_run_done" hidden>
-                      <Input />
-                    </Form.Item>
-                    <Typography.Title level={5}>{t('grpAppearance')}</Typography.Title>
-                    <Form.Item name="ui_theme" label={t('themeMode')}>
-                      <Select
-                        options={[
-                          { label: t('themeSystem'), value: 'system' },
-                          { label: t('themeLight'), value: 'light' },
-                          { label: t('themeDark'), value: 'dark' },
-                        ]}
-                      />
-                    </Form.Item>
-
-                    <Divider />
-                    <Typography.Title level={5}>{t('grpDownload')}</Typography.Title>
-                    <div className="grid-2">
-                      <Form.Item name="download_dir" label={t('downloadDir')}>
-                        <Input />
-                      </Form.Item>
-                      <Form.Item name="max_concurrent_downloads" label={t('maxConcurrent')}>
-                        <InputNumber min={1} style={{ width: '100%' }} />
-                      </Form.Item>
-                      <Form.Item name="max_connection_per_server" label={t('maxConn')}>
-                        <InputNumber min={1} style={{ width: '100%' }} />
-                      </Form.Item>
-                      <Form.Item name="max_overall_download_limit" label={t('maxLimit')}>
-                        <Input placeholder="0 / 10M / 2M" />
-                      </Form.Item>
-                    </div>
-                    <Form.Item name="bt_tracker" label={t('btTracker')}>
-                      <Input.TextArea rows={2} />
-                    </Form.Item>
-                    <Space wrap style={{ marginBottom: 12 }}>
-                      <Typography.Text type="secondary">{t('trackerPresets')}:</Typography.Text>
-                      <Button
-                        size="small"
-                        onClick={() =>
-                          settingsForm.setFieldValue(
-                            'bt_tracker',
-                            'udp://tracker.opentrackr.org:1337/announce,udp://open.demonii.com:1337/announce',
-                          )
-                        }
-                      >
-                        Public A
-                      </Button>
-                      <Button
-                        size="small"
-                        onClick={() =>
-                          settingsForm.setFieldValue(
-                            'bt_tracker',
-                            'udp://tracker.torrent.eu.org:451/announce,udp://tracker.moeking.me:6969/announce',
-                          )
-                        }
-                      >
-                        Public B
-                      </Button>
-                    </Space>
-
-                    <Divider />
-                    <Typography.Title level={5}>{t('grpAria2')}</Typography.Title>
-                    <Form.Item name="aria2_bin_path" label={t('aria2Path')}>
-                      <Input />
-                    </Form.Item>
-                    <Space style={{ marginBottom: 12 }}>
-                      <Button onClick={browseAria2Path}>{t('browse')}</Button>
-                      <Button onClick={detectAria2Path}>{t('detectAria2')}</Button>
-                      <Button onClick={loadSettings}>{t('reload')}</Button>
-                      <Button onClick={openImportExport}>{t('importExport')}</Button>
-                    </Space>
-                    <Form.Item name="enable_upnp" label={t('enableUpnp')} valuePropName="checked">
-                      <Switch />
-                    </Form.Item>
-
-                    <Divider />
-                    <Typography.Title level={5}>{t('grpIntegration')}</Typography.Title>
-                    <div className="grid-2">
-                      <Form.Item name="github_cdn" label={t('githubCdn')}>
-                        <Input />
-                      </Form.Item>
-                      <Form.Item name="github_token" label={t('githubToken')}>
-                        <Input.Password />
-                      </Form.Item>
-                      <Form.Item name="browser_bridge_enabled" label={t('bridgeEnabled')} valuePropName="checked">
-                        <Switch />
-                      </Form.Item>
-                      <Form.Item name="browser_bridge_port" label={t('bridgePort')}>
-                        <InputNumber min={1} max={65535} style={{ width: '100%' }} />
-                      </Form.Item>
-                    </div>
-                    <Form.Item name="browser_bridge_token" label={t('bridgeToken')}>
-                      <Input />
-                    </Form.Item>
-                    <Form.Item name="browser_bridge_allowed_origins" label={t('bridgeAllowedOrigins')}>
-                      <Input placeholder="chrome-extension://,moz-extension://" />
-                    </Form.Item>
-                    <Space wrap style={{ marginBottom: 8 }}>
-                      <Button loading={bridgeChecking} onClick={checkBridgeStatus}>
-                        {t('bridgeCheck')}
-                      </Button>
-                      <Button
-                        onClick={async () => {
-                          try {
-                            const token = await api.call<string>('rotate_browser_bridge_token')
-                            settingsForm.setFieldValue('browser_bridge_token', token)
-                            msg.success(t('settingsSaved'))
-                          } catch (err) {
-                            msg.error(parseErr(err))
-                          }
-                        }}
-                      >
-                        {t('rotateBridgeToken')}
-                      </Button>
-                      <Button
-                        loading={bridgeChecking}
-                        onClick={async () => {
-                          await saveSettings()
-                          await checkBridgeStatus()
-                        }}
-                      >
-                        {t('bridgeReconnect')}
-                      </Button>
-                      <Tag color={bridgeStatus?.connected ? 'green' : 'orange'}>
-                        {t('bridgeStatus')}: {bridgeStatus?.connected ? t('bridgeConnected') : t('bridgeDisconnected')}
-                      </Tag>
-                    </Space>
-                    <Typography.Text type="secondary" style={{ display: 'block', marginTop: -4, marginBottom: 8 }}>
-                      {bridgeStatus?.endpoint ? `${bridgeStatus.endpoint} - ${bridgeStatus.message}` : bridgeStatus?.message || '-'}
-                    </Typography.Text>
-                    <Form.Item name="clipboard_watch_enabled" label={t('clipboardWatchEnabled')} valuePropName="checked">
-                      <Switch />
-                    </Form.Item>
-
-                    <Divider />
-                    <Typography.Title level={5}>{t('grpReliability')}</Typography.Title>
-                    <div className="grid-2">
-                      <Form.Item name="retry_max_attempts" label={t('retryMaxAttempts')}>
-                        <InputNumber min={0} max={20} style={{ width: '100%' }} />
-                      </Form.Item>
-                      <Form.Item name="retry_backoff_secs" label={t('retryBackoff')}>
-                        <InputNumber min={1} max={3600} style={{ width: '100%' }} />
-                      </Form.Item>
-                      <Form.Item name="metadata_timeout_secs" label={t('metadataTimeout')}>
-                        <InputNumber min={30} max={3600} style={{ width: '100%' }} />
-                      </Form.Item>
-                    </div>
-                    <Form.Item name="retry_fallback_mirrors" label={t('retryMirrors')}>
-                      <Input.TextArea rows={2} placeholder="https://mirror1.example.com\nhttps://mirror2.example.com" />
-                    </Form.Item>
-                    <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
-                      {t('speedPlan')}
-                    </Typography.Text>
-                    <Space wrap style={{ marginBottom: 10 }}>
-                      <Typography.Text type="secondary">{t('scheduleMode')}</Typography.Text>
-                      <Select
-                        style={{ width: 260 }}
-                        value={speedPlanMode}
-                        onChange={(v) => onSpeedPlanModeChange(v as SpeedPlanMode)}
-                        options={[
-                          { label: t('scheduleManual'), value: 'manual' },
-                          { label: t('scheduleOff'), value: 'off' },
-                          { label: t('scheduleWorkdayLimited'), value: 'workday_limited' },
-                          { label: t('scheduleNightBoost'), value: 'night_boost' },
-                        ]}
-                      />
-                    </Space>
-                    <Form.List name="speed_plan_rules">
-                      {(fields, { add, remove }) => (
-                        <Space direction="vertical" style={{ width: '100%' }}>
-                          {fields.map((field) => (
-                            <Card key={field.key} size="small">
-                              <div className="grid-rule">
-                                <Form.Item name={[field.name, 'days']} label={t('speedDays')}>
-                                  <Input placeholder="1,2,3,4,5 (Mon=1..Sun=7)" />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'start']} label={t('speedStart')}>
-                                  <Input placeholder="09:00" />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'end']} label={t('speedEnd')}>
-                                  <Input placeholder="18:00" />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'limit']} label={t('speedLimit')}>
-                                  <Input placeholder="0 / 2M / 10M" />
-                                </Form.Item>
-                              </div>
-                              <Button danger onClick={() => remove(field.name)}>
-                                {t('removeRule')}
-                              </Button>
-                            </Card>
-                          ))}
-                          <Button
-                            icon={<PlusOutlined />}
-                            onClick={() =>
-                              add({
-                                days: '',
-                                start: '',
-                                end: '',
-                                limit: '0',
-                              })
-                            }
-                          >
-                            {t('addRule')}
-                          </Button>
-                        </Space>
-                      )}
-                    </Form.List>
-                    <Form.Item name="speed_plan" hidden>
-                      <Input />
-                    </Form.Item>
-                    <Form.Item
-                      name="auto_delete_control_files"
-                      label={t('autoDeleteControlFiles')}
-                      valuePropName="checked"
-                    >
-                      <Switch />
-                    </Form.Item>
-                    <Form.Item name="auto_clear_completed_days" label={t('autoClearCompletedDays')}>
-                      <InputNumber min={0} max={3650} style={{ width: '100%' }} />
-                    </Form.Item>
-
-                    <Divider />
-                    <Typography.Title level={5}>{isMac ? t('trayPrefsMac') : t('trayPrefs')}</Typography.Title>
-                    <div className="grid-2">
-                      <Form.Item name="start_minimized" label={t('startMinimized')} valuePropName="checked">
-                        <Switch />
-                      </Form.Item>
-                      <Form.Item
-                        name="minimize_to_tray"
-                        label={isMac ? t('minimizeToTrayMac') : t('minimizeToTray')}
-                        valuePropName="checked"
-                      >
-                        <Switch />
-                      </Form.Item>
-                      {isMac && (
-                        <Typography.Text type="secondary" style={{ display: 'block', marginTop: -8 }}>
-                          {t('trayRecoverHintMac')}
-                        </Typography.Text>
-                      )}
-                      {isMac && (
-                        <Typography.Text type="secondary" style={{ display: 'block', marginTop: 4 }}>
-                          {t('trayDisabledMac')}
-                        </Typography.Text>
-                      )}
-                      <Form.Item name="notify_on_complete" label={t('notifyOnComplete')} valuePropName="checked">
-                        <Switch />
-                      </Form.Item>
-                      <Form.Item name="post_complete_action" label={t('postCompleteAction')}>
-                        <Select
-                          options={[
-                            { label: t('postCompleteNone'), value: 'none' },
-                            { label: t('postCompleteOpenDir'), value: 'open_dir' },
-                            { label: t('postCompleteOpenFile'), value: 'open_file' },
-                          ]}
-                        />
-                      </Form.Item>
-                    </div>
-                    <Space style={{ marginBottom: 8 }}>
-                      <Button onClick={resetUiLayout}>{t('resetUiLayout')}</Button>
-                      <Button danger onClick={resetSettingsToDefaults}>{t('resetSettingsDefaults')}</Button>
-                    </Space>
-
-                    <Divider />
-                    <Typography.Title level={5}>{t('rulesTitle')}</Typography.Title>
-                    <Form.List name="download_dir_rules">
-                      {(fields, { add, remove }) => (
-                        <Space direction="vertical" style={{ width: '100%' }}>
-                          {fields.map((field) => (
-                            <Card key={field.key} size="small">
-                              <div className="grid-rule">
-                                <Form.Item name={[field.name, 'enabled']} label={t('enabled')} valuePropName="checked">
-                                  <Switch />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'matcher']} label={t('matcher')}>
-                                  <Select
-                                    options={[
-                                      { label: 'ext', value: 'ext' },
-                                      { label: 'domain', value: 'domain' },
-                                      { label: 'type', value: 'type' },
-                                    ]}
-                                  />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'pattern']} label={t('pattern')}>
-                                  <Input placeholder="mp4,mkv or github.com or torrent" />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'save_dir']} label={t('saveDir')}>
-                                  <Input placeholder="/path/to/save" />
-                                </Form.Item>
-                                <Form.Item
-                                  name={[field.name, 'subdir_by_domain']}
-                                  label={t('subdirByDomain')}
-                                  valuePropName="checked"
-                                >
-                                  <Switch />
-                                </Form.Item>
-                                <Form.Item
-                                  name={[field.name, 'subdir_by_date']}
-                                  label={t('subdirByDate')}
-                                  valuePropName="checked"
-                                >
-                                  <Switch />
-                                </Form.Item>
-                              </div>
-                              <Button danger onClick={() => remove(field.name)}>
-                                {t('removeRule')}
-                              </Button>
-                            </Card>
-                          ))}
-                          <Button
-                            icon={<PlusOutlined />}
-                            onClick={() =>
-                              add({
-                                enabled: true,
-                                matcher: 'ext',
-                                subdir_by_domain: false,
-                                subdir_by_date: false,
-                              })
-                            }
-                          >
-                            {t('addRule')}
-                          </Button>
-                        </Space>
-                      )}
-                    </Form.List>
-                    <Divider />
-                    <Typography.Title level={5}>{t('categoryRulesTitle')}</Typography.Title>
-                    <Form.List name="category_rules">
-                      {(fields, { add, remove }) => (
-                        <Space direction="vertical" style={{ width: '100%' }}>
-                          {fields.map((field) => (
-                            <Card key={field.key} size="small">
-                              <div className="grid-rule">
-                                <Form.Item name={[field.name, 'enabled']} label={t('enabled')} valuePropName="checked">
-                                  <Switch />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'matcher']} label={t('matcher')}>
-                                  <Select
-                                    options={[
-                                      { label: 'ext', value: 'ext' },
-                                      { label: 'domain', value: 'domain' },
-                                      { label: 'type', value: 'type' },
-                                    ]}
-                                  />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'pattern']} label={t('pattern')}>
-                                  <Input placeholder="mp4,mkv or github.com or torrent" />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'category']} label={t('categoryName')}>
-                                  <Input placeholder="video / docs / work" />
-                                </Form.Item>
-                              </div>
-                              <Button danger onClick={() => remove(field.name)}>
-                                {t('removeRule')}
-                              </Button>
-                            </Card>
-                          ))}
-                          <Button
-                            icon={<PlusOutlined />}
-                            onClick={() =>
-                              add({
-                                enabled: true,
-                                matcher: 'ext',
-                                category: '',
-                              })
-                            }
-                          >
-                            {t('addRule')}
-                          </Button>
-                        </Space>
-                      )}
-                    </Form.List>
-                  </Form>
-                ),
-              },
-              {
-                key: 'diagnostics',
-                label: t('tabDiagnostics'),
-                children: (
-                  <Space direction="vertical" style={{ width: '100%' }}>
-                    <Card size="small" title={t('startupSelfCheck')}>
-                      <Space direction="vertical" style={{ width: '100%' }}>
-                        <Typography.Text>
-                          aria2: <Typography.Text code>{startupSummary?.aria2_bin_path || '-'}</Typography.Text>
-                        </Typography.Text>
-                        <Typography.Text>
-                          {t('aria2PathSource')}:{' '}
-                          <Typography.Text code>
-                            {startupSummary?.aria2_path_source === 'manual'
-                              ? t('aria2SourceManual')
-                              : startupSummary?.aria2_path_source === 'bundled'
-                                ? t('aria2SourceBundled')
-                                : t('aria2SourceSystem')}
-                          </Typography.Text>
-                        </Typography.Text>
-                        <Space wrap>
-                          <Tag color={startupSummary?.aria2_bin_exists ? 'green' : 'red'}>
-                            bin {startupSummary?.aria2_bin_exists ? t('statusOk') : t('statusFail')}
-                          </Tag>
-                          <Tag color={startupSummary?.aria2_bin_executable ? 'green' : 'red'}>
-                            exec {startupSummary?.aria2_bin_executable ? t('statusOk') : t('statusFail')}
-                          </Tag>
-                          <Tag color={startupSummary?.download_dir_exists ? 'green' : 'red'}>
-                            dir {startupSummary?.download_dir_exists ? t('statusOk') : t('statusFail')}
-                          </Tag>
-                          <Tag color={startupSummary?.download_dir_writable ? 'green' : 'red'}>
-                            writable {startupSummary?.download_dir_writable ? t('statusOk') : t('statusFail')}
-                          </Tag>
-                          <Tag color={startupSummary?.rpc_ready ? 'green' : 'orange'}>
-                            rpc {startupSummary?.rpc_ready ? t('statusOk') : t('statusFail')}
-                          </Tag>
-                        </Space>
-                        <Typography.Text>
-                          download dir:{' '}
-                          <Typography.Text code>{startupSummary?.download_dir || '-'}</Typography.Text>
-                        </Typography.Text>
-                        <Typography.Text>
-                          rpc endpoint:{' '}
-                          <Typography.Text code>{startupSummary?.rpc_endpoint || '-'}</Typography.Text>
-                        </Typography.Text>
-                      </Space>
-                    </Card>
-                    <Space wrap>
-                      <Button onClick={doRpcPing}>{t('rpcPing')}</Button>
-                      <Button onClick={doRestart}>{t('restartAria2')}</Button>
-                      <Button onClick={doStartupCheck}>{t('startupCheck')}</Button>
-                      <Button onClick={doSaveSession}>{t('saveSession')}</Button>
-                      <Button onClick={doExportDebugBundle}>{t('exportDebug')}</Button>
-                      <Button icon={<ReloadOutlined />} onClick={loadDiagnostics}>{t('refresh')}</Button>
-                    </Space>
-                    <Input.TextArea value={diagnosticsText} autoSize={{ minRows: 12, maxRows: 22 }} readOnly />
-                  </Space>
-                ),
-              },
-              {
-                key: 'updates',
-                label: t('tabUpdates'),
-                children: (
-                  <Space direction="vertical" style={{ width: '100%' }}>
-                    <Space wrap>
-                      <Button onClick={loadUpdateInfo}>{t('checkUpdate')}</Button>
-                      <Button type="primary" onClick={doUpdateAria2Now}>{t('updateNow')}</Button>
-                    </Space>
-                    <Input.TextArea value={updateText} autoSize={{ minRows: 10, maxRows: 20 }} readOnly />
-                    <Input.TextArea value={appUpdateStrategyText} autoSize={{ minRows: 4, maxRows: 10 }} readOnly />
-                  </Space>
-                ),
-              },
-              ]}
-            />
-            </div>
-          </Modal>
-        </SettingsPage>
-          </Suspense>
-        )}
 
         <Modal
           title={t('removeConfirm')}

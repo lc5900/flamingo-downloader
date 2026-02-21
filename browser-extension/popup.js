@@ -1,4 +1,6 @@
 const ext = typeof browser !== 'undefined' ? browser : chrome;
+const i18n = (typeof window !== 'undefined' && window.FlamingoI18n) || null;
+const t = (key, vars = {}) => (i18n ? i18n.t(key, vars) : key);
 
 const el = {
   summary: document.getElementById('summary'),
@@ -83,7 +85,7 @@ async function loadQuickState() {
   el.sniffMediaEnabled.checked = !!state.sniffMediaEnabled;
   el.autoIntercept.checked = !!state.autoIntercept;
   const activity = state.lastBridgeActivityAt ? fmtTs(state.lastBridgeActivityAt) : '-';
-  el.summary.textContent = `Media ${Number(state.mediaCount || 0)} | Last ${activity}`;
+  el.summary.textContent = t('popup_summary', { count: Number(state.mediaCount || 0), activity });
 }
 
 async function loadCandidates() {
@@ -95,7 +97,7 @@ async function loadCandidates() {
     : sourceItems;
   if (items.length === 0) {
     selectedUrls.clear();
-    el.list.innerHTML = '<div class="card muted">No media detected yet.</div>';
+    el.list.innerHTML = `<div class="card muted">${esc(t('popup_no_media'))}</div>`;
     return;
   }
   const visibleUrls = new Set(items.map((item) => String(item?.url || '').trim()).filter(Boolean));
@@ -111,13 +113,13 @@ async function loadCandidates() {
       return `
 <div class="card">
   <div class="hint">#${idx + 1} | ${esc(item?.reason)} | hits ${Number(item?.hits || 0)} | ${esc(fmtTs(item?.lastSeenAt))}</div>
-  <label class="switch"><input class="pick" data-url="${encodeURIComponent(url)}" type="checkbox" ${selectedUrls.has(url) ? 'checked' : ''} />Select</label>
+  <label class="switch"><input class="pick" data-url="${encodeURIComponent(url)}" type="checkbox" ${selectedUrls.has(url) ? 'checked' : ''} />${esc(t('popup_select'))}</label>
   <div><span class="chip">${esc(fmt)}</span><span class="chip">${esc(quality)}</span></div>
   <div class="url">${esc(url)}</div>
   <div class="toolbar">
-    <button class="send primary" data-url="${encodeURIComponent(url)}" type="button">Send</button>
-    <button class="copy" data-url="${encodeURIComponent(url)}" type="button">Copy</button>
-    <button class="open" data-page="${encodeURIComponent(String(item?.pageUrl || ''))}" type="button">Open Source</button>
+    <button class="send primary" data-url="${encodeURIComponent(url)}" type="button">${esc(t('popup_send'))}</button>
+    <button class="copy" data-url="${encodeURIComponent(url)}" type="button">${esc(t('popup_copy'))}</button>
+    <button class="open" data-page="${encodeURIComponent(String(item?.pageUrl || ''))}" type="button">${esc(t('popup_open_source'))}</button>
   </div>
 </div>`;
     })
@@ -137,8 +139,8 @@ async function loadCandidates() {
         }
         const taskId = String(response?.task_id || '');
         showStatus(taskId
-          ? `Sent task: ${taskId}`
-          : `Sent: ${target.slice(0, 80)}`, 'success');
+          ? t('popup_status_sent_task', { taskId })
+          : t('popup_status_sent_short', { target: target.slice(0, 80) }), 'success');
       } catch (e) {
         showStatus(String(e?.message || e), 'error');
       }
@@ -150,7 +152,7 @@ async function loadCandidates() {
       const target = decodeURIComponent(String(btn.getAttribute('data-url') || ''));
       try {
         await navigator.clipboard.writeText(target);
-        showStatus('Copied URL', 'success');
+        showStatus(t('popup_status_copied_url'), 'success');
       } catch (e) {
         showStatus(String(e?.message || e), 'error');
       }
@@ -170,7 +172,7 @@ async function loadCandidates() {
     btn.addEventListener('click', async () => {
       const page = decodeURIComponent(String(btn.getAttribute('data-page') || ''));
       if (!page) {
-        showStatus('No source page available', 'error');
+        showStatus(t('popup_no_source_page'), 'error');
         return;
       }
       try {
@@ -221,7 +223,7 @@ el.clear.addEventListener('click', () => {
 el.sendSelected.addEventListener('click', async () => {
   const targets = Array.from(selectedUrls);
   if (targets.length === 0) {
-    showStatus('No selected media', 'error');
+    showStatus(t('popup_status_no_selected_media'), 'error');
     return;
   }
   let okCount = 0;
@@ -233,19 +235,19 @@ el.sendSelected.addEventListener('click', async () => {
       // continue
     }
   }
-  if (okCount > 0) showStatus(`Sent ${okCount}/${targets.length}`, 'success');
-  else showStatus('Batch send failed', 'error');
+  if (okCount > 0) showStatus(t('popup_status_sent_batch', { ok: okCount, total: targets.length }), 'success');
+  else showStatus(t('popup_status_batch_failed'), 'error');
 });
 
 el.copySelected.addEventListener('click', async () => {
   const targets = Array.from(selectedUrls);
   if (targets.length === 0) {
-    showStatus('No selected media', 'error');
+    showStatus(t('popup_status_no_selected_media'), 'error');
     return;
   }
   try {
     await navigator.clipboard.writeText(targets.join('\n'));
-    showStatus(`Copied ${targets.length} URL(s)`, 'success');
+    showStatus(t('popup_status_copied_batch', { count: targets.length }), 'success');
   } catch (e) {
     showStatus(String(e?.message || e), 'error');
   }
@@ -267,3 +269,7 @@ el.currentTabOnly.addEventListener('change', () => {
 refreshAll().catch((e) => {
   showStatus(String(e?.message || e), 'error');
 });
+
+if (i18n) {
+  i18n.apply(document);
+}

@@ -473,13 +473,22 @@ impl DownloadService {
             .db
             .get_task(task_id)?
             .ok_or_else(|| AppError::TaskNotFound(task_id.to_string()))?;
-        if let Some(gid) = task.aria2_gid.as_ref() {
-            // Never block record deletion on aria2 rpc responsiveness.
-            let _ = time::timeout(Duration::from_millis(1200), self.aria2.remove(gid, true)).await;
-        }
 
         if delete_files {
             self.delete_task_files_safely(&task)?;
+        }
+
+        if let Some(gid) = task.aria2_gid.as_ref() {
+            // Mark gid first so even if aria2 rpc times out/crashes, reconcile won't
+            // recreate this user-deleted task after restart.
+            let _ = self.db.mark_deleted_gid(gid, now_ts());
+            // Best effort: remove running/waiting task, then purge stopped result.
+            let _ = time::timeout(Duration::from_millis(1200), self.aria2.remove(gid, true)).await;
+            let _ = time::timeout(
+                Duration::from_millis(1200),
+                self.aria2.remove_download_result(gid),
+            )
+            .await;
         }
 
         self.db.remove_task(task_id)?;
@@ -1003,6 +1012,11 @@ impl DownloadService {
             }
         };
 
+        let configured = self.aria2_bin_path();
+        if !configured.trim().is_empty() {
+            push_unique(PathBuf::from(configured.trim()));
+        }
+
         if let Ok(current) = self.db.get_setting("manual_aria2_bin_path")
             && let Some(v) = current
             && !v.trim().is_empty()
@@ -1324,13 +1338,40 @@ impl DownloadService {
         self.ensure_aria2_ready().await?;
         let snapshots = self.aria2.tell_all().await?;
         let now = now_ts();
+        let _ = self.db.prune_deleted_gids_before(now - 30 * 24 * 3600);
+        let _ = self.purge_recovered_error_placeholders(now);
 
         let _ = self.db.update_from_snapshots(&snapshots, now)?;
 
         let mut created = 0usize;
+        let mut skipped_deleted = 0usize;
+        let mut skipped_terminal_orphans = 0usize;
         let default_dir = self.configured_download_dir()?;
         for snapshot in snapshots {
-            if self.db.get_task_by_gid(&snapshot.gid)?.is_some() {
+            if let Some(existing) = self.db.get_task_by_gid(&snapshot.gid)? {
+                if is_terminal_aria2_status(&snapshot.status)
+                    && is_recovered_source(&existing.source)
+                    && existing.total_length == 0
+                    && existing.completed_length == 0
+                {
+                    let _ = self.db.mark_deleted_gid(&snapshot.gid, now);
+                    let _ = self.db.remove_task(&existing.id);
+                    let _ = self.aria2.remove_download_result(&snapshot.gid).await;
+                    skipped_terminal_orphans += 1;
+                }
+                continue;
+            }
+            if self.db.is_gid_deleted(&snapshot.gid)? {
+                skipped_deleted += 1;
+                let _ = self.aria2.remove(&snapshot.gid, true).await;
+                let _ = self.aria2.remove_download_result(&snapshot.gid).await;
+                continue;
+            }
+            if is_terminal_aria2_status(&snapshot.status) {
+                skipped_terminal_orphans += 1;
+                let _ = self.db.mark_deleted_gid(&snapshot.gid, now);
+                let _ = self.aria2.remove(&snapshot.gid, true).await;
+                let _ = self.aria2.remove_download_result(&snapshot.gid).await;
                 continue;
             }
             let task_id = Uuid::new_v4().to_string();
@@ -1377,9 +1418,39 @@ impl DownloadService {
 
         self.push_log(
             "reconcile_with_aria2",
-            format!("reconciled, recovered {created} orphan task(s)"),
+            format!(
+                "reconciled, recovered {created} orphan task(s), skipped {skipped_deleted} deleted gid(s), skipped {skipped_terminal_orphans} terminal orphan(s)"
+            ),
         );
         Ok(created)
+    }
+
+    fn purge_recovered_error_placeholders(&self, now: i64) -> Result<usize> {
+        let mut purged = 0usize;
+        let tasks = self.db.list_tasks(None, 5000, 0)?;
+        for task in tasks {
+            if !is_recovered_source(&task.source) {
+                continue;
+            }
+            if task.status != TaskStatus::Error {
+                continue;
+            }
+            if task.total_length != 0 || task.completed_length != 0 {
+                continue;
+            }
+            if let Some(gid) = task.aria2_gid.as_ref() {
+                let _ = self.db.mark_deleted_gid(gid, now);
+            }
+            let _ = self.db.remove_task(&task.id);
+            purged += 1;
+        }
+        if purged > 0 {
+            self.push_log(
+                "reconcile_cleanup",
+                format!("purged {purged} recovered error placeholder task(s)"),
+            );
+        }
+        Ok(purged)
     }
 
     pub async fn rpc_ping(&self) -> Result<String> {
@@ -2653,6 +2724,14 @@ fn ext_to_type_group(ext: &str) -> &'static str {
     }
 }
 
+fn is_terminal_aria2_status(status: &str) -> bool {
+    matches!(status, "complete" | "error" | "removed")
+}
+
+fn is_recovered_source(source: &str) -> bool {
+    source.starts_with("aria2:recovered:")
+}
+
 async fn detect_http_content_type(url: &str) -> Option<String> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(2))
@@ -3481,6 +3560,11 @@ mod tests {
             Ok("ok".to_string())
         }
 
+        async fn remove_download_result(&self, _gid: &str) -> Result<String> {
+            self.call("remove_download_result");
+            Ok("ok".to_string())
+        }
+
         async fn tell_status(&self, _gid: &str) -> Result<Value> {
             self.call("tell_status");
             Ok(json!({ "files": [] }))
@@ -3577,6 +3661,7 @@ mod tests {
         assert!(calls.iter().any(|c| c == "add_uri"));
         assert!(calls.iter().any(|c| c == "pause"));
         assert!(calls.iter().any(|c| c == "remove"));
+        assert!(calls.iter().any(|c| c == "remove_download_result"));
     }
 
     #[tokio::test]
@@ -3610,6 +3695,40 @@ mod tests {
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].status, TaskStatus::Active);
         assert!(tasks[0].source.contains("aria2:recovered:gid-orphan"));
+    }
+
+    #[tokio::test]
+    async fn reconcile_skips_deleted_gid_tombstone() {
+        let mock = Arc::new(MockAria2::default());
+        mock.push_snapshot(Aria2TaskSnapshot {
+            gid: "gid-deleted".to_string(),
+            status: "active".to_string(),
+            total_length: 1024,
+            completed_length: 64,
+            download_speed: 10,
+            upload_speed: 0,
+            connections: 1,
+            error_code: None,
+            error_message: None,
+            name: Some("should-not-restore.bin".to_string()),
+            has_metadata: true,
+            files: vec![],
+        });
+
+        let (service, db, _mock) = build_service(mock);
+        db.mark_deleted_gid("gid-deleted", super::now_ts())
+            .expect("mark deleted gid");
+
+        let created = service
+            .reconcile_with_aria2()
+            .await
+            .expect("reconcile with aria2");
+        assert_eq!(created, 0);
+
+        let tasks = service
+            .list_tasks(None, 20, 0)
+            .expect("list tasks after reconcile");
+        assert!(tasks.is_empty());
     }
 
     #[tokio::test]

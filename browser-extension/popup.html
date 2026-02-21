@@ -30,35 +30,36 @@
     <div class="wrap">
       <div class="header">
         <div>
-          <div class="title">🦩 Flamingo</div>
-          <div id="summary" class="meta">Loading...</div>
+          <div class="title" data-i18n="popup_title">🦩 Flamingo</div>
+          <div id="summary" class="meta" data-i18n="popup_loading">Loading...</div>
         </div>
-        <button id="openOptions" type="button">Advanced</button>
+        <button id="openOptions" type="button" data-i18n="popup_advanced">Advanced</button>
       </div>
 
       <div class="toolbar">
-        <button id="refresh" type="button">Refresh</button>
-        <button id="clear" type="button">Clear</button>
-        <button id="sendSelected" class="primary" type="button">Send Selected</button>
-        <button id="copySelected" type="button">Copy Selected</button>
+        <button id="refresh" type="button" data-i18n="popup_refresh">Refresh</button>
+        <button id="clear" type="button" data-i18n="popup_clear">Clear</button>
+        <button id="sendSelected" class="primary" type="button" data-i18n="popup_send_selected">Send Selected</button>
+        <button id="copySelected" type="button" data-i18n="popup_copy_selected">Copy Selected</button>
       </div>
 
       <div class="row">
-        <label class="switch"><input id="enabled" type="checkbox" />Bridge</label>
-        <label class="switch"><input id="sniffMediaEnabled" type="checkbox" />Sniffer</label>
-        <label class="switch"><input id="autoIntercept" type="checkbox" />Auto</label>
+        <label class="switch"><input id="enabled" type="checkbox" /><span data-i18n="popup_bridge">Bridge</span></label>
+        <label class="switch"><input id="sniffMediaEnabled" type="checkbox" /><span data-i18n="popup_sniffer">Sniffer</span></label>
+        <label class="switch"><input id="autoIntercept" type="checkbox" /><span data-i18n="popup_auto">Auto</span></label>
       </div>
       <div class="row">
-        <label class="switch"><input id="currentTabOnly" type="checkbox" />Current tab only</label>
+        <label class="switch"><input id="currentTabOnly" type="checkbox" /><span data-i18n="popup_current_tab_only">Current tab only</span></label>
       </div>
 
       <div id="status" class="status"></div>
       <div id="list"></div>
 
       <div class="footer">
-        <span class="hint">Click a video page, then reopen this popup to pick links.</span>
+        <span class="hint" data-i18n="popup_footer_hint">Click a video page, then reopen this popup to pick links.</span>
       </div>
     </div>
+    <script src="i18n.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

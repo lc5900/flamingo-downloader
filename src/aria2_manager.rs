@@ -39,6 +39,7 @@ pub trait Aria2Api: Send + Sync {
     async fn pause_all(&self) -> Result<String>;
     async fn unpause_all(&self) -> Result<String>;
     async fn remove(&self, gid: &str, force: bool) -> Result<String>;
+    async fn remove_download_result(&self, gid: &str) -> Result<String>;
     async fn tell_status(&self, gid: &str) -> Result<Value>;
     async fn get_peers(&self, gid: &str) -> Result<Vec<Value>>;
     async fn tell_all(&self) -> Result<Vec<Aria2TaskSnapshot>>;
@@ -90,7 +91,6 @@ fn resolve_default_download_dir(base_dir: &Path) -> PathBuf {
 
 fn resolve_aria2_bin(base_dir: &Path) -> PathBuf {
     let bin_dir = base_dir.join("aria2").join("bin");
-    let mut candidates = bundled_aria2_candidates();
     let base_candidates = if cfg!(target_os = "windows") {
         vec![
             bin_dir.join("windows").join("aria2c.exe"),
@@ -105,11 +105,12 @@ fn resolve_aria2_bin(base_dir: &Path) -> PathBuf {
     } else {
         vec![bin_dir.join("linux").join("aria2c"), bin_dir.join("aria2c")]
     };
-    candidates.extend(base_candidates);
+    let mut candidates = base_candidates;
+    candidates.extend(bundled_aria2_candidates());
 
     candidates.extend(system_aria2_candidates());
 
-    candidates
+    let selected = candidates
         .into_iter()
         .find(|p| p.exists())
         .unwrap_or_else(|| {
@@ -118,7 +119,61 @@ fn resolve_aria2_bin(base_dir: &Path) -> PathBuf {
             } else {
                 bin_dir.join("aria2c")
             }
-        })
+        });
+
+    stage_managed_aria2_copy_if_needed(base_dir, &selected).unwrap_or(selected)
+}
+
+fn stage_managed_aria2_copy_if_needed(base_dir: &Path, selected: &Path) -> Option<PathBuf> {
+    let bin_dir = base_dir.join("aria2").join("bin");
+    let (managed_primary, managed_platform) = if cfg!(target_os = "windows") {
+        (
+            bin_dir.join("aria2c.exe"),
+            Some(bin_dir.join("windows").join("aria2c.exe")),
+        )
+    } else if cfg!(target_os = "macos") {
+        (
+            bin_dir.join("aria2c"),
+            Some(bin_dir.join("macos").join("aria2c")),
+        )
+    } else {
+        (
+            bin_dir.join("aria2c"),
+            Some(bin_dir.join("linux").join("aria2c")),
+        )
+    };
+
+    if managed_primary.exists() {
+        return Some(managed_primary);
+    }
+    if !selected.exists() || selected == managed_primary {
+        return None;
+    }
+
+    if let Some(parent) = managed_primary.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let copy_ok = fs::copy(selected, &managed_primary).is_ok();
+    if !copy_ok {
+        return None;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&managed_primary, fs::Permissions::from_mode(0o755));
+    }
+    if let Some(platform_path) = managed_platform {
+        if let Some(parent) = platform_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let _ = fs::copy(&managed_primary, &platform_path);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&platform_path, fs::Permissions::from_mode(0o755));
+        }
+    }
+    Some(managed_primary)
 }
 
 fn bundled_aria2_candidates() -> Vec<PathBuf> {
@@ -304,6 +359,13 @@ impl Aria2Manager {
             command
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::from(stderr_file));
+            #[cfg(target_os = "windows")]
+            {
+                use std::os::windows::process::CommandExt;
+                // Avoid flashing a terminal window when launching aria2 in GUI mode.
+                const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+                command.creation_flags(CREATE_NO_WINDOW);
+            }
             command.spawn().with_context(|| {
                 format!(
                     "failed to spawn aria2c at {}",
@@ -507,6 +569,13 @@ impl Aria2Manager {
             "aria2.remove"
         };
         self.client().await?.call(method, vec![json!(gid)]).await
+    }
+
+    pub async fn remove_download_result(&self, gid: &str) -> Result<String> {
+        self.client()
+            .await?
+            .call("aria2.removeDownloadResult", vec![json!(gid)])
+            .await
     }
 
     pub async fn tell_status(&self, gid: &str) -> Result<Value> {
@@ -731,6 +800,10 @@ impl Aria2Api for Aria2Manager {
 
     async fn remove(&self, gid: &str, force: bool) -> Result<String> {
         Aria2Manager::remove(self, gid, force).await
+    }
+
+    async fn remove_download_result(&self, gid: &str) -> Result<String> {
+        Aria2Manager::remove_download_result(self, gid).await
     }
 
     async fn tell_status(&self, gid: &str) -> Result<Value> {

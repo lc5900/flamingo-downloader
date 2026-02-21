@@ -20,7 +20,7 @@ use tauri::include_image;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 #[cfg(not(target_os = "macos"))]
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
-use tauri::{Emitter, Manager, State};
+use tauri::{Emitter, LogicalSize, Manager, Size, State};
 
 #[derive(Default)]
 struct TauriEventEmitter {
@@ -160,12 +160,13 @@ fn restore_main_window(app: &tauri::AppHandle) {
                     tauri::WebviewUrl::App("index.html".into()),
                 )
                 .title("Flamingo Downloader")
-                .inner_size(1200.0, 780.0)
+                .inner_size(1260.0, 820.0)
                 .resizable(true)
                 .build();
             }
 
             if let Some(win) = h_for_closure.get_webview_window("main") {
+                ensure_main_window_bounds(&win);
                 let _ = win.set_skip_taskbar(false);
                 let _ = win.show();
                 let _ = win.unminimize();
@@ -185,6 +186,28 @@ fn restore_main_window(app: &tauri::AppHandle) {
         std::thread::sleep(Duration::from_millis(120));
         do_restore_on_main(app_handle);
     });
+}
+
+fn ensure_main_window_bounds(win: &tauri::WebviewWindow) {
+    let min_w = 1080u32;
+    let min_h = 700u32;
+    let default_w = 1260u32;
+    let default_h = 820u32;
+
+    let _ = win.set_min_size(Some(Size::Logical(LogicalSize::new(
+        min_w as f64,
+        min_h as f64,
+    ))));
+
+    if let Ok(size) = win.inner_size() {
+        if size.width < 1100 || size.height < 720 {
+            let _ = win.set_size(Size::Logical(LogicalSize::new(
+                default_w as f64,
+                default_h as f64,
+            )));
+            let _ = win.center();
+        }
+    }
 }
 
 #[tauri::command]
@@ -801,6 +824,7 @@ fn main() {
                 && let Ok(settings) = app.state::<AppState>().service.get_global_settings()
                 && settings.start_minimized.unwrap_or(false)
             {
+                ensure_main_window_bounds(&main_win);
                 if settings.minimize_to_tray.unwrap_or(false) {
                     #[cfg(target_os = "macos")]
                     {
@@ -814,6 +838,8 @@ fn main() {
                 } else {
                     let _ = main_win.minimize();
                 }
+            } else if let Some(main_win) = app.get_webview_window("main") {
+                ensure_main_window_bounds(&main_win);
             }
 
             #[cfg(not(target_os = "macos"))]

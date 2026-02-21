@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react'
 import type { SectionKey, TableLayout, TableLayoutStore } from '../types'
 
-const TABLE_LAYOUT_KEY = 'flamingo.table_layout.v1'
+const TABLE_LAYOUT_KEY = 'flamingo.table_layout.v2'
 const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
-  progress: 180,
-  speed: 105,
-  eta: 88,
-  status: 180,
-  actions: 180,
-  size: 120,
-  completed_at: 180,
+  progress: 168,
+  speed: 96,
+  eta: 82,
+  status: 108,
+  actions: 154,
+  size: 110,
+  completed_at: 156,
 }
 const DEFAULT_TABLE_LAYOUT: TableLayoutStore = {
   downloading: {
@@ -40,7 +40,24 @@ function sanitizeLayout(section: SectionKey, raw: unknown): TableLayout {
   const base = defaultLayoutFor(section)
   if (!raw || typeof raw !== 'object') return base
   const obj = raw as Partial<TableLayout>
-  const widths = { ...base.columnWidths, ...(obj.columnWidths || {}) }
+  const mergedWidths = { ...base.columnWidths, ...(obj.columnWidths || {}) }
+  const widthCaps: Record<string, [number, number]> = {
+    progress: [120, 220],
+    speed: [80, 140],
+    eta: [72, 120],
+    status: [88, 130],
+    actions: [132, 200],
+    size: [90, 150],
+    completed_at: [120, 220],
+  }
+  const widths = Object.fromEntries(
+    Object.entries(mergedWidths).map(([key, value]) => {
+      const [min, max] = widthCaps[key] || [80, 260]
+      const n = Number(value)
+      const safe = Number.isFinite(n) ? Math.floor(n) : base.columnWidths[key] || min
+      return [key, Math.max(min, Math.min(max, safe))]
+    }),
+  )
   const allowed = new Set(base.columnOrder)
   const order = Array.isArray(obj.columnOrder)
     ? obj.columnOrder.filter((k): k is string => typeof k === 'string' && allowed.has(k))

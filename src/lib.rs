@@ -38,11 +38,11 @@ pub async fn init_backend(
         &aria2_cfg.default_download_dir.to_string_lossy(),
     )?;
     db.set_setting_if_absent("aria2_bin_path", &aria2_cfg.aria2_bin.to_string_lossy())?;
-    if db
-        .get_setting("aria2_bin_path")?
-        .map(|v| !v.trim().is_empty() && Path::new(v.trim()).exists())
-        != Some(true)
-    {
+    let current_aria2_bin = db.get_setting("aria2_bin_path")?.unwrap_or_default();
+    let should_reset_aria2_path = current_aria2_bin.trim().is_empty()
+        || !Path::new(current_aria2_bin.trim()).exists()
+        || is_bundled_resource_aria2_path(current_aria2_bin.trim());
+    if should_reset_aria2_path {
         db.set_setting("aria2_bin_path", &aria2_cfg.aria2_bin.to_string_lossy())?;
     }
     db.set_setting_if_absent(
@@ -104,6 +104,10 @@ pub async fn init_backend(
     db.validate_runtime_settings()?;
     let aria2 = Arc::new(Aria2Manager::new(aria2_cfg.clone()));
     let service = Arc::new(DownloadService::new(db.clone(), aria2.clone(), emitter));
+    service.append_operation_log(
+        "aria2_path_resolved",
+        format!("aria2_bin_path={}", aria2_cfg.aria2_bin.to_string_lossy()),
+    );
 
     service.clone().start_sync_loop();
     service.clone().start_log_flush_loop();
@@ -174,4 +178,19 @@ pub async fn init_backend(
         aria2,
         config: aria2_cfg,
     })
+}
+
+fn is_bundled_resource_aria2_path(value: &str) -> bool {
+    if value.trim().is_empty() {
+        return false;
+    }
+    let path = Path::new(value.trim());
+    if let Some(resource_dir) = std::env::var_os("FLAMINGO_RESOURCE_DIR") {
+        let bundled_root = Path::new(&resource_dir).join("aria2").join("bin");
+        if path.starts_with(&bundled_root) {
+            return true;
+        }
+    }
+    let text = value.replace('\\', "/");
+    text.contains("/resources/aria2/bin/")
 }

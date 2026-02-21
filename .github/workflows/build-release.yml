@@ -143,7 +143,7 @@ jobs:
           zip -r browser-extension/dist/flamingo-browser-extension-chromium.zip browser-extension \
             -x "browser-extension/dist/*" "browser-extension/manifest.firefox.json"
 
-          cp browser-extension/background.js browser-extension/options.js browser-extension/options.html browser-extension/popup.html browser-extension/popup.js browser-extension/dist/firefox/
+          cp browser-extension/background.js browser-extension/i18n.js browser-extension/options.js browser-extension/options.html browser-extension/popup.html browser-extension/popup.js browser-extension/dist/firefox/
           cp browser-extension/manifest.firefox.json browser-extension/dist/firefox/manifest.json
           (cd browser-extension/dist/firefox && zip -r ../flamingo-browser-extension-firefox.zip .)
 

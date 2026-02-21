@@ -19,62 +19,63 @@
   </head>
   <body>
     <div class="wrap">
-      <h2>Flamingo Downloader Bridge</h2>
+      <h2 data-i18n="options_title">Flamingo Downloader Bridge</h2>
       <label class="row">
         <input id="enabled" type="checkbox" />
-        <span>Enable Flamingo bridge</span>
+        <span data-i18n="options_enable_bridge">Enable Flamingo bridge</span>
       </label>
       <label class="row">
         <input id="useNativeMessaging" type="checkbox" />
-        <span>Use native messaging (optional)</span>
+        <span data-i18n="options_native_msg">Use native messaging (optional)</span>
       </label>
       <label class="row">
         <input id="autoIntercept" type="checkbox" />
-        <span>Auto-intercept browser downloads</span>
+        <span data-i18n="options_auto_intercept">Auto-intercept browser downloads</span>
       </label>
       <label class="row">
         <input id="sniffMediaEnabled" type="checkbox" />
-        <span>Enable media sniffing (experimental)</span>
+        <span data-i18n="options_enable_sniffer">Enable media sniffing (experimental)</span>
       </label>
       <label>
-        <span>Sniffer allowlist (optional, one rule per line)</span>
-        <textarea id="sniffAllowlist" placeholder="host:example.com&#10;path:*playlist*.m3u8"></textarea>
+        <span data-i18n="options_allowlist">Sniffer allowlist (optional, one rule per line)</span>
+        <textarea id="sniffAllowlist" data-i18n-placeholder="options_placeholder_allowlist"></textarea>
       </label>
       <label>
-        <span>Sniffer blocklist (optional, one rule per line)</span>
-        <textarea id="sniffBlocklist" placeholder="host:ads.example.com&#10;path:*tracker*"></textarea>
+        <span data-i18n="options_blocklist">Sniffer blocklist (optional, one rule per line)</span>
+        <textarea id="sniffBlocklist" data-i18n-placeholder="options_placeholder_blocklist"></textarea>
       </label>
       <label>
-        <span>Intercept allowlist (domain per line, empty = all)</span>
-        <textarea id="interceptAllowlist" placeholder="example.com&#10;download.example.org"></textarea>
+        <span data-i18n="options_intercept_allowlist">Intercept allowlist (domain per line, empty = all)</span>
+        <textarea id="interceptAllowlist" data-i18n-placeholder="options_placeholder_intercept_allowlist"></textarea>
       </label>
       <label>
-        <span>Native host name</span>
-        <input id="nativeHost" type="text" placeholder="com.lc5900.flamingo.bridge" />
+        <span data-i18n="options_native_host">Native host name</span>
+        <input id="nativeHost" type="text" data-i18n-placeholder="options_placeholder_native_host" />
       </label>
       <label>
-        <span>Bridge endpoint</span>
-        <input id="endpoint" type="text" placeholder="http://127.0.0.1:16789/add" />
+        <span data-i18n="options_endpoint">Bridge endpoint</span>
+        <input id="endpoint" type="text" data-i18n-placeholder="options_placeholder_endpoint" />
       </label>
       <label>
-        <span>Bridge token</span>
-        <input id="token" type="text" placeholder="optional (leave empty for default extension-origin mode)" />
+        <span data-i18n="options_token">Bridge token</span>
+        <input id="token" type="text" data-i18n-placeholder="options_placeholder_token" />
       </label>
       <div class="row">
-        <button id="save" type="button">Save</button>
-        <button id="refreshState" type="button">Refresh Activity</button>
+        <button id="save" type="button" data-i18n="options_save">Save</button>
+        <button id="refreshState" type="button" data-i18n="options_refresh_activity">Refresh Activity</button>
       </div>
       <div id="status"></div>
       <div id="activity"></div>
 
       <hr />
-      <h3>Detected Media Candidates</h3>
+      <h3 data-i18n="options_detected_media">Detected Media Candidates</h3>
       <div class="row">
-        <button id="refreshMedia" type="button">Refresh Media</button>
-        <button id="clearMedia" type="button">Clear Media</button>
+        <button id="refreshMedia" type="button" data-i18n="options_refresh_media">Refresh Media</button>
+        <button id="clearMedia" type="button" data-i18n="options_clear_media">Clear Media</button>
       </div>
       <div id="mediaList"></div>
     </div>
+    <script src="i18n.js"></script>
     <script src="options.js"></script>
   </body>
 </html>

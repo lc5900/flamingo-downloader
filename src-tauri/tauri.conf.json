@@ -13,9 +13,21 @@
     "windows": [
       {
         "title": "Flamingo Downloader",
-        "width": 1200,
-        "height": 780,
-        "resizable": true
+        "width": 1260,
+        "height": 820,
+        "minWidth": 1080,
+        "minHeight": 700,
+        "resizable": true,
+        "transparent": true,
+        "windowEffects": {
+          "effects": [
+            "mica",
+            "acrylic",
+            "blur",
+            "hudWindow"
+          ],
+          "radius": 12
+        }
       }
     ],
     "security": {

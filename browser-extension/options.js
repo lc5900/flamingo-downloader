@@ -19,6 +19,8 @@ const el = {
 };
 
 const ext = typeof browser !== 'undefined' ? browser : chrome;
+const i18n = (typeof window !== 'undefined' && window.FlamingoI18n) || null;
+const t = (key, vars = {}) => (i18n ? i18n.t(key, vars) : key);
 
 const DEFAULTS = {
   enabled: true,
@@ -89,7 +91,12 @@ async function loadActivity() {
   const success = String(local.lastBridgeSuccess || '-');
   const skipped = String(local.lastBridgeSkip || '-');
   const error = String(local.lastBridgeError || '-');
-  el.activity.textContent = `Last Activity: ${lastAt}\nLast Success: ${success}\nLast Skipped: ${skipped}\nLast Error: ${error}`;
+  el.activity.textContent = [
+    t('options_last_activity', { v: lastAt }),
+    t('options_last_success', { v: success }),
+    t('options_last_skipped', { v: skipped }),
+    t('options_last_error', { v: error }),
+  ].join('\n');
 }
 
 async function save() {
@@ -105,7 +112,7 @@ async function save() {
     endpoint: String(el.endpoint.value || DEFAULTS.endpoint).trim(),
     token: String(el.token.value || '').trim(),
   });
-  showStatus(`Saved at ${new Date().toLocaleTimeString()}`, 'success');
+  showStatus(t('options_saved_at', { time: new Date().toLocaleTimeString() }), 'success');
 }
 
 function esc(input) {
@@ -134,8 +141,8 @@ async function sendMedia(url) {
   const taskId = String(response?.task_id || '');
   showStatus(
     taskId
-      ? `Sent task ${taskId}`
-      : `Sent media URL at ${new Date().toLocaleTimeString()}`,
+      ? t('options_sent_task', { taskId })
+      : t('options_sent_media_at', { time: new Date().toLocaleTimeString() }),
     'success',
   );
 }
@@ -145,7 +152,7 @@ async function loadMedia() {
     const response = await ext.runtime.sendMessage({ action: 'list_media_candidates' });
     const items = Array.isArray(response?.items) ? response.items : [];
     if (items.length === 0) {
-      el.mediaList.innerHTML = '<div style=\"color:#6b7280;font-size:12px\">No media candidates detected yet.</div>';
+      el.mediaList.innerHTML = `<div style=\"color:#6b7280;font-size:12px\">${esc(t('options_no_media'))}</div>`;
       return;
     }
     el.mediaList.innerHTML = items
@@ -157,7 +164,7 @@ async function loadMedia() {
   <div style=\"font-size:12px;color:#6b7280\">#${idx + 1} | ${esc(item?.reason)} | hits ${Number(item?.hits || 0)} | ${esc(fmtTime(item?.lastSeenAt))}</div>
   <div style=\"font-size:12px;word-break:break-all;margin:6px 0\">${esc(url)}</div>
   <div style=\"display:flex;gap:8px;align-items:center\">
-    <button class=\"send-media\" data-url=\"${encodeURIComponent(url)}\" type=\"button\">Send to Flamingo</button>
+    <button class=\"send-media\" data-url=\"${encodeURIComponent(url)}\" type=\"button\">${esc(t('options_send_to_flamingo'))}</button>
     <span style=\"font-size:11px;color:#6b7280\">${esc(item?.contentType || '-')}</span>
   </div>
 </div>`;
@@ -206,3 +213,7 @@ el.clearMedia.addEventListener('click', () => {
 load().catch((e) => {
   showStatus(String(e?.message || e), 'error');
 });
+
+if (i18n) {
+  i18n.apply(document);
+}
