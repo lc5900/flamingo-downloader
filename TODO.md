@@ -25,7 +25,7 @@
 ### P2 - Media and Post-processing
 
 - [x] HLS/DASH merge: make ffmpeg merge a first-class workflow (progress, output path, failure reasons)
-- [ ] Media tasks: persist merge metadata (input URL, output file, ffmpeg args) for diagnostics/export
+- [x] Media tasks: persist merge metadata (input URL, output file, ffmpeg args) for diagnostics/export
 
 ### P2 - Performance and Maintainability
 

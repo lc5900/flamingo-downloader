@@ -220,6 +220,19 @@ pub struct OperationLog {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MediaMergeJob {
+    pub task_id: String,
+    pub input_url: String,
+    pub output_path: String,
+    pub ffmpeg_bin: String,
+    pub ffmpeg_args: String,
+    pub status: String, // queued | active | completed | error
+    pub error_message: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StartupNotice {
     pub level: String, // info | warning | error
     pub message: String,

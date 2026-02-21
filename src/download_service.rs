@@ -28,8 +28,8 @@ use crate::{
     models::{
         AddTaskOptions, AppUpdateStrategy, Aria2UpdateApplyResult, Aria2UpdateInfo,
         BrowserBridgeStatus, CategoryRule, Diagnostics, DownloadDirRule, GlobalSettings,
-        ImportTaskListResult, OperationLog, SaveDirSuggestion, StartupSelfCheck, StorageSummary,
-        Task, TaskFile, TaskListSnapshot, TaskStatus, TaskType,
+        ImportTaskListResult, MediaMergeJob, OperationLog, SaveDirSuggestion, StartupSelfCheck,
+        StorageSummary, Task, TaskFile, TaskListSnapshot, TaskStatus, TaskType,
     },
 };
 
@@ -207,6 +207,20 @@ impl DownloadService {
         let output_path = Path::new(&target_dir).join(output_name);
         let task_id = Uuid::new_v4().to_string();
         let now = now_ts();
+        let mut ffmpeg_args = vec![
+            "-y".to_string(),
+            "-nostdin".to_string(),
+            "-loglevel".to_string(),
+            "warning".to_string(),
+            "-progress".to_string(),
+            "pipe:2".to_string(),
+            "-nostats".to_string(),
+            "-i".to_string(),
+            url.to_string(),
+            "-c".to_string(),
+            "copy".to_string(),
+            output_path.to_string_lossy().to_string(),
+        ];
         let task = Task {
             id: task_id.clone(),
             aria2_gid: None,
@@ -237,6 +251,18 @@ impl DownloadService {
             selected: true,
         }];
         let _ = self.db.replace_task_files(&task_id, &initial_files);
+        let merge_job = MediaMergeJob {
+            task_id: task_id.clone(),
+            input_url: url.to_string(),
+            output_path: output_path.to_string_lossy().to_string(),
+            ffmpeg_bin: ffmpeg_bin.clone(),
+            ffmpeg_args: ffmpeg_args.join(" "),
+            status: "active".to_string(),
+            error_message: None,
+            created_at: now,
+            updated_at: now,
+        };
+        let _ = self.db.upsert_media_merge_job(&merge_job);
 
         let mut cmd = tokio::process::Command::new(&ffmpeg_bin);
         cmd.arg("-y")
@@ -259,9 +285,13 @@ impl DownloadService {
             .filter(|v| !v.is_empty())
         {
             cmd.arg("-user_agent").arg(v);
+            ffmpeg_args.push("-user_agent".to_string());
+            ffmpeg_args.push(v.to_string());
         }
         if let Some(v) = referer.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
             cmd.arg("-referer").arg(v);
+            ffmpeg_args.push("-referer".to_string());
+            ffmpeg_args.push(v.to_string());
         }
         let cleaned_headers = headers
             .into_iter()
@@ -272,6 +302,8 @@ impl DownloadService {
             let mut merged = cleaned_headers.join("\r\n");
             merged.push_str("\r\n");
             cmd.arg("-headers").arg(merged);
+            ffmpeg_args.push("-headers".to_string());
+            ffmpeg_args.push("<custom headers>".to_string());
         }
         let mut child = cmd.spawn().map_err(|e| {
             anyhow!("ffmpeg merge start failed: {e}. check ffmpeg_bin_path setting")
@@ -286,6 +318,9 @@ impl DownloadService {
         let emitter = self.emitter.clone();
         let task_id_bg = task_id.clone();
         let output_path_bg = output_path.clone();
+        let input_url_bg = url.to_string();
+        let ffmpeg_bin_bg = ffmpeg_bin.clone();
+        let ffmpeg_args_bg = ffmpeg_args.join(" ");
         tokio::spawn(async move {
             let mut stderr_tail: VecDeque<String> = VecDeque::with_capacity(24);
             let mut progress_tick: i64 = 0;
@@ -340,6 +375,17 @@ impl DownloadService {
                                 output_path_bg.display()
                             ),
                         }]);
+                        let _ = db.upsert_media_merge_job(&MediaMergeJob {
+                            task_id: task_id_bg.clone(),
+                            input_url: input_url_bg.clone(),
+                            output_path: output_path_bg.to_string_lossy().to_string(),
+                            ffmpeg_bin: ffmpeg_bin_bg.clone(),
+                            ffmpeg_args: ffmpeg_args_bg.clone(),
+                            status: "completed".to_string(),
+                            error_message: None,
+                            created_at: t.created_at,
+                            updated_at: now_ts(),
+                        });
                         let _ = emitter.emit_task_update(&[t]);
                     }
                 }
@@ -374,6 +420,17 @@ impl DownloadService {
                                 t.error_message.clone().unwrap_or_default()
                             ),
                         }]);
+                        let _ = db.upsert_media_merge_job(&MediaMergeJob {
+                            task_id: task_id_bg.clone(),
+                            input_url: input_url_bg.clone(),
+                            output_path: output_path_bg.to_string_lossy().to_string(),
+                            ffmpeg_bin: ffmpeg_bin_bg.clone(),
+                            ffmpeg_args: ffmpeg_args_bg.clone(),
+                            status: "error".to_string(),
+                            error_message: t.error_message.clone(),
+                            created_at: t.created_at,
+                            updated_at: now_ts(),
+                        });
                         let _ = emitter.emit_task_update(&[t]);
                     }
                 }
@@ -389,6 +446,17 @@ impl DownloadService {
                             action: "ffmpeg_merge_wait_failed".to_string(),
                             message: format!("task={} error={e}", task_id_bg),
                         }]);
+                        let _ = db.upsert_media_merge_job(&MediaMergeJob {
+                            task_id: task_id_bg.clone(),
+                            input_url: input_url_bg.clone(),
+                            output_path: output_path_bg.to_string_lossy().to_string(),
+                            ffmpeg_bin: ffmpeg_bin_bg.clone(),
+                            ffmpeg_args: ffmpeg_args_bg.clone(),
+                            status: "error".to_string(),
+                            error_message: t.error_message.clone(),
+                            created_at: t.created_at,
+                            updated_at: now_ts(),
+                        });
                         let _ = emitter.emit_task_update(&[t]);
                     }
                 }
@@ -1682,6 +1750,7 @@ impl DownloadService {
             files.append(&mut task_files);
         }
         let integrity = self.db.run_integrity_check()?;
+        let media_merge_jobs = redact_media_merge_jobs(&self.db.list_media_merge_jobs(2000)?);
 
         let ts = now_ts();
         let base_dir = std::env::temp_dir().join(format!("flamingo-debug-{ts}"));
@@ -1693,12 +1762,17 @@ impl DownloadService {
         let files_path = base_dir.join("task_files.json");
         let integrity_path = base_dir.join("db_integrity_check.txt");
         let db_snapshot_path = base_dir.join("app.db.snapshot");
+        let media_merge_jobs_path = base_dir.join("media_merge_jobs.redacted.json");
 
         fs::write(&diagnostics_path, serde_json::to_vec_pretty(&diagnostics)?)?;
         fs::write(&logs_path, serde_json::to_vec_pretty(&redacted_logs)?)?;
         fs::write(&tasks_path, serde_json::to_vec_pretty(&tasks)?)?;
         fs::write(&files_path, serde_json::to_vec_pretty(&files)?)?;
         fs::write(&integrity_path, format!("{integrity}\n"))?;
+        fs::write(
+            &media_merge_jobs_path,
+            serde_json::to_vec_pretty(&media_merge_jobs)?,
+        )?;
         let _ = self.db.copy_db_snapshot(&db_snapshot_path)?;
 
         let zip_path = std::env::temp_dir().join(format!("flamingo-debug-{ts}.zip"));
@@ -1713,6 +1787,7 @@ impl DownloadService {
             ("tasks.json", tasks_path),
             ("task_files.json", files_path),
             ("db_integrity_check.txt", integrity_path),
+            ("media_merge_jobs.redacted.json", media_merge_jobs_path),
             ("app.db.snapshot", db_snapshot_path),
         ] {
             let content = fs::read(path)?;
@@ -2732,6 +2807,23 @@ fn redact_operation_logs(logs: &[OperationLog]) -> Vec<OperationLog> {
             ts: log.ts,
             action: log.action.clone(),
             message: redact_sensitive_text(&log.message),
+        })
+        .collect()
+}
+
+fn redact_media_merge_jobs(items: &[MediaMergeJob]) -> Vec<MediaMergeJob> {
+    items
+        .iter()
+        .map(|job| MediaMergeJob {
+            task_id: job.task_id.clone(),
+            input_url: redact_sensitive_text(&job.input_url),
+            output_path: redact_sensitive_text(&job.output_path),
+            ffmpeg_bin: redact_sensitive_text(&job.ffmpeg_bin),
+            ffmpeg_args: redact_sensitive_text(&job.ffmpeg_args),
+            status: job.status.clone(),
+            error_message: job.error_message.as_deref().map(redact_sensitive_text),
+            created_at: job.created_at,
+            updated_at: job.updated_at,
         })
         .collect()
 }

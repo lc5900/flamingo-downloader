@@ -8,8 +8,8 @@ use anyhow::{Context, Result, anyhow};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::models::{
-    Aria2TaskSnapshot, CategoryRule, DownloadDirRule, GlobalSettings, Task, TaskFile, TaskStatus,
-    TaskType,
+    Aria2TaskSnapshot, CategoryRule, DownloadDirRule, GlobalSettings, MediaMergeJob, Task,
+    TaskFile, TaskStatus, TaskType,
 };
 
 pub struct Database {
@@ -17,7 +17,7 @@ pub struct Database {
     db_path: PathBuf,
 }
 
-const SCHEMA_VERSION: i64 = 5;
+const SCHEMA_VERSION: i64 = 6;
 
 impl Database {
     pub fn new(path: impl AsRef<Path>) -> Result<Self> {
@@ -70,6 +70,19 @@ impl Database {
               key TEXT PRIMARY KEY,
               value TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS media_merge_jobs (
+              task_id TEXT PRIMARY KEY,
+              input_url TEXT NOT NULL,
+              output_path TEXT NOT NULL,
+              ffmpeg_bin TEXT NOT NULL,
+              ffmpeg_args TEXT NOT NULL,
+              status TEXT NOT NULL,
+              error_message TEXT,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_media_merge_jobs_updated_at ON media_merge_jobs(updated_at);
             "#,
         )?;
         run_schema_migrations(&conn)?;
@@ -552,6 +565,10 @@ impl Database {
             "DELETE FROM task_files WHERE task_id = ?1",
             params![task_id],
         )?;
+        conn.execute(
+            "DELETE FROM media_merge_jobs WHERE task_id = ?1",
+            params![task_id],
+        )?;
         conn.execute("DELETE FROM tasks WHERE id = ?1", params![task_id])?;
         Ok(())
     }
@@ -658,6 +675,65 @@ impl Database {
         let conn = self.conn.lock().expect("db mutex poisoned");
         conn.execute("DELETE FROM operation_logs", [])?;
         Ok(())
+    }
+
+    pub fn upsert_media_merge_job(&self, job: &MediaMergeJob) -> Result<()> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        conn.execute(
+            r#"
+            INSERT INTO media_merge_jobs (
+              task_id, input_url, output_path, ffmpeg_bin, ffmpeg_args, status, error_message, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            ON CONFLICT(task_id) DO UPDATE SET
+              input_url=excluded.input_url,
+              output_path=excluded.output_path,
+              ffmpeg_bin=excluded.ffmpeg_bin,
+              ffmpeg_args=excluded.ffmpeg_args,
+              status=excluded.status,
+              error_message=excluded.error_message,
+              updated_at=excluded.updated_at
+            "#,
+            params![
+                job.task_id,
+                job.input_url,
+                job.output_path,
+                job.ffmpeg_bin,
+                job.ffmpeg_args,
+                job.status,
+                job.error_message,
+                job.created_at,
+                job.updated_at,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_media_merge_jobs(&self, limit: usize) -> Result<Vec<MediaMergeJob>> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT task_id, input_url, output_path, ffmpeg_bin, ffmpeg_args, status, error_message, created_at, updated_at
+            FROM media_merge_jobs
+            ORDER BY updated_at DESC
+            LIMIT ?1
+            "#,
+        )?;
+        let rows = stmt
+            .query_map(params![limit as i64], |row| {
+                Ok(MediaMergeJob {
+                    task_id: row.get(0)?,
+                    input_url: row.get(1)?,
+                    output_path: row.get(2)?,
+                    ffmpeg_bin: row.get(3)?,
+                    ffmpeg_args: row.get(4)?,
+                    status: row.get(5)?,
+                    error_message: row.get(6)?,
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
     }
 
     pub fn run_integrity_check(&self) -> Result<String> {
@@ -824,6 +900,25 @@ fn apply_migration(conn: &Connection, version: i64) -> Result<()> {
                 );
                 CREATE INDEX IF NOT EXISTS idx_deleted_aria2_gids_deleted_at
                 ON deleted_aria2_gids(deleted_at);
+                "#,
+            )?;
+        }
+        6 => {
+            conn.execute_batch(
+                r#"
+                CREATE TABLE IF NOT EXISTS media_merge_jobs (
+                  task_id TEXT PRIMARY KEY,
+                  input_url TEXT NOT NULL,
+                  output_path TEXT NOT NULL,
+                  ffmpeg_bin TEXT NOT NULL,
+                  ffmpeg_args TEXT NOT NULL,
+                  status TEXT NOT NULL,
+                  error_message TEXT,
+                  created_at INTEGER NOT NULL,
+                  updated_at INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_media_merge_jobs_updated_at
+                ON media_merge_jobs(updated_at);
                 "#,
             )?;
         }
