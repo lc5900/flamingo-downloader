@@ -241,6 +241,20 @@ function findDuplicateShortcut(bindings: ShortcutBindings): string | null {
   return null
 }
 
+function findShortcutConflictAction(
+  bindings: ShortcutBindings,
+  candidate: string,
+  excluding: ShortcutAction | null,
+): ShortcutAction | null {
+  const normalized = normalizeShortcut(candidate)
+  if (!normalized) return null
+  for (const key of Object.keys(bindings) as ShortcutAction[]) {
+    if (excluding && key === excluding) continue
+    if (normalizeShortcut(bindings[key]) === normalized) return key
+  }
+  return null
+}
+
 type ShortcutDisplayMode = 'text' | 'symbol'
 
 function loadShortcutDisplayMode(): ShortcutDisplayMode {
@@ -2055,6 +2069,13 @@ export default function App() {
       ] as Array<{ key: ShortcutAction; label: string }>,
     [t],
   )
+  const shortcutLabelMap = useMemo(
+    () =>
+      new Map<ShortcutAction, string>(
+        shortcutItems.map((item) => [item.key, item.label] as [ShortcutAction, string]),
+      ),
+    [shortcutItems],
+  )
 
   const setShortcutBinding = (action: ShortcutAction, value: string) => {
     setShortcutDraft((prev) => ({ ...prev, [action]: normalizeShortcut(value) }))
@@ -2077,6 +2098,11 @@ export default function App() {
     setShortcutEditorOpen(false)
     setShortcutEditingAction(null)
   }
+  const shortcutConflictAction = useMemo(
+    () =>
+      findShortcutConflictAction(shortcutDraft, shortcutCaptured, shortcutEditingAction || null),
+    [shortcutCaptured, shortcutDraft, shortcutEditingAction],
+  )
 
   const performShortcutAction = useCallback(
     async (action: ShortcutAction) => {
@@ -3459,6 +3485,13 @@ export default function App() {
                 {displayShortcut(shortcutCaptured) || t('shortcutPress')}
               </Typography.Text>
             </Typography.Text>
+            {shortcutConflictAction && (
+              <Typography.Text type="warning">
+                {i18nFormat(t('shortcutConflictWith'), {
+                  action: shortcutLabelMap.get(shortcutConflictAction) || shortcutConflictAction,
+                })}
+              </Typography.Text>
+            )}
             <Typography.Text type="secondary">{t('shortcutRecording')}</Typography.Text>
           </Space>
         </Modal>

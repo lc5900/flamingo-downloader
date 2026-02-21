@@ -160,6 +160,7 @@
   "shortcutClear": "清空",
   "shortcutResetDefaults": "重置快捷键",
   "shortcutDuplicate": "检测到重复快捷键：{key}",
+  "shortcutConflictWith": "该快捷键已被占用：{action}",
   "shortcutNewDownload": "新建下载",
   "shortcutFocusSearch": "聚焦搜索",
   "shortcutRefreshList": "刷新列表",

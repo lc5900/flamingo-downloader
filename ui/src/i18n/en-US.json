@@ -160,6 +160,7 @@
   "shortcutClear": "Clear",
   "shortcutResetDefaults": "Reset Shortcuts",
   "shortcutDuplicate": "Duplicate shortcut detected: {key}",
+  "shortcutConflictWith": "This shortcut is already used by: {action}",
   "shortcutNewDownload": "New Download",
   "shortcutFocusSearch": "Focus Search",
   "shortcutRefreshList": "Refresh List",

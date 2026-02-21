@@ -217,6 +217,7 @@ export const I18N_KEYS = [
   "setupHint",
   "setupTitle",
   "shortcutClear",
+  "shortcutConflictWith",
   "shortcutCurrent",
   "shortcutDisplayMode",
   "shortcutDisplaySymbol",
