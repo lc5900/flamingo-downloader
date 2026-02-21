@@ -489,6 +489,9 @@ impl DownloadService {
                 self.aria2.remove_download_result(gid),
             )
             .await;
+            // Persist aria2 session immediately so a quick app restart doesn't reload
+            // stale tasks from the previous save-session interval.
+            let _ = time::timeout(Duration::from_millis(1200), self.aria2.save_session()).await;
         }
 
         self.db.remove_task(task_id)?;
