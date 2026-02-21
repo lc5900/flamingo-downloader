@@ -3,6 +3,8 @@ const DEFAULTS = {
   useNativeMessaging: false,
   autoIntercept: false,
   sniffMediaEnabled: true,
+  sniffAllowlist: "",
+  sniffBlocklist: "",
   interceptAllowlist: "",
   nativeHost: "com.lc5900.flamingo.bridge",
   endpoint: "http://127.0.0.1:16789/add",
@@ -21,6 +23,8 @@ async function getConfig() {
     "useNativeMessaging",
     "autoIntercept",
     "sniffMediaEnabled",
+    "sniffAllowlist",
+    "sniffBlocklist",
     "interceptAllowlist",
     "nativeHost",
     "endpoint",
@@ -38,6 +42,8 @@ async function getConfig() {
       typeof saved.sniffMediaEnabled === "boolean"
         ? saved.sniffMediaEnabled
         : DEFAULTS.sniffMediaEnabled,
+    sniffAllowlist: String(saved.sniffAllowlist || DEFAULTS.sniffAllowlist),
+    sniffBlocklist: String(saved.sniffBlocklist || DEFAULTS.sniffBlocklist),
     interceptAllowlist: String(saved.interceptAllowlist || DEFAULTS.interceptAllowlist),
     nativeHost: String(saved.nativeHost || DEFAULTS.nativeHost),
     endpoint: String(saved.endpoint || DEFAULTS.endpoint),
@@ -109,12 +115,54 @@ async function upsertMediaCandidate(item) {
   await ext.storage.local.set({ mediaCandidates: list.slice(0, MAX_MEDIA_CANDIDATES) });
 }
 
+function toPatternRules(raw) {
+  return String(raw || "")
+    .split(/[,\n]/)
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => item.length > 0);
+}
+
+function wildcardMatch(input, rule) {
+  if (!rule) return false;
+  const escaped = rule.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replaceAll("*", ".*");
+  const re = new RegExp(`^${escaped}$`, "i");
+  return re.test(input);
+}
+
+function sniffRuleMatch(url, rules) {
+  const normalized = String(url || "").toLowerCase();
+  let host = "";
+  let path = "";
+  try {
+    const u = new URL(normalized);
+    host = String(u.hostname || "").toLowerCase();
+    path = `${String(u.pathname || "")}${String(u.search || "")}`.toLowerCase();
+  } catch {
+    host = normalized;
+    path = normalized;
+  }
+  return rules.some((rule) => {
+    if (rule.startsWith("host:")) {
+      const target = rule.slice(5);
+      return wildcardMatch(host, target) || host === target || host.endsWith(`.${target}`);
+    }
+    if (rule.startsWith("path:")) {
+      return wildcardMatch(path, rule.slice(5));
+    }
+    return wildcardMatch(normalized, rule) || normalized.includes(rule);
+  });
+}
+
 async function maybeCaptureMedia(details) {
   try {
     const cfg = await getConfig();
     if (!cfg.sniffMediaEnabled) return;
     const url = String(details?.url || "");
     if (!url.startsWith("http://") && !url.startsWith("https://")) return;
+    const allowRules = toPatternRules(cfg.sniffAllowlist);
+    const blockRules = toPatternRules(cfg.sniffBlocklist);
+    if (allowRules.length > 0 && !sniffRuleMatch(url, allowRules)) return;
+    if (blockRules.length > 0 && sniffRuleMatch(url, blockRules)) return;
     const contentType = readHeader(details?.responseHeaders, "content-type");
     const reason = detectMediaReason(url, contentType);
     if (!reason) return;
@@ -251,6 +299,8 @@ ext.runtime.onInstalled.addListener(async () => {
     "useNativeMessaging",
     "autoIntercept",
     "sniffMediaEnabled",
+    "sniffAllowlist",
+    "sniffBlocklist",
     "interceptAllowlist",
     "nativeHost",
     "endpoint",
@@ -268,6 +318,8 @@ ext.runtime.onInstalled.addListener(async () => {
       typeof saved.sniffMediaEnabled === "boolean"
         ? saved.sniffMediaEnabled
         : DEFAULTS.sniffMediaEnabled,
+    sniffAllowlist: String(saved.sniffAllowlist || DEFAULTS.sniffAllowlist),
+    sniffBlocklist: String(saved.sniffBlocklist || DEFAULTS.sniffBlocklist),
     interceptAllowlist: String(saved.interceptAllowlist || DEFAULTS.interceptAllowlist),
     nativeHost: String(saved.nativeHost || DEFAULTS.nativeHost),
     endpoint: String(saved.endpoint || DEFAULTS.endpoint),
@@ -324,6 +376,10 @@ ext.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (typeof message?.sniffMediaEnabled === "boolean")
       patch.sniffMediaEnabled = !!message.sniffMediaEnabled;
     if (typeof message?.autoIntercept === "boolean") patch.autoIntercept = !!message.autoIntercept;
+    if (typeof message?.sniffAllowlist === "string")
+      patch.sniffAllowlist = String(message.sniffAllowlist || "");
+    if (typeof message?.sniffBlocklist === "string")
+      patch.sniffBlocklist = String(message.sniffBlocklist || "");
     ext.storage.sync
       .set(patch)
       .then(() => sendResponse({ ok: true }))

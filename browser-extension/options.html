@@ -37,6 +37,14 @@
         <span>Enable media sniffing (experimental)</span>
       </label>
       <label>
+        <span>Sniffer allowlist (optional, one rule per line)</span>
+        <textarea id="sniffAllowlist" placeholder="host:example.com&#10;path:*playlist*.m3u8"></textarea>
+      </label>
+      <label>
+        <span>Sniffer blocklist (optional, one rule per line)</span>
+        <textarea id="sniffBlocklist" placeholder="host:ads.example.com&#10;path:*tracker*"></textarea>
+      </label>
+      <label>
         <span>Intercept allowlist (domain per line, empty = all)</span>
         <textarea id="interceptAllowlist" placeholder="example.com&#10;download.example.org"></textarea>
       </label>

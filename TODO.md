@@ -224,7 +224,7 @@
 ### Phase 2 - UX and Filtering
 
 - [x] Add page-scoped filtering (current tab only) and simple quality/format labels
-- [ ] Add whitelist/blacklist patterns for sniffer capture (host/path rules)
+- [x] Add whitelist/blacklist patterns for sniffer capture (host/path rules)
 - [ ] Add action buttons: copy URL / open source page / batch send selected
 
 ### Phase 3 - Product Hardening

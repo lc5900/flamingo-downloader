@@ -3,6 +3,8 @@ const el = {
   useNativeMessaging: document.getElementById('useNativeMessaging'),
   autoIntercept: document.getElementById('autoIntercept'),
   sniffMediaEnabled: document.getElementById('sniffMediaEnabled'),
+  sniffAllowlist: document.getElementById('sniffAllowlist'),
+  sniffBlocklist: document.getElementById('sniffBlocklist'),
   interceptAllowlist: document.getElementById('interceptAllowlist'),
   nativeHost: document.getElementById('nativeHost'),
   endpoint: document.getElementById('endpoint'),
@@ -23,6 +25,8 @@ const DEFAULTS = {
   useNativeMessaging: false,
   autoIntercept: false,
   sniffMediaEnabled: true,
+  sniffAllowlist: '',
+  sniffBlocklist: '',
   interceptAllowlist: '',
   nativeHost: 'com.lc5900.flamingo.bridge',
   endpoint: 'http://127.0.0.1:16789/add',
@@ -50,6 +54,8 @@ async function load() {
     'useNativeMessaging',
     'autoIntercept',
     'sniffMediaEnabled',
+    'sniffAllowlist',
+    'sniffBlocklist',
     'interceptAllowlist',
     'nativeHost',
     'endpoint',
@@ -62,6 +68,8 @@ async function load() {
     typeof saved.autoIntercept === 'boolean' ? saved.autoIntercept : DEFAULTS.autoIntercept;
   el.sniffMediaEnabled.checked =
     typeof saved.sniffMediaEnabled === 'boolean' ? saved.sniffMediaEnabled : DEFAULTS.sniffMediaEnabled;
+  el.sniffAllowlist.value = String(saved.sniffAllowlist || DEFAULTS.sniffAllowlist);
+  el.sniffBlocklist.value = String(saved.sniffBlocklist || DEFAULTS.sniffBlocklist);
   el.interceptAllowlist.value = String(saved.interceptAllowlist || DEFAULTS.interceptAllowlist);
   el.nativeHost.value = String(saved.nativeHost || DEFAULTS.nativeHost);
   el.endpoint.value = String(saved.endpoint || DEFAULTS.endpoint);
@@ -90,6 +98,8 @@ async function save() {
     useNativeMessaging: !!el.useNativeMessaging.checked,
     autoIntercept: !!el.autoIntercept.checked,
     sniffMediaEnabled: !!el.sniffMediaEnabled.checked,
+    sniffAllowlist: String(el.sniffAllowlist.value || '').trim(),
+    sniffBlocklist: String(el.sniffBlocklist.value || '').trim(),
     interceptAllowlist: String(el.interceptAllowlist.value || '').trim(),
     nativeHost: String(el.nativeHost.value || DEFAULTS.nativeHost).trim(),
     endpoint: String(el.endpoint.value || DEFAULTS.endpoint).trim(),

@@ -45,6 +45,8 @@ Open extension options and set (optional/advanced):
 - Enable Flamingo bridge: on
 - Auto-intercept downloads: on/off (optional)
 - Enable media sniffing (experimental): on/off
+- Sniffer allowlist/blocklist (optional): host/path rules, one per line  
+  examples: `host:example.com`, `path:*playlist*.m3u8`
 - Intercept allowlist: optional domains (one per line). Empty means intercept all domains.
 - Use native messaging (optional): on/off
 - Native host name (optional): e.g. `com.lc5900.flamingo.bridge`
