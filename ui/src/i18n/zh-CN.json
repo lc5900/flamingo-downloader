@@ -119,6 +119,7 @@
   "presetRequired": "请输入预设名称",
   "presetInvalid": "预设 JSON 无效",
   "outName": "文件名（可选）",
+  "mergeOutputFormat": "合并输出格式",
   "maxDownloadLimit": "单任务下载限速",
   "taskMaxConn": "单任务最大连接数",
   "taskSplit": "单任务分段数",

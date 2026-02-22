@@ -745,6 +745,7 @@ export default function App() {
       preset_name: '',
       preset_selected: undefined,
       out: '',
+      merge_format: 'mp4',
       max_download_limit: '',
       max_upload_limit: '',
       seed_ratio: undefined,
@@ -1517,6 +1518,7 @@ export default function App() {
     return {
       save_dir: values.save_dir || null,
       out: String(values.out || '').trim() || null,
+      merge_format: String(values.merge_format || '').trim() || null,
       max_download_limit: String(values.max_download_limit || '').trim() || null,
       max_upload_limit: String(values.max_upload_limit || '').trim() || null,
       seed_ratio: values.seed_ratio ?? null,
@@ -3642,6 +3644,18 @@ export default function App() {
                           <Form.Item name="out" label={t('outName')}>
                             <Input placeholder="example.zip" />
                           </Form.Item>
+                          {addType === 'url' && (
+                            <Form.Item name="merge_format" label={t('mergeOutputFormat')}>
+                              <Select
+                                options={[
+                                  { label: 'MP4', value: 'mp4' },
+                                  { label: 'MKV', value: 'mkv' },
+                                  { label: 'MOV', value: 'mov' },
+                                  { label: 'WEBM', value: 'webm' },
+                                ]}
+                              />
+                            </Form.Item>
+                          )}
                           <Form.Item name="max_download_limit" label={t('maxDownloadLimit')}>
                             <Input placeholder="0 / 2M / 10M" />
                           </Form.Item>

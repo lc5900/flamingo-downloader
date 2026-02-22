@@ -85,6 +85,7 @@ pub struct TaskFile {
 pub struct AddTaskOptions {
     pub save_dir: Option<String>,
     pub out: Option<String>,
+    pub merge_format: Option<String>,
     pub max_connection_per_server: Option<u32>,
     pub split: Option<u32>,
     pub max_download_limit: Option<String>,

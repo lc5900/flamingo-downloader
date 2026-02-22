@@ -119,6 +119,7 @@
   "presetRequired": "Please input preset name",
   "presetInvalid": "Invalid preset JSON",
   "outName": "Filename (optional)",
+  "mergeOutputFormat": "Merge Output Format",
   "maxDownloadLimit": "Per-task Max Download Limit",
   "taskMaxConn": "Per-task Max Connections",
   "taskSplit": "Per-task Split",

@@ -76,6 +76,25 @@ impl DownloadService {
 
     pub async fn add_url(&self, url: &str, options: AddTaskOptions) -> Result<String> {
         validate_url(url)?;
+        let merge_enabled = self
+            .db
+            .get_setting("media_merge_enabled")?
+            .map(|v| v == "true")
+            .unwrap_or(false);
+        if merge_enabled && is_stream_manifest_url(url) {
+            let (task_id, _) = self
+                .spawn_ffmpeg_merge(
+                    url,
+                    options.save_dir.clone(),
+                    options.referer.clone(),
+                    options.user_agent.clone(),
+                    options.headers.clone(),
+                    options.out.clone(),
+                    options.merge_format.clone(),
+                )
+                .await?;
+            return Ok(task_id);
+        }
         self.ensure_aria2_ready().await?;
 
         let http_type = detect_http_content_type(url).await;
@@ -160,6 +179,8 @@ impl DownloadService {
                     normalized_referer.clone(),
                     user_agent.clone(),
                     normalized_headers.clone(),
+                    None,
+                    None,
                 )
                 .await?;
             return Ok(json!({
@@ -192,6 +213,8 @@ impl DownloadService {
         referer: Option<String>,
         user_agent: Option<String>,
         headers: Vec<String>,
+        output_name: Option<String>,
+        output_format: Option<String>,
     ) -> Result<(String, String)> {
         let ffmpeg_bin = self
             .db
@@ -207,7 +230,8 @@ impl DownloadService {
             None => self.configured_download_dir()?,
         };
         fs::create_dir_all(&target_dir)?;
-        let output_name = stream_output_filename(url);
+        let output_name =
+            stream_output_filename(url, output_name.as_deref(), output_format.as_deref());
         let output_path = Path::new(&target_dir).join(output_name);
         let cleaned_headers = headers
             .into_iter()
@@ -2285,7 +2309,26 @@ fn normalize_bridge_headers(headers: Vec<String>) -> Result<Vec<String>> {
     Ok(out)
 }
 
-fn stream_output_filename(url: &str) -> String {
+fn stream_output_filename(
+    url: &str,
+    preferred_name: Option<&str>,
+    preferred_format: Option<&str>,
+) -> String {
+    let ext = preferred_format
+        .map(|v| v.trim().trim_start_matches('.').to_ascii_lowercase())
+        .filter(|v| matches!(v.as_str(), "mp4" | "mkv" | "mov" | "webm"))
+        .unwrap_or_else(|| "mp4".to_string());
+    if let Some(name) = preferred_name
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(sanitize_output_basename)
+        .filter(|v| !v.is_empty())
+    {
+        if name.to_ascii_lowercase().ends_with(&format!(".{ext}")) {
+            return name;
+        }
+        return format!("{name}.{ext}");
+    }
     let candidate = reqwest::Url::parse(url)
         .ok()
         .and_then(|u| {
@@ -2295,7 +2338,24 @@ fn stream_output_filename(url: &str) -> String {
         })
         .filter(|v| !v.trim().is_empty())
         .unwrap_or_else(|| format!("stream-{}", now_ts()));
-    format!("{candidate}.mp4")
+    format!("{}.{ext}", sanitize_output_basename(&candidate))
+}
+
+fn sanitize_output_basename(input: &str) -> String {
+    let mut out = input
+        .chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            _ => c,
+        })
+        .collect::<String>()
+        .trim()
+        .trim_matches('.')
+        .to_string();
+    if out.is_empty() {
+        out = format!("stream-{}", now_ts());
+    }
+    out
 }
 
 fn ffprobe_binary_from_ffmpeg(ffmpeg_bin: &str) -> String {

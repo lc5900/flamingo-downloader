@@ -128,6 +128,7 @@ export const I18N_KEYS = [
   "maxConn",
   "maxDownloadLimit",
   "maxLimit",
+  "mergeOutputFormat",
   "metadataTimeout",
   "minimizeToTray",
   "minimizeToTrayMac",
