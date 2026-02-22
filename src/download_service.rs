@@ -195,6 +195,7 @@ impl DownloadService {
             .db
             .get_setting("ffmpeg_bin_path")?
             .unwrap_or_else(|| "ffmpeg".to_string());
+        let ffprobe_bin = ffprobe_binary_from_ffmpeg(&ffmpeg_bin);
         let target_dir = match save_dir
             .as_deref()
             .map(|v| v.trim())
@@ -206,6 +207,19 @@ impl DownloadService {
         fs::create_dir_all(&target_dir)?;
         let output_name = stream_output_filename(url);
         let output_path = Path::new(&target_dir).join(output_name);
+        let cleaned_headers = headers
+            .into_iter()
+            .map(|h| h.trim().to_string())
+            .filter(|h| !h.is_empty())
+            .collect::<Vec<_>>();
+        let duration_ms = probe_media_duration_ms(
+            &ffprobe_bin,
+            url,
+            user_agent.as_deref(),
+            referer.as_deref(),
+            &cleaned_headers,
+        )
+        .unwrap_or(1);
         let task_id = Uuid::new_v4().to_string();
         let now = now_ts();
         let mut ffmpeg_args = vec![
@@ -233,7 +247,7 @@ impl DownloadService {
                 .map(|v| v.to_string_lossy().to_string()),
             category: self.resolve_category_for_new_task(TaskType::Http, url, None)?,
             save_dir: target_dir.clone(),
-            total_length: 1,
+            total_length: duration_ms,
             completed_length: 0,
             download_speed: 0,
             upload_speed: 0,
@@ -294,11 +308,6 @@ impl DownloadService {
             ffmpeg_args.push("-referer".to_string());
             ffmpeg_args.push(v.to_string());
         }
-        let cleaned_headers = headers
-            .into_iter()
-            .map(|h| h.trim().to_string())
-            .filter(|h| !h.is_empty())
-            .collect::<Vec<_>>();
         if !cleaned_headers.is_empty() {
             let mut merged = cleaned_headers.join("\r\n");
             merged.push_str("\r\n");
@@ -322,9 +331,10 @@ impl DownloadService {
         let input_url_bg = url.to_string();
         let ffmpeg_bin_bg = ffmpeg_bin.clone();
         let ffmpeg_args_bg = ffmpeg_args.join(" ");
+        let duration_ms_bg = duration_ms.max(1);
         tokio::spawn(async move {
             let mut stderr_tail: VecDeque<String> = VecDeque::with_capacity(24);
-            let mut progress_tick: i64 = 0;
+            let mut last_out_time_ms: i64 = 0;
             if let Some(stderr) = child.stderr.take() {
                 let mut lines = BufReader::new(stderr).lines();
                 while let Ok(Some(line)) = lines.next_line().await {
@@ -332,11 +342,19 @@ impl DownloadService {
                     if line.is_empty() {
                         continue;
                     }
+                    if let Some(raw) = line.strip_prefix("out_time_ms=") {
+                        // ffmpeg progress out_time_ms is in microseconds.
+                        let micros = raw.trim().parse::<i64>().unwrap_or(0);
+                        last_out_time_ms = (micros / 1000).max(0);
+                        continue;
+                    }
                     if line == "progress=continue" {
-                        progress_tick += 1;
                         if let Ok(Some(mut t)) = db.get_task(&task_id_bg) {
                             t.updated_at = now_ts();
-                            t.completed_length = progress_tick.max(t.completed_length);
+                            let total = t.total_length.max(duration_ms_bg);
+                            let next = last_out_time_ms.clamp(0, total);
+                            t.total_length = total;
+                            t.completed_length = next.max(t.completed_length);
                             let _ = db.upsert_task(&t);
                             let _ = emitter.emit_task_update(&[t]);
                         }
@@ -354,7 +372,8 @@ impl DownloadService {
                 Ok(exit) if exit.success() => {
                     if let Ok(Some(mut t)) = db.get_task(&task_id_bg) {
                         t.status = TaskStatus::Completed;
-                        t.completed_length = t.total_length.max(1);
+                        t.total_length = t.total_length.max(duration_ms_bg).max(1);
+                        t.completed_length = t.total_length;
                         t.error_code = None;
                         t.error_message = None;
                         t.updated_at = now_ts();
@@ -2235,6 +2254,68 @@ fn stream_output_filename(url: &str) -> String {
         .filter(|v| !v.trim().is_empty())
         .unwrap_or_else(|| format!("stream-{}", now_ts()));
     format!("{candidate}.mp4")
+}
+
+fn ffprobe_binary_from_ffmpeg(ffmpeg_bin: &str) -> String {
+    let as_path = Path::new(ffmpeg_bin);
+    let file = as_path
+        .file_name()
+        .and_then(|v| v.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let probe_name = if file.ends_with(".exe") {
+        "ffprobe.exe"
+    } else {
+        "ffprobe"
+    };
+    if let Some(parent) = as_path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        return parent.join(probe_name).to_string_lossy().to_string();
+    }
+    if file.contains("ffmpeg") {
+        return ffmpeg_bin
+            .replace("ffmpeg.exe", "ffprobe.exe")
+            .replace("ffmpeg", "ffprobe");
+    }
+    probe_name.to_string()
+}
+
+fn probe_media_duration_ms(
+    ffprobe_bin: &str,
+    url: &str,
+    user_agent: Option<&str>,
+    referer: Option<&str>,
+    headers: &[String],
+) -> Option<i64> {
+    let mut cmd = Command::new(ffprobe_bin);
+    cmd.arg("-v")
+        .arg("error")
+        .arg("-show_entries")
+        .arg("format=duration")
+        .arg("-of")
+        .arg("default=noprint_wrappers=1:nokey=1");
+    if let Some(v) = user_agent.map(str::trim).filter(|v| !v.is_empty()) {
+        cmd.arg("-user_agent").arg(v);
+    }
+    if let Some(v) = referer.map(str::trim).filter(|v| !v.is_empty()) {
+        cmd.arg("-referer").arg(v);
+    }
+    if !headers.is_empty() {
+        let mut merged = headers.join("\r\n");
+        merged.push_str("\r\n");
+        cmd.arg("-headers").arg(merged);
+    }
+    let out = cmd.arg(url).output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let text = String::from_utf8(out.stdout).ok()?;
+    let secs = text.trim().parse::<f64>().ok()?;
+    if !secs.is_finite() || secs <= 0.0 {
+        return None;
+    }
+    Some((secs * 1000.0).round() as i64)
 }
 
 fn is_dir_writable(path: &Path) -> bool {
