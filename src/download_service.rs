@@ -1833,12 +1833,13 @@ impl DownloadService {
         let diagnostics = self.get_diagnostics().await?;
         let logs = self.list_operation_logs(1000)?;
         let redacted_logs = redact_operation_logs(&logs);
-        let tasks = self.db.list_tasks(None, u32::MAX, 0)?;
+        let tasks = redact_tasks(&self.db.list_tasks(None, u32::MAX, 0)?);
         let mut files = Vec::<TaskFile>::new();
         for task in &tasks {
             let mut task_files = self.db.list_task_files(&task.id)?;
             files.append(&mut task_files);
         }
+        let files = redact_task_files(&files);
         let integrity = self.db.run_integrity_check()?;
         let media_merge_jobs = redact_media_merge_jobs(&self.db.list_media_merge_jobs(2000)?);
 
@@ -3122,6 +3123,44 @@ fn redact_operation_logs(logs: &[OperationLog]) -> Vec<OperationLog> {
             ts: log.ts,
             action: log.action.clone(),
             message: redact_sensitive_text(&log.message),
+        })
+        .collect()
+}
+
+fn redact_tasks(tasks: &[Task]) -> Vec<Task> {
+    tasks
+        .iter()
+        .map(|task| Task {
+            id: task.id.clone(),
+            aria2_gid: task.aria2_gid.clone(),
+            task_type: task.task_type.clone(),
+            source: redact_sensitive_text(&task.source),
+            status: task.status.clone(),
+            name: task.name.as_deref().map(redact_sensitive_text),
+            category: task.category.clone(),
+            save_dir: redact_sensitive_text(&task.save_dir),
+            total_length: task.total_length,
+            completed_length: task.completed_length,
+            download_speed: task.download_speed,
+            upload_speed: task.upload_speed,
+            connections: task.connections,
+            error_code: task.error_code.clone(),
+            error_message: task.error_message.as_deref().map(redact_sensitive_text),
+            created_at: task.created_at,
+            updated_at: task.updated_at,
+        })
+        .collect()
+}
+
+fn redact_task_files(files: &[TaskFile]) -> Vec<TaskFile> {
+    files
+        .iter()
+        .map(|f| TaskFile {
+            task_id: f.task_id.clone(),
+            path: redact_sensitive_text(&f.path),
+            length: f.length,
+            completed_length: f.completed_length,
+            selected: f.selected,
         })
         .collect()
 }
