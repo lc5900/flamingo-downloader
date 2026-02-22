@@ -1,5 +1,44 @@
 # Flamingo Downloader TODO
 
+## 2026-02-22 Backlog (Next)
+
+### P0 - CI Speed and Reliability
+
+- [x] CI: skip full multi-platform build on `pull_request` (run `validate` + optional Linux smoke build only)
+- [x] CI: avoid double UI builds (`preflight build-ui` vs Tauri `beforeBuildCommand`) via an env gate
+- [x] CI: speed up Linux deps install (consider a prebuilt container image or a reusable composite action)
+- [x] CI: upload bundle-size report for each platform build job too (not only `validate`)
+
+### P0 - Media Merge (ffmpeg) UX
+
+- [x] Merge progress: compute real progress via `out_time_ms` + `ffprobe` duration (avoid fake 0/100%)
+- [x] Merge control: keep process handle to support cancel/stop from UI
+- [x] Merge errors: normalize common failure reasons (403/401/cors, protocol whitelist, redirects) for clearer UI
+- [x] Merge output: allow user to choose output filename/format (`.mp4` vs `.mkv`) in New Download advanced options
+
+### P1 - Onboarding and Defaults
+
+- [x] Default aria2 path: prefer bundled aria2 on first run, fallback to system PATH, then manual prompt
+- [x] Default ffmpeg path: auto-detect common locations and validate, show effective path in Diagnostics
+- [x] Browser bridge: add a small pairing wizard (copy endpoint/token, show status, open extension docs)
+
+### P1 - Extension UX Polish
+
+- [x] Extension popup: one-click “Send current page URL” action + clear skip reason if unsupported
+- [x] Extension popup: show bridge probe details in a collapsible panel (avoid pushing out the media list)
+- [x] Extension: add a simple “best guess” filter (prefer HLS/DASH manifests over segments when both present)
+
+### P2 - Security and Diagnostics
+
+- [x] Debug bundle: redact sensitive fields in `tasks.json`/`task_files.json` (not just operation logs)
+- [x] Browser bridge: add request size limits and basic rate limiting for `/add` and `/health`
+- [x] Extension: surface token/origin mismatch reason with actionable steps (copy token, open settings)
+
+### P2 - Dependency Hygiene
+
+- [x] UI: review `npm audit` vulnerabilities and upgrade/patch (avoid `--force` upgrades unless necessary)
+- [x] Repo: add Dependabot for `cargo` and `npm` ecosystems
+
 ## 2026-02-22 Backlog (New)
 
 ### P0 - Must Fix / Guardrails
