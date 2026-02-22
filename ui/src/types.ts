@@ -81,6 +81,7 @@ export type AddFormValues = {
   magnet: string
   save_dir?: string
   out?: string
+  merge_format?: string
   max_download_limit?: string
   max_upload_limit?: string
   seed_ratio?: number

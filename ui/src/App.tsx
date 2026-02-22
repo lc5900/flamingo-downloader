@@ -462,6 +462,7 @@ export default function App() {
   const [bridgeStatus, setBridgeStatus] = useState<BrowserBridgeStatus | null>(null)
   const [storageSummary, setStorageSummary] = useState<StorageSummary | null>(null)
   const [bridgeChecking, setBridgeChecking] = useState(false)
+  const [bridgeWizardOpen, setBridgeWizardOpen] = useState(false)
   const [ioOpen, setIoOpen] = useState(false)
   const [exportJsonText, setExportJsonText] = useState('')
   const [importJsonText, setImportJsonText] = useState('')
@@ -3085,6 +3086,7 @@ export default function App() {
                       >
                         {t('bridgeReconnect')}
                       </Button>
+                      <Button onClick={() => setBridgeWizardOpen(true)}>{t('bridgePairWizard')}</Button>
                       <Tag color={bridgeStatus?.connected ? 'green' : 'orange'}>
                         {t('bridgeStatus')}: {bridgeStatus?.connected ? t('bridgeConnected') : t('bridgeDisconnected')}
                       </Tag>
@@ -3966,6 +3968,83 @@ export default function App() {
           </Suspense>
         )}
 
+
+        <Modal
+          title={t('bridgePairWizard')}
+          open={bridgeWizardOpen}
+          onCancel={() => setBridgeWizardOpen(false)}
+          footer={[
+            <Button
+              key="docs"
+              onClick={() => {
+                window.open('https://github.com/lc5900/flamingo-downloader/tree/main/browser-extension', '_blank')
+              }}
+            >
+              {t('bridgeOpenDocs')}
+            </Button>,
+            <Button key="ok" type="primary" onClick={() => setBridgeWizardOpen(false)}>
+              {t('done')}
+            </Button>,
+          ]}
+        >
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <Typography.Text type="secondary">{t('bridgeWizardStepInstall')}</Typography.Text>
+            <Typography.Text type="secondary">{t('bridgeWizardStepOpen')}</Typography.Text>
+            <Typography.Text type="secondary">{t('bridgeWizardStepPaste')}</Typography.Text>
+            <Card size="small">
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <div>
+                  <Typography.Text strong>{t('bridgeEndpoint')}</Typography.Text>
+                  <Typography.Paragraph copyable style={{ marginBottom: 0 }}>
+                    {String(
+                      bridgeStatus?.endpoint ||
+                        `http://127.0.0.1:${Number(settingsForm.getFieldValue('browser_bridge_port') || 16789)}`,
+                    )}
+                  </Typography.Paragraph>
+                </div>
+                <div>
+                  <Typography.Text strong>{t('bridgeToken')}</Typography.Text>
+                  <Typography.Paragraph copyable style={{ marginBottom: 0 }}>
+                    {String(settingsForm.getFieldValue('browser_bridge_token') || '-')}
+                  </Typography.Paragraph>
+                </div>
+                <Space wrap>
+                  <Button
+                    onClick={async () => {
+                      const endpoint = String(
+                        bridgeStatus?.endpoint ||
+                          `http://127.0.0.1:${Number(settingsForm.getFieldValue('browser_bridge_port') || 16789)}`,
+                      )
+                      await writeClipboardText(endpoint)
+                      msg.success(t('bridgeCopiedEndpoint'))
+                    }}
+                  >
+                    {t('bridgeCopyEndpoint')}
+                  </Button>
+                  <Button
+                    onClick={async () => {
+                      const token = String(settingsForm.getFieldValue('browser_bridge_token') || '')
+                      if (!token) {
+                        msg.warning(t('bridgeTokenMissing'))
+                        return
+                      }
+                      await writeClipboardText(token)
+                      msg.success(t('bridgeCopiedToken'))
+                    }}
+                  >
+                    {t('bridgeCopyToken')}
+                  </Button>
+                  <Button loading={bridgeChecking} onClick={checkBridgeStatus}>
+                    {t('bridgeCheck')}
+                  </Button>
+                </Space>
+                <Tag color={bridgeStatus?.connected ? 'green' : 'orange'}>
+                  {t('bridgeStatus')}: {bridgeStatus?.connected ? t('bridgeConnected') : t('bridgeDisconnected')}
+                </Tag>
+              </Space>
+            </Card>
+          </Space>
+        </Modal>
 
         <Modal
           title={t('removeConfirm')}
