@@ -23,6 +23,7 @@
       .bridge-probe { margin: 6px 0 10px; border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffffcc; }
       .bridge-probe > summary { cursor: pointer; padding: 6px 8px; font-size: 12px; color: #334155; user-select: none; }
       .bridge-probe pre { margin: 0; padding: 8px; border-top: 1px solid #e2e8f0; font-size: 11px; white-space: pre-wrap; word-break: break-word; color: #475569; }
+      .probe-actions { display: none; gap: 6px; padding: 8px; border-top: 1px solid #e2e8f0; }
       .bridge-pill {
         font-size: 11px;
         border: 1px solid #cbd5e1;
@@ -95,6 +96,10 @@
       <details id="probeDetailsWrap" class="bridge-probe">
         <summary data-i18n="popup_probe_details">Probe details</summary>
         <pre id="probeDetailsText">-</pre>
+        <div id="probeActions" class="probe-actions">
+          <button id="probeCopyToken" type="button" data-i18n="popup_probe_copy_token">Copy Configured Token</button>
+          <button id="probeOpenSettings" type="button" data-i18n="popup_probe_open_settings">Open Settings</button>
+        </div>
       </details>
 
       <div id="status" class="status"></div>

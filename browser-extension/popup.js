@@ -20,6 +20,9 @@ const el = {
   bridgeState: document.getElementById('bridgeState'),
   probeDetailsWrap: document.getElementById('probeDetailsWrap'),
   probeDetailsText: document.getElementById('probeDetailsText'),
+  probeActions: document.getElementById('probeActions'),
+  probeCopyToken: document.getElementById('probeCopyToken'),
+  probeOpenSettings: document.getElementById('probeOpenSettings'),
   toastWrap: document.getElementById('toastWrap'),
 };
 
@@ -160,6 +163,11 @@ function renderBridgeProbe(probe) {
     ];
     el.probeDetailsText.textContent = lines.join('\n');
   }
+  if (el.probeActions) {
+    const guide = String(probe?.guide || '').trim();
+    const actionable = guide === 'check_token' || guide === 'check_endpoint';
+    el.probeActions.style.display = actionable ? 'flex' : 'none';
+  }
   if (el.probeDetailsWrap && !ok) {
     el.probeDetailsWrap.open = true;
   }
@@ -171,6 +179,17 @@ function renderBridgeProbe(probe) {
       if (msg) showStatus(msg, 'error');
     }
   }
+}
+
+async function copyConfiguredBridgeToken() {
+  const saved = await ext.storage.sync.get(['token']);
+  const token = String(saved?.token || '').trim();
+  if (!token) {
+    showStatus(t('popup_probe_token_empty'), 'error');
+    return;
+  }
+  await navigator.clipboard.writeText(token);
+  showStatus(t('popup_probe_token_copied'), 'success');
 }
 
 async function probeBridgeState() {
@@ -452,6 +471,18 @@ el.autoIntercept.addEventListener('change', () => { void setQuickFlags(); });
 if (el.probeBridge) {
   el.probeBridge.addEventListener('click', () => {
     void probeBridgeState().catch((e) => showStatus(String(e?.message || e), 'error'));
+  });
+}
+if (el.probeCopyToken) {
+  el.probeCopyToken.addEventListener('click', () => {
+    void copyConfiguredBridgeToken().catch((e) => showStatus(String(e?.message || e), 'error'));
+  });
+}
+if (el.probeOpenSettings) {
+  el.probeOpenSettings.addEventListener('click', () => {
+    if (ext.runtime.openOptionsPage) {
+      void ext.runtime.openOptionsPage();
+    }
   });
 }
 el.currentTabOnly.addEventListener('change', () => {
