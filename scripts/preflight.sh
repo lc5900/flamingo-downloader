@@ -16,6 +16,16 @@ fi
 
 mode="${1:-build-ui}"
 
+find_text() {
+  local pattern="$1"
+  local file="$2"
+  if command -v rg >/dev/null 2>&1; then
+    rg -n "$pattern" "$file" >/dev/null
+  else
+    grep -E -n "$pattern" "$file" >/dev/null
+  fi
+}
+
 if [[ "$mode" == "build-ui" ]]; then
   npm --prefix ui run build
 fi
@@ -26,17 +36,17 @@ if [[ ! -d "ui/dist" || ! -f "ui/dist/index.html" ]]; then
   exit 1
 fi
 
-if ! rg -n "\"devtools\"\\s*:\\s*false" src-tauri/tauri.conf.json >/dev/null; then
+if ! find_text "\"devtools\"[[:space:]]*:[[:space:]]*false" src-tauri/tauri.conf.json; then
   echo "Release hardening check failed: src-tauri/tauri.conf.json must set devtools=false."
   exit 1
 fi
 
-if ! rg -n "addEventListener\\('contextmenu'" ui/src/App.tsx >/dev/null; then
+if ! find_text "addEventListener\\('contextmenu'" ui/src/App.tsx; then
   echo "Release hardening check failed: ui/src/App.tsx must block context menu in production."
   exit 1
 fi
 
-if ! rg -n "F12|shiftKey.*\\(key === 'i' \\|\\| key === 'j' \\|\\| key === 'c'\\)" ui/src/App.tsx >/dev/null; then
+if ! find_text "F12|shiftKey.*\\(key === 'i' \\|\\| key === 'j' \\|\\| key === 'c'\\)" ui/src/App.tsx; then
   echo "Release hardening check failed: ui/src/App.tsx must block DevTools hotkeys in production."
   exit 1
 fi
