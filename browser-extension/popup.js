@@ -60,6 +60,28 @@ function detectQuality(item) {
   return m ? m[1].toUpperCase() : 'Unknown';
 }
 
+function isManifestCandidate(item) {
+  const url = String(item?.url || '').toLowerCase();
+  const ct = String(item?.contentType || '').toLowerCase();
+  return url.includes('.m3u8') || url.includes('.mpd') || ct.includes('mpegurl') || ct.includes('dash+xml');
+}
+
+function isSegmentCandidate(item) {
+  const url = String(item?.url || '').toLowerCase();
+  return (
+    url.includes('.m4s') ||
+    url.includes('.ts') ||
+    url.includes('/segment') ||
+    /[?&](seg|segment|part)=/.test(url)
+  );
+}
+
+function pickBestCandidates(items) {
+  const hasManifest = items.some((item) => isManifestCandidate(item));
+  if (!hasManifest) return items;
+  return items.filter((item) => isManifestCandidate(item) || !isSegmentCandidate(item));
+}
+
 async function resolveCurrentTab() {
   try {
     const tabs = await ext.tabs.query({ active: true, currentWindow: true });
@@ -172,9 +194,10 @@ async function loadCandidates() {
   const response = await ask('list_media_candidates');
   if (!response?.ok) throw new Error(String(response?.error || 'list unavailable'));
   const sourceItems = Array.isArray(response.items) ? response.items : [];
-  const items = el.currentTabOnly.checked
+  const scopedItems = el.currentTabOnly.checked
     ? sourceItems.filter((item) => Number(item?.tabId || -1) === currentTabId)
     : sourceItems;
+  const items = pickBestCandidates(scopedItems);
   if (items.length === 0) {
     selectedUrls.clear();
     el.list.innerHTML = `<div class="card muted">${esc(t('popup_no_media'))}</div>`;
