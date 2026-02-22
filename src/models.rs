@@ -188,6 +188,8 @@ pub struct Diagnostics {
     pub aria2_running: bool,
     pub aria2_bin_path: String,
     pub aria2_bin_exists: bool,
+    pub ffmpeg_bin_path: String,
+    pub ffmpeg_bin_exists: bool,
     pub version: Option<String>,
     pub stderr_tail: Option<String>,
     pub global_stat: serde_json::Value,

@@ -1398,6 +1398,8 @@ impl DownloadService {
                 aria2_running: true,
                 aria2_bin_path: self.aria2_bin_path(),
                 aria2_bin_exists: self.aria2_bin_exists(),
+                ffmpeg_bin_path: self.effective_ffmpeg_bin_path(),
+                ffmpeg_bin_exists: self.ffmpeg_bin_exists(),
                 version,
                 stderr_tail: self.aria2.stderr_tail(),
                 global_stat,
@@ -1412,6 +1414,8 @@ impl DownloadService {
             aria2_running: false,
             aria2_bin_path: self.aria2_bin_path(),
             aria2_bin_exists: self.aria2_bin_exists(),
+            ffmpeg_bin_path: self.effective_ffmpeg_bin_path(),
+            ffmpeg_bin_exists: self.ffmpeg_bin_exists(),
             version: None,
             stderr_tail: self.aria2.stderr_tail(),
             global_stat: json!({}),
@@ -2507,6 +2511,60 @@ fn is_executable(path: &Path) -> bool {
     false
 }
 
+fn resolve_binary_candidate(input: &str, include_common_dirs: bool) -> Option<PathBuf> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let as_path = PathBuf::from(trimmed);
+    if as_path.is_absolute() || trimmed.contains(std::path::MAIN_SEPARATOR) {
+        return as_path.exists().then_some(as_path);
+    }
+
+    if let Some(path_var) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path_var) {
+            let candidate = dir.join(trimmed);
+            if candidate.exists() {
+                return Some(candidate);
+            }
+            #[cfg(windows)]
+            {
+                let candidate_exe = dir.join(format!("{trimmed}.exe"));
+                if candidate_exe.exists() {
+                    return Some(candidate_exe);
+                }
+            }
+        }
+    }
+
+    if include_common_dirs {
+        #[cfg(target_os = "macos")]
+        {
+            for p in [
+                "/opt/homebrew/bin/ffmpeg",
+                "/usr/local/bin/ffmpeg",
+                "/usr/bin/ffmpeg",
+            ] {
+                let candidate = PathBuf::from(p);
+                if candidate.exists() {
+                    return Some(candidate);
+                }
+            }
+        }
+        #[cfg(target_os = "linux")]
+        {
+            for p in ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg"] {
+                let candidate = PathBuf::from(p);
+                if candidate.exists() {
+                    return Some(candidate);
+                }
+            }
+        }
+    }
+
+    None
+}
+
 fn to_aria2_options(options: AddTaskOptions) -> Value {
     let mut m = serde_json::Map::new();
     if let Some(dir) = options.save_dir {
@@ -2879,6 +2937,29 @@ impl DownloadService {
     fn aria2_bin_exists(&self) -> bool {
         let path = self.aria2_bin_path();
         !path.is_empty() && Path::new(&path).exists()
+    }
+
+    fn configured_ffmpeg_bin_path(&self) -> String {
+        self.db
+            .get_setting("ffmpeg_bin_path")
+            .ok()
+            .flatten()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| "ffmpeg".to_string())
+    }
+
+    fn effective_ffmpeg_bin_path(&self) -> String {
+        let configured = self.configured_ffmpeg_bin_path();
+        if let Some(found) = resolve_binary_candidate(&configured, true) {
+            return found.to_string_lossy().to_string();
+        }
+        configured
+    }
+
+    fn ffmpeg_bin_exists(&self) -> bool {
+        let configured = self.configured_ffmpeg_bin_path();
+        resolve_binary_candidate(&configured, true).is_some()
     }
 
     fn delete_task_files_safely(&self, task: &Task) -> Result<()> {

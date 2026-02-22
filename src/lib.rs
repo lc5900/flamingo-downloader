@@ -7,7 +7,10 @@ pub mod error;
 pub mod events;
 pub mod models;
 
-use std::{path::Path, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use anyhow::Result;
 use aria2_manager::{Aria2Manager, Aria2RuntimeConfig};
@@ -79,7 +82,7 @@ pub async fn init_backend(
         "browser_bridge_allowed_origins",
         "chrome-extension://,moz-extension://",
     )?;
-    db.set_setting_if_absent("ffmpeg_bin_path", "ffmpeg")?;
+    db.set_setting_if_absent("ffmpeg_bin_path", &detect_default_ffmpeg_bin())?;
     db.set_setting_if_absent("media_merge_enabled", "false")?;
     db.set_setting_if_absent("clipboard_watch_enabled", "false")?;
     db.set_setting_if_absent("ui_theme", "system")?;
@@ -198,4 +201,35 @@ fn is_bundled_resource_aria2_path(value: &str) -> bool {
     }
     let text = value.replace('\\', "/");
     text.contains("/resources/aria2/bin/")
+}
+
+fn detect_default_ffmpeg_bin() -> String {
+    if let Some(path_var) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path_var) {
+            let candidate = if cfg!(windows) {
+                dir.join("ffmpeg.exe")
+            } else {
+                dir.join("ffmpeg")
+            };
+            if candidate.exists() {
+                return candidate.to_string_lossy().to_string();
+            }
+        }
+    }
+
+    let common: &[&str] = if cfg!(target_os = "macos") {
+        &["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"]
+    } else if cfg!(target_os = "linux") {
+        &["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg"]
+    } else {
+        &[]
+    };
+    for p in common {
+        let candidate = PathBuf::from(p);
+        if candidate.exists() {
+            return candidate.to_string_lossy().to_string();
+        }
+    }
+
+    "ffmpeg".to_string()
 }
