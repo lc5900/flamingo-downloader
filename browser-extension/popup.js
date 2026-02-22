@@ -18,6 +18,8 @@ const el = {
   currentTabOnly: document.getElementById('currentTabOnly'),
   probeBridge: document.getElementById('probeBridge'),
   bridgeState: document.getElementById('bridgeState'),
+  probeDetailsWrap: document.getElementById('probeDetailsWrap'),
+  probeDetailsText: document.getElementById('probeDetailsText'),
   toastWrap: document.getElementById('toastWrap'),
 };
 
@@ -125,6 +127,20 @@ function renderBridgeProbe(probe) {
   const ok = !!probe?.ok;
   el.bridgeState.className = `bridge-pill ${ok ? 'ok' : 'fail'}`.trim();
   el.bridgeState.textContent = ok ? t('popup_bridge_status_ok') : t('popup_bridge_status_fail');
+  if (el.probeDetailsText) {
+    const lines = [
+      `ok: ${ok}`,
+      `mode: ${String(probe?.mode || '-')}`,
+      `state: ${String(probe?.state || '-')}`,
+      `guide: ${String(probe?.guide || '-')}`,
+      `detail: ${String(probe?.detail || '-')}`,
+      `at: ${new Date().toLocaleString()}`,
+    ];
+    el.probeDetailsText.textContent = lines.join('\n');
+  }
+  if (el.probeDetailsWrap && !ok) {
+    el.probeDetailsWrap.open = true;
+  }
   if (!ok) {
     const guide = bridgeGuideText(probe?.guide);
     const detail = String(probe?.detail || '').trim();
