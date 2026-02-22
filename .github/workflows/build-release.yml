@@ -32,15 +32,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Linux dependencies (validate)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libglib2.0-dev \
-            libgtk-3-dev \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf
+        uses: ./.github/actions/setup-linux-build-deps
 
       - name: Install Rust toolchain (fmt/clippy)
         uses: dtolnay/rust-toolchain@stable
@@ -105,13 +97,7 @@ jobs:
           cache-dependency-path: ui/package-lock.json
 
       - name: Install Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf
+        uses: ./.github/actions/setup-linux-build-deps
 
       - name: Install frontend dependencies
         working-directory: ui
@@ -202,14 +188,7 @@ jobs:
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            aria2
+        uses: ./.github/actions/setup-linux-build-deps
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
