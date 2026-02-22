@@ -173,6 +173,17 @@ jobs:
         run: |
           ./scripts/preflight.ps1 -Mode build-ui
 
+      - name: UI bundle size check (platform build)
+        run: npm --prefix ui run check:bundle
+
+      - name: Upload UI bundle size report (platform build)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-bundle-size-report-${{ matrix.artifact_suffix }}
+          path: ui/dist/bundle-size-report.json
+          if-no-files-found: warn
+
       - name: Package browser extensions
         if: runner.os == 'Linux'
         shell: bash
