@@ -33,17 +33,22 @@ pub async fn init_backend(
 
     let db = Arc::new(Database::new(db_path)?);
     let aria2_cfg = Aria2RuntimeConfig::with_defaults(base_dir);
+    let resolved_aria2_default = if aria2_cfg.aria2_bin.exists() {
+        aria2_cfg.aria2_bin.to_string_lossy().to_string()
+    } else {
+        String::new()
+    };
     db.set_setting_if_absent(
         "download_dir",
         &aria2_cfg.default_download_dir.to_string_lossy(),
     )?;
-    db.set_setting_if_absent("aria2_bin_path", &aria2_cfg.aria2_bin.to_string_lossy())?;
+    db.set_setting_if_absent("aria2_bin_path", &resolved_aria2_default)?;
     let current_aria2_bin = db.get_setting("aria2_bin_path")?.unwrap_or_default();
     let should_reset_aria2_path = current_aria2_bin.trim().is_empty()
         || !Path::new(current_aria2_bin.trim()).exists()
         || is_bundled_resource_aria2_path(current_aria2_bin.trim());
     if should_reset_aria2_path {
-        db.set_setting("aria2_bin_path", &aria2_cfg.aria2_bin.to_string_lossy())?;
+        db.set_setting("aria2_bin_path", &resolved_aria2_default)?;
     }
     db.set_setting_if_absent(
         "max_concurrent_downloads",
@@ -152,7 +157,7 @@ pub async fn init_backend(
     } else {
         let _ = service.set_startup_notice(
             "warning",
-            "aria2 binary not found on startup. Please set a valid aria2 path in Settings.",
+            "aria2 binary not found (bundled/system PATH). Please set a valid aria2 path in Settings.",
         );
     }
 
