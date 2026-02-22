@@ -434,13 +434,11 @@ impl DownloadService {
                             .rev()
                             .collect::<Vec<_>>()
                             .join(" | ");
+                        let (normalized_code, normalized_message) =
+                            normalize_ffmpeg_failure(exit.code(), &detail);
                         t.status = TaskStatus::Error;
-                        t.error_code = Some(format!("FFMPEG_EXIT_{}", exit.code().unwrap_or(-1)));
-                        t.error_message = Some(if detail.is_empty() {
-                            "ffmpeg merge failed with unknown error".to_string()
-                        } else {
-                            detail
-                        });
+                        t.error_code = Some(normalized_code);
+                        t.error_message = Some(normalized_message);
                         t.updated_at = now_ts();
                         let _ = db.upsert_task(&t);
                         let _ = db.append_operation_logs(&[OperationLog {
@@ -2360,6 +2358,56 @@ fn probe_media_duration_ms(
         return None;
     }
     Some((secs * 1000.0).round() as i64)
+}
+
+fn normalize_ffmpeg_failure(exit_code: Option<i32>, detail: &str) -> (String, String) {
+    let fallback_code = format!("FFMPEG_EXIT_{}", exit_code.unwrap_or(-1));
+    let fallback_msg = if detail.trim().is_empty() {
+        "ffmpeg merge failed with unknown error".to_string()
+    } else {
+        detail.to_string()
+    };
+    let lower = detail.to_ascii_lowercase();
+    if lower.contains("403 forbidden") || lower.contains("http error 403") {
+        return (
+            "FFMPEG_HTTP_403".to_string(),
+            "request forbidden (403). try adding referer/cookie or refresh source URL".to_string(),
+        );
+    }
+    if lower.contains("401 unauthorized") || lower.contains("http error 401") {
+        return (
+            "FFMPEG_HTTP_401".to_string(),
+            "request unauthorized (401). authentication token/cookie may be expired".to_string(),
+        );
+    }
+    if lower.contains("protocol not found")
+        || lower.contains("protocol whitelist")
+        || lower.contains("unsafe file name")
+    {
+        return (
+            "FFMPEG_PROTOCOL_BLOCKED".to_string(),
+            "source protocol blocked by ffmpeg. try a direct media URL or update ffmpeg".to_string(),
+        );
+    }
+    if lower.contains("cors")
+        || lower.contains("access-control-allow-origin")
+        || lower.contains("origin not allowed")
+    {
+        return (
+            "FFMPEG_CORS_RESTRICTED".to_string(),
+            "source blocked by CORS/origin policy. add referer headers or use browser bridge capture".to_string(),
+        );
+    }
+    if lower.contains("too many redirects")
+        || lower.contains("redirect")
+        || lower.contains("moved permanently")
+    {
+        return (
+            "FFMPEG_REDIRECT_ERROR".to_string(),
+            "redirect chain failed. source URL may be temporary or requires fresh capture".to_string(),
+        );
+    }
+    (fallback_code, fallback_msg)
 }
 
 fn is_dir_writable(path: &Path) -> bool {
