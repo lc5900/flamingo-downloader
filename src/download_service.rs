@@ -42,6 +42,7 @@ pub struct DownloadService {
     lifecycle_guard: AsyncMutex<()>,
     retry_state: Mutex<HashMap<String, RetryState>>,
     last_speed_limit: Mutex<Option<String>>,
+    merge_processes: Arc<Mutex<HashMap<String, u32>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -69,6 +70,7 @@ impl DownloadService {
             lifecycle_guard: AsyncMutex::new(()),
             retry_state: Mutex::new(HashMap::new()),
             last_speed_limit: Mutex::new(None),
+            merge_processes: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -318,6 +320,12 @@ impl DownloadService {
         let mut child = cmd.spawn().map_err(|e| {
             anyhow!("ffmpeg merge start failed: {e}. check ffmpeg_bin_path setting")
         })?;
+        if let Some(pid) = child.id() {
+            self.merge_processes
+                .lock()
+                .expect("merge_processes mutex poisoned")
+                .insert(task_id.clone(), pid);
+        }
 
         self.push_log(
             "ffmpeg_merge_spawned",
@@ -332,6 +340,7 @@ impl DownloadService {
         let ffmpeg_bin_bg = ffmpeg_bin.clone();
         let ffmpeg_args_bg = ffmpeg_args.join(" ");
         let duration_ms_bg = duration_ms.max(1);
+        let merge_processes = self.merge_processes.clone();
         tokio::spawn(async move {
             let mut stderr_tail: VecDeque<String> = VecDeque::with_capacity(24);
             let mut last_out_time_ms: i64 = 0;
@@ -368,6 +377,10 @@ impl DownloadService {
             }
 
             let final_status = child.wait().await;
+            merge_processes
+                .lock()
+                .expect("merge_processes mutex poisoned")
+                .remove(&task_id_bg);
             match final_status {
                 Ok(exit) if exit.success() => {
                     if let Ok(Some(mut t)) = db.get_task(&task_id_bg) {
@@ -731,6 +744,8 @@ impl DownloadService {
             // Persist aria2 session immediately so a quick app restart doesn't reload
             // stale tasks from the previous save-session interval.
             let _ = time::timeout(Duration::from_millis(1200), self.aria2.save_session()).await;
+        } else if matches!(task.status, TaskStatus::Active | TaskStatus::Queued) {
+            let _ = self.cancel_merge_process(task_id);
         }
 
         self.db.remove_task(task_id)?;
@@ -738,6 +753,35 @@ impl DownloadService {
             "remove_task",
             format!("removed task {task_id}, delete_files={delete_files}"),
         );
+        Ok(())
+    }
+
+    fn cancel_merge_process(&self, task_id: &str) -> Result<()> {
+        let pid = self
+            .merge_processes
+            .lock()
+            .expect("merge_processes mutex poisoned")
+            .remove(task_id);
+        let Some(pid) = pid else {
+            return Ok(());
+        };
+        #[cfg(windows)]
+        {
+            let _ = Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/T", "/F"])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+        }
+        #[cfg(unix)]
+        {
+            let _ = Command::new("kill")
+                .args(["-TERM", &pid.to_string()])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+        }
+        self.push_log("ffmpeg_merge_cancel", format!("task={task_id} pid={pid}"));
         Ok(())
     }
 
