@@ -127,6 +127,7 @@ jobs:
     if: github.event_name != 'pull_request'
     needs: [ validate ]
     env:
+      TAURI_SKIP_UI_BUILD: "1"
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
       APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
