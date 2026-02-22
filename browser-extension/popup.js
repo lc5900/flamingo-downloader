@@ -8,6 +8,7 @@ const el = {
   list: document.getElementById('list'),
   refresh: document.getElementById('refresh'),
   clear: document.getElementById('clear'),
+  sendCurrentPage: document.getElementById('sendCurrentPage'),
   sendSelected: document.getElementById('sendSelected'),
   copySelected: document.getElementById('copySelected'),
   openOptions: document.getElementById('openOptions'),
@@ -336,6 +337,55 @@ el.sendSelected.addEventListener('click', async () => {
   if (okCount > 0) showStatus(t('popup_status_sent_batch', { ok: okCount, total: targets.length }), 'success');
   else showStatus(t('popup_status_batch_failed'), 'error');
 });
+
+if (el.sendCurrentPage) {
+  el.sendCurrentPage.addEventListener('click', async () => {
+    try {
+      const tabs = await ext.tabs.query({ active: true, currentWindow: true });
+      const tab = Array.isArray(tabs) ? tabs[0] : null;
+      const target = String(tab?.url || '').trim();
+      if (!target) {
+        showStatus(t('popup_status_no_current_page'), 'error');
+        return;
+      }
+      const response = await ask('send_media_candidate', { url: target });
+      if (!response?.ok) {
+        const reason = formatSendFailureReason(response, null);
+        showToast(
+          t('popup_toast_send_failed', {
+            target: shortenTarget(target),
+            reason,
+          }),
+          'error',
+        );
+        showStatus(
+          t('popup_status_current_page_failed', {
+            reason,
+          }),
+          'error',
+        );
+        return;
+      }
+      const taskId = String(response?.task_id || '');
+      showToast(
+        taskId
+          ? t('popup_toast_sent_task', { taskId, target: shortenTarget(target) })
+          : t('popup_toast_sent', { target: shortenTarget(target) }),
+        'success',
+      );
+      showStatus(t('popup_status_current_page_sent'), 'success');
+      await loadQuickState();
+    } catch (e) {
+      const reason = formatSendFailureReason(null, e);
+      showStatus(
+        t('popup_status_current_page_failed', {
+          reason,
+        }),
+        'error',
+      );
+    }
+  });
+}
 
 el.copySelected.addEventListener('click', async () => {
   const targets = Array.from(selectedUrls);
