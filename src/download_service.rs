@@ -1,7 +1,7 @@
 use std::{
-    collections::VecDeque,
     collections::HashMap,
     collections::HashSet,
+    collections::VecDeque,
     fs,
     fs::File,
     io::{Cursor, Read},
@@ -15,8 +15,8 @@ use anyhow::{Result, anyhow};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::{Datelike, Local, Timelike};
 use serde_json::{Value, json};
-use tokio::{sync::Mutex as AsyncMutex, time};
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::{sync::Mutex as AsyncMutex, time};
 use uuid::Uuid;
 use zip::write::SimpleFileOptions;
 
@@ -151,14 +151,15 @@ impl DownloadService {
             .map(|v| v == "true")
             .unwrap_or(false);
         if merge_enabled && is_stream_manifest_url(clean_url) {
-            let output = self.spawn_ffmpeg_merge(
-                clean_url,
-                save_dir,
-                normalized_referer.clone(),
-                user_agent.clone(),
-                normalized_headers.clone(),
-            )
-            .await?;
+            let output = self
+                .spawn_ffmpeg_merge(
+                    clean_url,
+                    save_dir,
+                    normalized_referer.clone(),
+                    user_agent.clone(),
+                    normalized_headers.clone(),
+                )
+                .await?;
             return Ok(json!({
                 "ok": true,
                 "mode": "ffmpeg_merge",
