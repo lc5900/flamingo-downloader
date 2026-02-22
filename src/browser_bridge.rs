@@ -1,4 +1,8 @@
-use std::sync::Arc;
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::{Arc, LazyLock, Mutex},
+    time::{Duration, Instant},
+};
 
 use anyhow::{Result, anyhow};
 use serde::Deserialize;
@@ -9,6 +13,14 @@ use tokio::{
 };
 
 use crate::download_service::DownloadService;
+
+static BRIDGE_RATE_BUCKETS: LazyLock<Mutex<HashMap<String, VecDeque<Instant>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(10);
+const RATE_LIMIT_ADD: usize = 40;
+const RATE_LIMIT_HEALTH: usize = 80;
+const MAX_BODY_ADD: usize = 256 * 1024;
+const MAX_BODY_HEALTH: usize = 8 * 1024;
 
 #[derive(Debug, Clone)]
 pub struct BrowserBridgeConfig {
@@ -116,6 +128,15 @@ async fn handle_connection(
         }
     }
     let settings = service.get_global_settings().ok();
+    if !allow_request_for_path(path) {
+        service.append_operation_log("bridge_activity", format!("rate_limited path={path}"));
+        return write_json(
+            &mut stream,
+            429,
+            &json!({"ok": false, "error": "rate_limited"}),
+        )
+        .await;
+    }
     let allowed_origins = settings
         .as_ref()
         .and_then(|s| s.browser_bridge_allowed_origins.clone())
@@ -149,6 +170,24 @@ async fn handle_connection(
             &mut stream,
             401,
             &json!({"ok": false, "error": "unauthorized"}),
+        )
+        .await;
+    }
+
+    let body_limit = if path == "/health" {
+        MAX_BODY_HEALTH
+    } else {
+        MAX_BODY_ADD
+    };
+    if content_length > body_limit {
+        service.append_operation_log(
+            "bridge_activity",
+            format!("payload_too_large path={path} content_length={content_length}"),
+        );
+        return write_json(
+            &mut stream,
+            413,
+            &json!({"ok": false, "error": "payload_too_large"}),
         )
         .await;
     }
@@ -277,10 +316,37 @@ fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack.windows(needle.len()).position(|w| w == needle)
 }
 
+fn allow_request_for_path(path: &str) -> bool {
+    let limit = match path {
+        "/add" => RATE_LIMIT_ADD,
+        "/health" => RATE_LIMIT_HEALTH,
+        _ => 20,
+    };
+    let now = Instant::now();
+    let mut buckets = BRIDGE_RATE_BUCKETS
+        .lock()
+        .expect("bridge rate limiter mutex poisoned");
+    let queue = buckets.entry(path.to_string()).or_default();
+    while let Some(ts) = queue.front().cloned() {
+        if now.duration_since(ts) > RATE_LIMIT_WINDOW {
+            queue.pop_front();
+        } else {
+            break;
+        }
+    }
+    if queue.len() >= limit {
+        return false;
+    }
+    queue.push_back(now);
+    true
+}
+
 async fn write_json(stream: &mut TcpStream, status: u16, body: &serde_json::Value) -> Result<()> {
     let body_s = serde_json::to_string(body)?;
     let status_text = match status {
         200 => "OK",
+        413 => "Payload Too Large",
+        429 => "Too Many Requests",
         401 => "Unauthorized",
         404 => "Not Found",
         _ => "Bad Request",
