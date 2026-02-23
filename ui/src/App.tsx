@@ -402,6 +402,7 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(LOCALE_KEY, locale)
     document.documentElement.lang = locale
+    void api.call('set_app_locale', { locale }).catch(() => {})
   }, [locale])
 
   const [tasks, setTasks] = useState<Task[]>([])
@@ -499,6 +500,17 @@ export default function App() {
   const [selectedFileIndexes, setSelectedFileIndexes] = useState<number[]>([])
   const [fileSelectLoading, setFileSelectLoading] = useState(false)
   const movingTimerRef = useRef<number | null>(null)
+  const effectiveThemeRef = useRef<'light' | 'dark'>('light')
+  const systemMenuHandlersRef = useRef<{
+    openAdd: () => void
+    openImportExport: () => void
+    refresh: () => void
+    toggleTheme: () => void
+    openSettings: () => void
+    openAbout: () => void
+    rpcPing: () => void
+    startupCheck: () => void
+  } | null>(null)
 
   const [settingsForm] = Form.useForm<GlobalSettings>()
   const [addForm] = Form.useForm<AddFormValues>()
@@ -910,6 +922,9 @@ export default function App() {
   }, [])
 
   const effectiveTheme = resolveTheme(themeMode)
+  useEffect(() => {
+    effectiveThemeRef.current = effectiveTheme
+  }, [effectiveTheme])
 
   useEffect(() => {
     const darkCls = 'app-theme-dark'
@@ -1032,15 +1047,19 @@ export default function App() {
   )
 
   const quickToggleTheme = useCallback(async () => {
-    const next = effectiveTheme === 'dark' ? 'light' : 'dark'
-    setThemeMode(next)
-    settingsForm.setFieldValue('ui_theme', next)
+    let nextMode: ThemeMode = 'light'
+    setThemeMode((prev) => {
+      const current = prev === 'system' ? effectiveThemeRef.current : prev
+      nextMode = current === 'dark' ? 'light' : 'dark'
+      return nextMode
+    })
+    settingsForm.setFieldValue('ui_theme', nextMode)
     try {
-      await api.call('set_global_settings', { settings: { ui_theme: next } })
+      await api.call('set_global_settings', { settings: { ui_theme: nextMode } })
     } catch (err) {
       msg.error(parseErr(err))
     }
-  }, [effectiveTheme, msg, settingsForm])
+  }, [msg, settingsForm])
 
   const onPauseResume = useCallback(async (task: Task) => {
     try {
@@ -1987,6 +2006,75 @@ export default function App() {
       msg.error(parseErr(err))
     }
   }, [msg])
+
+  const openAboutDialog = useCallback(() => {
+    Modal.info({
+      title: 'Flamingo Downloader',
+      content: 'Flamingo Downloader',
+      okText: 'OK',
+    })
+  }, [])
+
+  useEffect(() => {
+    systemMenuHandlersRef.current = {
+      openAdd: () => void onOpenAdd(),
+      openImportExport: () => void openImportExport(),
+      refresh: () => void refresh(),
+      toggleTheme: () => void quickToggleTheme(),
+      openSettings: () => void openSettings(),
+      openAbout: () => void openAboutDialog(),
+      rpcPing: () => void doRpcPing(),
+      startupCheck: () => void doStartupCheck(),
+    }
+  }, [doRpcPing, doStartupCheck, onOpenAdd, openAboutDialog, openImportExport, refresh, quickToggleTheme, openSettings])
+
+  useEffect(() => {
+    let unlistenMenu: (() => void) | null = null
+    const bindMenuAction = async () => {
+      try {
+        unlistenMenu = await listen<string>('system_menu_action', (event) => {
+          const h = systemMenuHandlersRef.current
+          if (!h) return
+          const action = String(event.payload || '')
+          if (!action) return
+          switch (action) {
+            case 'open_add':
+              h.openAdd()
+              break
+            case 'open_import_export':
+              h.openImportExport()
+              break
+            case 'refresh_list':
+              h.refresh()
+              break
+            case 'toggle_theme':
+              h.toggleTheme()
+              break
+            case 'open_settings':
+              h.openSettings()
+              break
+            case 'open_about':
+              h.openAbout()
+              break
+            case 'rpc_ping':
+              h.rpcPing()
+              break
+            case 'startup_check':
+              h.startupCheck()
+              break
+            default:
+              break
+          }
+        })
+      } catch {
+        // ignore if event permission/listen unavailable
+      }
+    }
+    void bindMenuAction()
+    return () => {
+      if (unlistenMenu) unlistenMenu()
+    }
+  }, [])
 
   const shortcutItems = useMemo(
     () =>

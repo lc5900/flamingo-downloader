@@ -29,6 +29,10 @@ updates:
       day: monday
       time: "04:20"
     open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: "eslint"
+        update-types:
+          - "version-update:semver-major"
     labels:
       - dependencies
       - ui
