@@ -2451,7 +2451,8 @@ fn normalize_ffmpeg_failure(exit_code: Option<i32>, detail: &str) -> (String, St
     {
         return (
             "FFMPEG_PROTOCOL_BLOCKED".to_string(),
-            "source protocol blocked by ffmpeg. try a direct media URL or update ffmpeg".to_string(),
+            "source protocol blocked by ffmpeg. try a direct media URL or update ffmpeg"
+                .to_string(),
         );
     }
     if lower.contains("cors")
@@ -2469,7 +2470,8 @@ fn normalize_ffmpeg_failure(exit_code: Option<i32>, detail: &str) -> (String, St
     {
         return (
             "FFMPEG_REDIRECT_ERROR".to_string(),
-            "redirect chain failed. source URL may be temporary or requires fresh capture".to_string(),
+            "redirect chain failed. source URL may be temporary or requires fresh capture"
+                .to_string(),
         );
     }
     (fallback_code, fallback_msg)

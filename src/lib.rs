@@ -218,7 +218,11 @@ fn detect_default_ffmpeg_bin() -> String {
     }
 
     let common: &[&str] = if cfg!(target_os = "macos") {
-        &["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"]
+        &[
+            "/opt/homebrew/bin/ffmpeg",
+            "/usr/local/bin/ffmpeg",
+            "/usr/bin/ffmpeg",
+        ]
     } else if cfg!(target_os = "linux") {
         &["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg"]
     } else {
