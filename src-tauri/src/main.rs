@@ -14,6 +14,8 @@ use flamingo_downloader::{
 use serde::Serialize;
 #[cfg(target_os = "macos")]
 use tauri::ActivationPolicy;
+#[cfg(target_os = "macos")]
+use tauri::menu::{MenuBuilder as AppMenuBuilder, PredefinedMenuItem, SubmenuBuilder};
 #[cfg(not(target_os = "macos"))]
 use tauri::include_image;
 #[cfg(not(target_os = "macos"))]
@@ -231,6 +233,115 @@ fn ensure_main_window_bounds(win: &tauri::WebviewWindow) {
             )));
             let _ = win.center();
         }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn build_app_menu<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> tauri::Result<tauri::menu::Menu<R>> {
+    let file_menu = SubmenuBuilder::new(app, "File")
+        .text("menu_new_download", "New Download")
+        .text("menu_import_export", "Import / Export")
+        .separator()
+        .text("menu_save_session", "Save Session")
+        .separator()
+        .item(&PredefinedMenuItem::quit(app, Some("Quit Flamingo Downloader"))?)
+        .build()?;
+
+    let edit_menu = SubmenuBuilder::new(app, "Edit")
+        .item(&PredefinedMenuItem::undo(app, None)?)
+        .item(&PredefinedMenuItem::redo(app, None)?)
+        .separator()
+        .item(&PredefinedMenuItem::cut(app, None)?)
+        .item(&PredefinedMenuItem::copy(app, None)?)
+        .item(&PredefinedMenuItem::paste(app, None)?)
+        .item(&PredefinedMenuItem::select_all(app, None)?)
+        .build()?;
+
+    let view_menu = SubmenuBuilder::new(app, "View")
+        .text("menu_refresh_list", "Refresh List")
+        .text("menu_toggle_theme", "Toggle Dark/Light")
+        .text("menu_open_logs", "Open Logs")
+        .build()?;
+
+    let window_menu = SubmenuBuilder::new(app, "Window")
+        .item(&PredefinedMenuItem::minimize(app, None)?)
+        .item(&PredefinedMenuItem::maximize(app, None)?)
+        .separator()
+        .text("menu_open_settings", "Open Settings")
+        .text("menu_restore_main", "Restore Main Window")
+        .build()?;
+
+    let help_menu = SubmenuBuilder::new(app, "Help")
+        .text("menu_rpc_ping", "RPC Ping")
+        .text("menu_startup_check", "Startup Check")
+        .item(&PredefinedMenuItem::about(
+            app,
+            Some("About Flamingo Downloader"),
+            None,
+        )?)
+        .build()?;
+
+    AppMenuBuilder::new(app)
+        .items(&[
+            &file_menu,
+            &edit_menu,
+            &view_menu,
+            &window_menu,
+            &help_menu,
+        ])
+        .build()
+}
+
+#[cfg(target_os = "macos")]
+fn emit_system_menu_action(app: &tauri::AppHandle, action: &str) {
+    let _ = app.emit("system_menu_action", action);
+}
+
+#[cfg(target_os = "macos")]
+fn handle_app_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
+    let id = event.id().as_ref().to_string();
+    if let Some(state) = app.try_state::<AppState>() {
+        state
+            .service
+            .append_operation_log("app_menu_event", format!("id={id}"));
+    }
+    match id.as_str() {
+        "menu_new_download" => emit_system_menu_action(app, "open_add"),
+        "menu_import_export" => emit_system_menu_action(app, "open_import_export"),
+        "menu_refresh_list" => emit_system_menu_action(app, "refresh_list"),
+        "menu_toggle_theme" => emit_system_menu_action(app, "toggle_theme"),
+        "menu_open_settings" => emit_system_menu_action(app, "open_settings"),
+        "menu_open_logs" => {
+            let _ = open_logs_window(app.clone());
+        }
+        "menu_restore_main" => restore_main_window(app),
+        "menu_save_session" => {
+            if let Some(state) = app.try_state::<AppState>() {
+                let service = state.service.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = service.save_session().await;
+                });
+            }
+        }
+        "menu_rpc_ping" => {
+            if let Some(state) = app.try_state::<AppState>() {
+                let service = state.service.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = service.rpc_ping().await;
+                });
+            }
+        }
+        "menu_startup_check" => {
+            if let Some(state) = app.try_state::<AppState>() {
+                let service = state.service.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = service.startup_check_aria2().await;
+                });
+            }
+        }
+        _ => {}
     }
 }
 
@@ -748,6 +859,11 @@ fn main() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::default().build());
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .enable_macos_default_menu(false)
+        .menu(|app| build_app_menu(app))
+        .on_menu_event(handle_app_menu_event);
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(tauri_plugin_liquid_glass::init());
     #[cfg(not(target_os = "macos"))]

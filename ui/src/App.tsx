@@ -1988,52 +1988,42 @@ export default function App() {
     }
   }, [msg])
 
-  const onSystemToolAction = useCallback(
-    async (key: string) => {
-      switch (key) {
-        case 'open_settings':
-          await openSettings()
-          break
-        case 'import_export':
-          await openImportExport()
-          break
-        case 'open_logs':
-          await openLogsWindow()
-          break
-        case 'rpc_ping':
-          await doRpcPing()
-          break
-        case 'restart_aria2':
-          await doRestart()
-          break
-        case 'startup_check':
-          await doStartupCheck()
-          break
-        case 'save_session':
-          await doSaveSession()
-          break
-        case 'export_debug_bundle':
-          await doExportDebugBundle()
-          break
-        case 'update_aria2_now':
-          await doUpdateAria2Now()
-          break
-        default:
-          break
+  useEffect(() => {
+    let unlistenMenu: (() => void) | null = null
+    const bindMenuAction = async () => {
+      try {
+        unlistenMenu = await listen<string>('system_menu_action', (event) => {
+          const action = String(event.payload || '')
+          if (!action) return
+          switch (action) {
+            case 'open_add':
+              void onOpenAdd()
+              break
+            case 'open_import_export':
+              void openImportExport()
+              break
+            case 'refresh_list':
+              void refresh()
+              break
+            case 'toggle_theme':
+              void quickToggleTheme()
+              break
+            case 'open_settings':
+              void openSettings()
+              break
+            default:
+              break
+          }
+        })
+      } catch {
+        // ignore if event permission/listen unavailable
       }
-    },
-    [
-      doExportDebugBundle,
-      doRestart,
-      doRpcPing,
-      doSaveSession,
-      doStartupCheck,
-      doUpdateAria2Now,
-      openImportExport,
-      openLogsWindow,
-      openSettings,
-    ],
-  )
+    }
+    void bindMenuAction()
+    return () => {
+      if (unlistenMenu) unlistenMenu()
+    }
+  }, [onOpenAdd, openImportExport, refresh, quickToggleTheme, openSettings])
 
   const shortcutItems = useMemo(
     () =>
@@ -2709,26 +2699,6 @@ export default function App() {
                 <Button icon={<FileSearchOutlined />} onClick={openLogsWindow}>
                   {t('logsWindow')}
                 </Button>
-                <Dropdown
-                  menu={{
-                    items: [
-                      { key: 'open_settings', label: t('systemOpenSettings') },
-                      { key: 'import_export', label: t('systemImportExport') },
-                      { key: 'open_logs', label: t('systemOpenLogs') },
-                      { type: 'divider' },
-                      { key: 'rpc_ping', label: t('systemRpcPing') },
-                      { key: 'restart_aria2', label: t('systemRestartAria2') },
-                      { key: 'startup_check', label: t('systemStartupCheck') },
-                      { key: 'save_session', label: t('systemSaveSession') },
-                      { type: 'divider' },
-                      { key: 'export_debug_bundle', label: t('systemExportDebugBundle') },
-                      { key: 'update_aria2_now', label: t('systemUpdateAria2Now') },
-                    ],
-                    onClick: ({ key }) => void onSystemToolAction(String(key)),
-                  }}
-                >
-                  <Button icon={<SlidersOutlined />}>{t('systemTools')}</Button>
-                </Dropdown>
                 <Button icon={<SyncOutlined />} onClick={quickToggleTheme}>
                   {t('darkLight')}
                 </Button>
