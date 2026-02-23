@@ -1,5 +1,5 @@
 use std::{
-    sync::{Arc, RwLock},
+    sync::{Arc, OnceLock, RwLock},
     time::Duration,
 };
 
@@ -13,16 +13,35 @@ use flamingo_downloader::{
 };
 use serde::Serialize;
 #[cfg(target_os = "macos")]
+use sys_locale::get_locale;
+#[cfg(target_os = "macos")]
 use tauri::ActivationPolicy;
 #[cfg(not(target_os = "macos"))]
 use tauri::include_image;
 #[cfg(not(target_os = "macos"))]
-use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+#[cfg(target_os = "macos")]
+use tauri::menu::{MenuBuilder as AppMenuBuilder, PredefinedMenuItem, SubmenuBuilder};
 #[cfg(not(target_os = "macos"))]
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, LogicalSize, Manager, Size, State};
 #[cfg(target_os = "macos")]
 use tauri_plugin_liquid_glass::{GlassMaterialVariant, LiquidGlassConfig, LiquidGlassExt};
+
+#[cfg(target_os = "macos")]
+static APP_LOCALE_OVERRIDE: OnceLock<RwLock<Option<String>>> = OnceLock::new();
+
+#[cfg(target_os = "macos")]
+fn app_locale_override() -> &'static RwLock<Option<String>> {
+    APP_LOCALE_OVERRIDE.get_or_init(|| RwLock::new(None))
+}
+
+#[cfg(target_os = "macos")]
+fn set_app_locale_override(locale: &str) {
+    if let Ok(mut guard) = app_locale_override().write() {
+        *guard = Some(locale.to_string());
+    }
+}
 
 #[derive(Default)]
 struct TauriEventEmitter {
@@ -232,6 +251,232 @@ fn ensure_main_window_bounds(win: &tauri::WebviewWindow) {
             let _ = win.center();
         }
     }
+}
+
+#[cfg(target_os = "macos")]
+struct MenuI18n {
+    file: &'static str,
+    edit: &'static str,
+    view: &'static str,
+    window: &'static str,
+    help: &'static str,
+    new_download: &'static str,
+    import_export: &'static str,
+    save_session: &'static str,
+    quit: &'static str,
+    minimize: &'static str,
+    maximize: &'static str,
+    refresh_list: &'static str,
+    toggle_theme: &'static str,
+    open_logs: &'static str,
+    open_settings: &'static str,
+    restore_main_window: &'static str,
+    rpc_ping: &'static str,
+    startup_check: &'static str,
+    about: &'static str,
+}
+
+#[cfg(target_os = "macos")]
+fn menu_i18n() -> MenuI18n {
+    let locale = app_locale_override()
+        .read()
+        .ok()
+        .and_then(|g| g.clone())
+        .or_else(get_locale)
+        .unwrap_or_else(|| "en-US".to_string())
+        .to_ascii_lowercase();
+    let is_zh = locale.starts_with("zh");
+    if is_zh {
+        MenuI18n {
+            file: "文件",
+            edit: "编辑",
+            view: "视图",
+            window: "窗口",
+            help: "帮助",
+            new_download: "新建下载",
+            import_export: "导入 / 导出",
+            save_session: "保存会话",
+            quit: "退出 Flamingo Downloader",
+            minimize: "最小化窗口",
+            maximize: "缩放窗口",
+            refresh_list: "刷新列表",
+            toggle_theme: "切换亮色/暗色",
+            open_logs: "打开日志",
+            open_settings: "打开设置",
+            restore_main_window: "恢复主窗口",
+            rpc_ping: "RPC 连通检查",
+            startup_check: "启动自检",
+            about: "关于 Flamingo Downloader",
+        }
+    } else {
+        MenuI18n {
+            file: "File",
+            edit: "Edit",
+            view: "View",
+            window: "Window",
+            help: "Help",
+            new_download: "New Download",
+            import_export: "Import / Export",
+            save_session: "Save Session",
+            quit: "Quit Flamingo Downloader",
+            minimize: "Minimize Window",
+            maximize: "Zoom Window",
+            refresh_list: "Refresh List",
+            toggle_theme: "Toggle Dark/Light",
+            open_logs: "Open Logs",
+            open_settings: "Open Settings",
+            restore_main_window: "Restore Main Window",
+            rpc_ping: "RPC Ping",
+            startup_check: "Startup Check",
+            about: "About Flamingo Downloader",
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn build_app_menu<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> tauri::Result<tauri::menu::Menu<R>> {
+    let i18n = menu_i18n();
+
+    let file_menu = SubmenuBuilder::new(app, i18n.file)
+        .text("menu_new_download", i18n.new_download)
+        .text("menu_import_export", i18n.import_export)
+        .separator()
+        .text("menu_save_session", i18n.save_session)
+        .separator()
+        .text("menu_quit_app", i18n.quit)
+        .build()?;
+
+    let edit_menu = SubmenuBuilder::new(app, i18n.edit)
+        .item(&PredefinedMenuItem::undo(app, None)?)
+        .item(&PredefinedMenuItem::redo(app, None)?)
+        .separator()
+        .item(&PredefinedMenuItem::cut(app, None)?)
+        .item(&PredefinedMenuItem::copy(app, None)?)
+        .item(&PredefinedMenuItem::paste(app, None)?)
+        .item(&PredefinedMenuItem::select_all(app, None)?)
+        .build()?;
+
+    let view_menu = SubmenuBuilder::new(app, i18n.view)
+        .text("menu_refresh_list", i18n.refresh_list)
+        .text("menu_toggle_theme", i18n.toggle_theme)
+        .text("menu_open_logs", i18n.open_logs)
+        .build()?;
+
+    let window_menu = SubmenuBuilder::new(app, i18n.window)
+        .text("menu_window_minimize", i18n.minimize)
+        .text("menu_window_maximize", i18n.maximize)
+        .separator()
+        .text("menu_open_settings", i18n.open_settings)
+        .text("menu_restore_main", i18n.restore_main_window)
+        .build()?;
+
+    let help_menu = SubmenuBuilder::new(app, i18n.help)
+        .text("menu_rpc_ping", i18n.rpc_ping)
+        .text("menu_startup_check", i18n.startup_check)
+        .text("menu_about", i18n.about)
+        .build()?;
+
+    AppMenuBuilder::new(app)
+        .items(&[&file_menu, &edit_menu, &view_menu, &window_menu, &help_menu])
+        .build()
+}
+
+fn emit_system_menu_action(app: &tauri::AppHandle, action: &str) {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.emit("system_menu_action", action);
+    } else {
+        let _ = app.emit("system_menu_action", action);
+    }
+}
+
+fn handle_app_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
+    let id = event.id().as_ref().to_string();
+    if let Some(state) = app.try_state::<AppState>() {
+        state
+            .service
+            .append_operation_log("app_menu_event", format!("id={id}"));
+    }
+    match id.as_str() {
+        "menu_new_download" => emit_system_menu_action(app, "open_add"),
+        "menu_import_export" => emit_system_menu_action(app, "open_import_export"),
+        "menu_refresh_list" => emit_system_menu_action(app, "refresh_list"),
+        "menu_toggle_theme" => emit_system_menu_action(app, "toggle_theme"),
+        "menu_open_settings" => emit_system_menu_action(app, "open_settings"),
+        "menu_quit_app" => app.exit(0),
+        "menu_window_minimize" => {
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.minimize();
+            }
+        }
+        "menu_window_maximize" => {
+            if let Some(win) = app.get_webview_window("main") {
+                match win.is_maximized() {
+                    Ok(true) => {
+                        let _ = win.unmaximize();
+                    }
+                    _ => {
+                        let _ = win.maximize();
+                    }
+                }
+            }
+        }
+        "menu_about" => emit_system_menu_action(app, "open_about"),
+        "menu_open_logs" => {
+            let _ = open_logs_window(app.clone());
+        }
+        "menu_restore_main" => restore_main_window(app),
+        "menu_save_session" => {
+            if let Some(state) = app.try_state::<AppState>() {
+                let service = state.service.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = service.save_session().await;
+                });
+            }
+        }
+        "menu_rpc_ping" => emit_system_menu_action(app, "rpc_ping"),
+        "menu_startup_check" => emit_system_menu_action(app, "startup_check"),
+        _ => {}
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn build_app_menu<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> tauri::Result<tauri::menu::Menu<R>> {
+    let file_menu = SubmenuBuilder::new(app, "File")
+        .text("menu_new_download", "New Download")
+        .text("menu_import_export", "Import / Export")
+        .separator()
+        .text("menu_save_session", "Save Session")
+        .separator()
+        .text("menu_quit_app", "Quit Flamingo Downloader")
+        .build()?;
+
+    let view_menu = SubmenuBuilder::new(app, "View")
+        .text("menu_refresh_list", "Refresh List")
+        .text("menu_toggle_theme", "Toggle Dark/Light")
+        .text("menu_open_logs", "Open Logs")
+        .build()?;
+
+    let window_menu = SubmenuBuilder::new(app, "Window")
+        .text("menu_window_minimize", "Minimize Window")
+        .text("menu_window_maximize", "Maximize / Restore Window")
+        .separator()
+        .text("menu_open_settings", "Open Settings")
+        .text("menu_restore_main", "Restore Main Window")
+        .build()?;
+
+    let help_menu = SubmenuBuilder::new(app, "Help")
+        .text("menu_rpc_ping", "RPC Ping")
+        .text("menu_startup_check", "Startup Check")
+        .text("menu_about", "About Flamingo Downloader")
+        .build()?;
+
+    MenuBuilder::new(app)
+        .items(&[&file_menu, &view_menu, &window_menu, &help_menu])
+        .build()
 }
 
 #[cfg(target_os = "macos")]
@@ -504,6 +749,17 @@ async fn reset_global_settings_to_defaults(state: State<'_, AppState>) -> Result
 }
 
 #[tauri::command]
+async fn set_app_locale(app: tauri::AppHandle, locale: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        set_app_locale_override(&locale);
+        let menu = build_app_menu(&app).map_err(|e| e.to_string())?;
+        app.set_menu(menu).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 async fn suggest_save_dir(
     state: State<'_, AppState>,
     task_type: TaskType,
@@ -748,6 +1004,11 @@ fn main() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::default().build());
+    #[cfg(target_os = "macos")]
+    let builder = builder.enable_macos_default_menu(false);
+    let builder = builder
+        .menu(|app| build_app_menu(app))
+        .on_menu_event(handle_app_menu_event);
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(tauri_plugin_liquid_glass::init());
     #[cfg(not(target_os = "macos"))]
@@ -1025,6 +1286,7 @@ fn main() {
             set_global_settings,
             get_global_settings,
             reset_global_settings_to_defaults,
+            set_app_locale,
             suggest_save_dir,
             suggest_save_dir_detail,
             detect_aria2_bin_paths,
