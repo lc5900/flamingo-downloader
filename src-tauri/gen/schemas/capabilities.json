@@ -1,1 +1,1 @@
-{}
+{"default":{"identifier":"default","description":"Default capability set for main and logs windows","local":true,"windows":["main","logs-window-external"],"permissions":["core:default","core:event:allow-listen","core:event:allow-unlisten","clipboard-manager:default","clipboard-manager:allow-read-text","clipboard-manager:allow-write-text","dialog:default","window-state:default"]}}

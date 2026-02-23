@@ -8,6 +8,8 @@
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "clipboard-manager:default",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
     "dialog:default",
     "window-state:default"
   ]
