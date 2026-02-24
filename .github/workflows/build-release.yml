@@ -341,20 +341,53 @@ jobs:
         if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != '' && env.APPLE_CERTIFICATE_PASSWORD != '' && env.APPLE_SIGNING_IDENTITY != ''
         continue-on-error: true
         working-directory: src-tauri
-        run: cargo tauri build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/release/bundle/metadata
+          if cargo tauri build 2>&1 | tee target/release/bundle/metadata/macos-signed-build.log; then
+            exit 0
+          fi
+          echo "Signed macOS full bundle failed. Capturing DMG diagnostics..."
+          {
+            echo "---- bundle/dmg tree ----"
+            find target/release/bundle/dmg -maxdepth 2 -type f -print || true
+            echo "---- bundle_dmg.sh (head) ----"
+            sed -n '1,240p' target/release/bundle/dmg/bundle_dmg.sh || true
+            echo "---- rerun bundle_dmg.sh with xtrace ----"
+            bash -x target/release/bundle/dmg/bundle_dmg.sh || true
+          } 2>&1 | tee target/release/bundle/metadata/macos-dmg-debug.log
+          echo "Falling back to app-only bundle for signed macOS build."
+          cargo tauri build --bundles app 2>&1 | tee target/release/bundle/metadata/macos-signed-app-only.log
 
       - name: Build app bundle (macOS unsigned fallback)
         if: runner.os == 'macOS' && (env.APPLE_CERTIFICATE == '' || env.APPLE_CERTIFICATE_PASSWORD == '' || env.APPLE_SIGNING_IDENTITY == '' || steps.macos_signed_build.outcome == 'failure')
         working-directory: src-tauri
+        shell: bash
         run: |
+          set -euo pipefail
           if [ "${{ steps.macos_signed_build.outcome || '' }}" = "failure" ]; then
             echo "WARNING: macOS signed build failed. Falling back to unsigned build."
           else
             echo "WARNING: Missing macOS signing secrets (APPLE_CERTIFICATE/APPLE_CERTIFICATE_PASSWORD/APPLE_SIGNING_IDENTITY). Building unsigned artifact."
           fi
           unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
-          cargo tauri build
           mkdir -p target/release/bundle/metadata
+          if cargo tauri build 2>&1 | tee target/release/bundle/metadata/macos-unsigned-build.log; then
+            true
+          else
+            echo "Unsigned macOS full bundle failed. Capturing DMG diagnostics..."
+            {
+              echo "---- bundle/dmg tree ----"
+              find target/release/bundle/dmg -maxdepth 2 -type f -print || true
+              echo "---- bundle_dmg.sh (head) ----"
+              sed -n '1,240p' target/release/bundle/dmg/bundle_dmg.sh || true
+              echo "---- rerun bundle_dmg.sh with xtrace ----"
+              bash -x target/release/bundle/dmg/bundle_dmg.sh || true
+            } 2>&1 | tee target/release/bundle/metadata/macos-dmg-debug.log
+            echo "Falling back to app-only bundle for unsigned macOS build."
+            cargo tauri build --bundles app 2>&1 | tee target/release/bundle/metadata/macos-unsigned-app-only.log
+          fi
           cat > target/release/bundle/metadata/UNSIGNED-MACOS-BUILD.txt << 'EOF'
           This macOS artifact is unsigned and not notarized.
           Configure APPLE_CERTIFICATE/APPLE_SIGNING_IDENTITY/APPLE_ID/APPLE_PASSWORD/APPLE_TEAM_ID for signed releases.
