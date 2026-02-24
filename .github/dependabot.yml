@@ -29,6 +29,14 @@ updates:
       day: monday
       time: "04:20"
     open-pull-requests-limit: 10
+    groups:
+      ui-lint-stack:
+        patterns:
+          - "eslint"
+          - "@eslint/*"
+          - "eslint-*"
+          - "typescript-eslint"
+          - "@typescript-eslint/*"
     ignore:
       - dependency-name: "eslint"
         update-types:
