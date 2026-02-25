@@ -983,7 +983,7 @@ fn open_logs_window(app: tauri::AppHandle) -> Result<(), String> {
 fn close_logs_window(app: tauri::AppHandle) -> Result<(), String> {
     let label = "logs-window-external";
     if let Some(win) = app.get_webview_window(label) {
-        win.close().map_err(|e| e.to_string())?;
+        win.hide().map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -1014,10 +1014,15 @@ fn main() {
 
     let app = builder
         .on_window_event(|window, event| {
-            if window.label() != "main" {
-                return;
-            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "logs-window-external" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                    return;
+                }
+                if window.label() != "main" {
+                    return;
+                }
                 let minimize_to_tray = window
                     .state::<AppState>()
                     .service
