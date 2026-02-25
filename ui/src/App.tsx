@@ -2673,8 +2673,8 @@ export default function App() {
         <Layout className={`root-layout theme-${effectiveTheme} ${siderCollapsed ? 'sider-collapsed' : ''} ${windowMoving ? 'window-moving' : ''}`}>
           <Layout.Sider
             theme={effectiveTheme}
-            width={132}
-            collapsedWidth={72}
+            width={152}
+            collapsedWidth={88}
             collapsed={siderCollapsed}
             trigger={null}
             className={`side ${siderCollapsed ? 'side-collapsed' : ''}`}
