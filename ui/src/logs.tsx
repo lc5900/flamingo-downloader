@@ -65,10 +65,10 @@ export default function LogsApp() {
 
   const closeWindow = async () => {
     try {
-      await getCurrentWindow().close()
+      await invoke('close_logs_window')
     } catch (err) {
       try {
-        await invoke('close_logs_window')
+        await getCurrentWindow().destroy()
       } catch (err2) {
         msg.error(parseErr(err2 || err))
       }
