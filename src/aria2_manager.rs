@@ -126,21 +126,12 @@ fn resolve_aria2_bin(base_dir: &Path) -> PathBuf {
 
 fn stage_managed_aria2_copy_if_needed(base_dir: &Path, selected: &Path) -> Option<PathBuf> {
     let bin_dir = base_dir.join("aria2").join("bin");
-    let (managed_primary, managed_platform) = if cfg!(target_os = "windows") {
-        (
-            bin_dir.join("aria2c.exe"),
-            Some(bin_dir.join("windows").join("aria2c.exe")),
-        )
+    let managed_primary = if cfg!(target_os = "windows") {
+        bin_dir.join("aria2c.exe")
     } else if cfg!(target_os = "macos") {
-        (
-            bin_dir.join("aria2c"),
-            Some(bin_dir.join("macos").join("aria2c")),
-        )
+        bin_dir.join("aria2c")
     } else {
-        (
-            bin_dir.join("aria2c"),
-            Some(bin_dir.join("linux").join("aria2c")),
-        )
+        bin_dir.join("aria2c")
     };
 
     if managed_primary.exists() {
@@ -161,17 +152,6 @@ fn stage_managed_aria2_copy_if_needed(base_dir: &Path, selected: &Path) -> Optio
     {
         use std::os::unix::fs::PermissionsExt;
         let _ = fs::set_permissions(&managed_primary, fs::Permissions::from_mode(0o755));
-    }
-    if let Some(platform_path) = managed_platform {
-        if let Some(parent) = platform_path.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-        let _ = fs::copy(&managed_primary, &platform_path);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&platform_path, fs::Permissions::from_mode(0o755));
-        }
     }
     Some(managed_primary)
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { invoke } from '@tauri-apps/api/core'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { App as AntApp, Button, Card, ConfigProvider, Input, Select, Space, Switch, Table, Typography, message, theme } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import './logs.css'
@@ -64,9 +65,13 @@ export default function LogsApp() {
 
   const closeWindow = async () => {
     try {
-      await invoke('close_logs_window')
+      await getCurrentWindow().close()
     } catch (err) {
-      msg.error(parseErr(err))
+      try {
+        await invoke('close_logs_window')
+      } catch (err2) {
+        msg.error(parseErr(err2 || err))
+      }
     }
   }
 

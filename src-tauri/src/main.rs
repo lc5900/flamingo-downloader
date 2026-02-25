@@ -1,3 +1,8 @@
+#![cfg_attr(
+    all(target_os = "windows", not(debug_assertions)),
+    windows_subsystem = "windows"
+)]
+
 use std::{
     sync::{Arc, OnceLock, RwLock},
     time::Duration,
@@ -12,7 +17,6 @@ use flamingo_downloader::{
     },
 };
 use serde::Serialize;
-#[cfg(target_os = "macos")]
 use sys_locale::get_locale;
 #[cfg(target_os = "macos")]
 use tauri::ActivationPolicy;
@@ -28,15 +32,12 @@ use tauri::{Emitter, LogicalSize, Manager, Size, State};
 #[cfg(target_os = "macos")]
 use tauri_plugin_liquid_glass::{GlassMaterialVariant, LiquidGlassConfig, LiquidGlassExt};
 
-#[cfg(target_os = "macos")]
 static APP_LOCALE_OVERRIDE: OnceLock<RwLock<Option<String>>> = OnceLock::new();
 
-#[cfg(target_os = "macos")]
 fn app_locale_override() -> &'static RwLock<Option<String>> {
     APP_LOCALE_OVERRIDE.get_or_init(|| RwLock::new(None))
 }
 
-#[cfg(target_os = "macos")]
 fn set_app_locale_override(locale: &str) {
     if let Ok(mut guard) = app_locale_override().write() {
         *guard = Some(locale.to_string());
@@ -253,7 +254,6 @@ fn ensure_main_window_bounds(win: &tauri::WebviewWindow) {
     }
 }
 
-#[cfg(target_os = "macos")]
 struct MenuI18n {
     file: &'static str,
     edit: &'static str,
@@ -276,7 +276,6 @@ struct MenuI18n {
     about: &'static str,
 }
 
-#[cfg(target_os = "macos")]
 fn menu_i18n() -> MenuI18n {
     let locale = app_locale_override()
         .read()
@@ -445,33 +444,35 @@ fn handle_app_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) 
 fn build_app_menu<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> tauri::Result<tauri::menu::Menu<R>> {
-    let file_menu = SubmenuBuilder::new(app, "File")
-        .text("menu_new_download", "New Download")
-        .text("menu_import_export", "Import / Export")
+    let i18n = menu_i18n();
+
+    let file_menu = SubmenuBuilder::new(app, i18n.file)
+        .text("menu_new_download", i18n.new_download)
+        .text("menu_import_export", i18n.import_export)
         .separator()
-        .text("menu_save_session", "Save Session")
+        .text("menu_save_session", i18n.save_session)
         .separator()
-        .text("menu_quit_app", "Quit Flamingo Downloader")
+        .text("menu_quit_app", i18n.quit)
         .build()?;
 
-    let view_menu = SubmenuBuilder::new(app, "View")
-        .text("menu_refresh_list", "Refresh List")
-        .text("menu_toggle_theme", "Toggle Dark/Light")
-        .text("menu_open_logs", "Open Logs")
+    let view_menu = SubmenuBuilder::new(app, i18n.view)
+        .text("menu_refresh_list", i18n.refresh_list)
+        .text("menu_toggle_theme", i18n.toggle_theme)
+        .text("menu_open_logs", i18n.open_logs)
         .build()?;
 
-    let window_menu = SubmenuBuilder::new(app, "Window")
-        .text("menu_window_minimize", "Minimize Window")
-        .text("menu_window_maximize", "Maximize / Restore Window")
+    let window_menu = SubmenuBuilder::new(app, i18n.window)
+        .text("menu_window_minimize", i18n.minimize)
+        .text("menu_window_maximize", i18n.maximize)
         .separator()
-        .text("menu_open_settings", "Open Settings")
-        .text("menu_restore_main", "Restore Main Window")
+        .text("menu_open_settings", i18n.open_settings)
+        .text("menu_restore_main", i18n.restore_main_window)
         .build()?;
 
-    let help_menu = SubmenuBuilder::new(app, "Help")
-        .text("menu_rpc_ping", "RPC Ping")
-        .text("menu_startup_check", "Startup Check")
-        .text("menu_about", "About Flamingo Downloader")
+    let help_menu = SubmenuBuilder::new(app, i18n.help)
+        .text("menu_rpc_ping", i18n.rpc_ping)
+        .text("menu_startup_check", i18n.startup_check)
+        .text("menu_about", i18n.about)
         .build()?;
 
     MenuBuilder::new(app)
@@ -750,12 +751,9 @@ async fn reset_global_settings_to_defaults(state: State<'_, AppState>) -> Result
 
 #[tauri::command]
 async fn set_app_locale(app: tauri::AppHandle, locale: String) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        set_app_locale_override(&locale);
-        let menu = build_app_menu(&app).map_err(|e| e.to_string())?;
-        app.set_menu(menu).map_err(|e| e.to_string())?;
-    }
+    set_app_locale_override(&locale);
+    let menu = build_app_menu(&app).map_err(|e| e.to_string())?;
+    app.set_menu(menu).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -1026,7 +1024,7 @@ fn main() {
                     .get_global_settings()
                     .ok()
                     .and_then(|s| s.minimize_to_tray)
-                    .unwrap_or(false);
+                    .unwrap_or(cfg!(target_os = "windows"));
                 if minimize_to_tray {
                     api.prevent_close();
                     #[cfg(target_os = "macos")]

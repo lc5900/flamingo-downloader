@@ -341,6 +341,12 @@ impl DownloadService {
             ffmpeg_args.push("-headers".to_string());
             ffmpeg_args.push("<custom headers>".to_string());
         }
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            cmd.as_std_mut().creation_flags(CREATE_NO_WINDOW);
+        }
         let mut child = cmd.spawn().map_err(|e| {
             anyhow!("ffmpeg merge start failed: {e}. check ffmpeg_bin_path setting")
         })?;
@@ -1295,7 +1301,7 @@ impl DownloadService {
             auto_clear_completed_days: Some(0),
             first_run_done: Some(true),
             start_minimized: Some(false),
-            minimize_to_tray: Some(false),
+            minimize_to_tray: Some(cfg!(target_os = "windows")),
             notify_on_complete: Some(true),
         };
         self.db.save_global_settings(&defaults)?;
@@ -2412,6 +2418,12 @@ fn probe_media_duration_ms(
         let mut merged = headers.join("\r\n");
         merged.push_str("\r\n");
         cmd.arg("-headers").arg(merged);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
     }
     let out = cmd.arg(url).output().ok()?;
     if !out.status.success() {

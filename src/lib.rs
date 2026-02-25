@@ -36,11 +36,8 @@ pub async fn init_backend(
 
     let db = Arc::new(Database::new(db_path)?);
     let aria2_cfg = Aria2RuntimeConfig::with_defaults(base_dir);
-    let resolved_aria2_default = if aria2_cfg.aria2_bin.exists() {
-        aria2_cfg.aria2_bin.to_string_lossy().to_string()
-    } else {
-        String::new()
-    };
+    let resolved_aria2_default = detect_existing_aria2_bin(base_dir)
+        .unwrap_or_else(|| aria2_cfg.aria2_bin.to_string_lossy().to_string());
     db.set_setting_if_absent(
         "download_dir",
         &aria2_cfg.default_download_dir.to_string_lossy(),
@@ -97,7 +94,23 @@ pub async fn init_backend(
     db.set_setting_if_absent("auto_clear_completed_days", "0")?;
     db.set_setting_if_absent("first_run_done", "false")?;
     db.set_setting_if_absent("start_minimized", "false")?;
-    db.set_setting_if_absent("minimize_to_tray", "false")?;
+    db.set_setting_if_absent(
+        "minimize_to_tray",
+        if cfg!(target_os = "windows") {
+            "true"
+        } else {
+            "false"
+        },
+    )?;
+    if cfg!(target_os = "windows") {
+        let migrated = db
+            .get_setting("windows_minimize_to_tray_migrated")?
+            .unwrap_or_default();
+        if migrated != "true" {
+            db.set_setting("minimize_to_tray", "true")?;
+            db.set_setting("windows_minimize_to_tray_migrated", "true")?;
+        }
+    }
     db.set_setting_if_absent("notify_on_complete", "true")?;
     db.set_setting_if_absent("startup_notice_level", "")?;
     db.set_setting_if_absent("startup_notice_message", "")?;
@@ -201,6 +214,54 @@ fn is_bundled_resource_aria2_path(value: &str) -> bool {
     }
     let text = value.replace('\\', "/");
     text.contains("/resources/aria2/bin/")
+}
+
+fn detect_existing_aria2_bin(base_dir: &Path) -> Option<String> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    let local_bin = base_dir.join("aria2").join("bin");
+    if cfg!(target_os = "windows") {
+        candidates.push(local_bin.join("aria2c.exe"));
+        candidates.push(local_bin.join("windows").join("aria2c.exe"));
+    } else if cfg!(target_os = "macos") {
+        candidates.push(local_bin.join("aria2c"));
+        candidates.push(local_bin.join("macos").join("aria2c"));
+        candidates.push(local_bin.join("darwin").join("aria2c"));
+    } else {
+        candidates.push(local_bin.join("aria2c"));
+        candidates.push(local_bin.join("linux").join("aria2c"));
+    }
+
+    if let Some(resource_dir) = std::env::var_os("FLAMINGO_RESOURCE_DIR").map(PathBuf::from) {
+        let resource_bin = resource_dir.join("aria2").join("bin");
+        if cfg!(target_os = "windows") {
+            candidates.push(resource_bin.join("aria2c.exe"));
+            candidates.push(resource_bin.join("windows").join("aria2c.exe"));
+        } else if cfg!(target_os = "macos") {
+            candidates.push(resource_bin.join("aria2c"));
+            candidates.push(resource_bin.join("macos").join("aria2c"));
+            candidates.push(resource_bin.join("darwin").join("aria2c"));
+        } else {
+            candidates.push(resource_bin.join("aria2c"));
+            candidates.push(resource_bin.join("linux").join("aria2c"));
+        }
+    }
+
+    if let Some(path_var) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path_var) {
+            if cfg!(target_os = "windows") {
+                candidates.push(dir.join("aria2c.exe"));
+            } else {
+                candidates.push(dir.join("aria2c"));
+            }
+        }
+    }
+
+    for candidate in candidates {
+        if candidate.exists() && candidate.is_file() {
+            return Some(candidate.to_string_lossy().to_string());
+        }
+    }
+    None
 }
 
 fn detect_default_ffmpeg_bin() -> String {
