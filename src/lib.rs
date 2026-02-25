@@ -51,6 +51,8 @@ pub async fn init_backend(
     if should_reset_aria2_path {
         db.set_setting("aria2_bin_path", &resolved_aria2_default)?;
     }
+    // Keep diagnostics/runtime path in sync with the effective resolved binary path.
+    db.set_setting("aria2_bin_path", &resolved_aria2_default)?;
     db.set_setting_if_absent(
         "max_concurrent_downloads",
         &aria2_cfg.max_concurrent_downloads.to_string(),
@@ -237,7 +239,14 @@ fn is_runtime_managed_aria2_path(base_dir: &Path, value: &str) -> bool {
 
 fn detect_existing_aria2_bin(base_dir: &Path) -> Option<String> {
     let mut candidates: Vec<PathBuf> = Vec::new();
+    let mut resource_roots = Vec::new();
     if let Some(resource_dir) = std::env::var_os("FLAMINGO_RESOURCE_DIR").map(PathBuf::from) {
+        resource_roots.push(resource_dir);
+    }
+    if let Some(resource_dir) = infer_resource_dir_from_current_exe() {
+        resource_roots.push(resource_dir);
+    }
+    for resource_dir in resource_roots {
         let resource_bin = resource_dir.join("aria2").join("bin");
         if cfg!(target_os = "windows") {
             candidates.push(resource_bin.join("aria2c.exe"));
@@ -281,6 +290,20 @@ fn detect_existing_aria2_bin(base_dir: &Path) -> Option<String> {
         }
     }
     None
+}
+
+fn infer_resource_dir_from_current_exe() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    #[cfg(target_os = "macos")]
+    {
+        let contents = exe.parent()?.parent()?.parent()?;
+        return Some(contents.join("Resources"));
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let parent = exe.parent()?;
+        return Some(parent.join("resources"));
+    }
 }
 
 fn detect_default_ffmpeg_bin() -> String {

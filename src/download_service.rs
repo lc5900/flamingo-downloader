@@ -1351,6 +1351,10 @@ impl DownloadService {
             }
         };
 
+        for p in bundled_aria2_candidates_for_detection() {
+            push_unique(p);
+        }
+
         let configured = self.aria2_bin_path();
         if !configured.trim().is_empty() {
             push_unique(PathBuf::from(configured.trim()));
@@ -4482,4 +4486,44 @@ fn extract_task_name(status: &Value) -> Option<String> {
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
         })
+}
+
+fn bundled_aria2_candidates_for_detection() -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let mut roots = Vec::new();
+    if let Some(resource_dir) = std::env::var_os("FLAMINGO_RESOURCE_DIR").map(PathBuf::from) {
+        roots.push(resource_dir);
+    }
+    if let Some(resource_dir) = infer_resource_dir_from_current_exe() {
+        roots.push(resource_dir);
+    }
+    for root in roots {
+        let bin = root.join("aria2").join("bin");
+        if cfg!(target_os = "windows") {
+            out.push(bin.join("aria2c.exe"));
+            out.push(bin.join("windows").join("aria2c.exe"));
+        } else if cfg!(target_os = "macos") {
+            out.push(bin.join("aria2c"));
+            out.push(bin.join("macos").join("aria2c"));
+            out.push(bin.join("darwin").join("aria2c"));
+        } else {
+            out.push(bin.join("aria2c"));
+            out.push(bin.join("linux").join("aria2c"));
+        }
+    }
+    out
+}
+
+fn infer_resource_dir_from_current_exe() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    #[cfg(target_os = "macos")]
+    {
+        let contents = exe.parent()?.parent()?.parent()?;
+        return Some(contents.join("Resources"));
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let parent = exe.parent()?;
+        return Some(parent.join("resources"));
+    }
 }

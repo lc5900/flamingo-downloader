@@ -127,22 +127,42 @@ fn resolve_aria2_bin(base_dir: &Path) -> PathBuf {
 
 fn bundled_aria2_candidates() -> Vec<PathBuf> {
     let mut out = Vec::new();
-    let Some(resource_dir) = std::env::var_os("FLAMINGO_RESOURCE_DIR").map(PathBuf::from) else {
-        return out;
-    };
-    let bin_dir = resource_dir.join("aria2").join("bin");
-    if cfg!(target_os = "windows") {
-        out.push(bin_dir.join("windows").join("aria2c.exe"));
-        out.push(bin_dir.join("aria2c.exe"));
-    } else if cfg!(target_os = "macos") {
-        out.push(bin_dir.join("macos").join("aria2c"));
-        out.push(bin_dir.join("darwin").join("aria2c"));
-        out.push(bin_dir.join("aria2c"));
-    } else {
-        out.push(bin_dir.join("linux").join("aria2c"));
-        out.push(bin_dir.join("aria2c"));
+    let mut resource_roots = Vec::new();
+    if let Some(resource_dir) = std::env::var_os("FLAMINGO_RESOURCE_DIR").map(PathBuf::from) {
+        resource_roots.push(resource_dir);
+    }
+    if let Some(resource_dir) = infer_resource_dir_from_current_exe() {
+        resource_roots.push(resource_dir);
+    }
+    for resource_dir in resource_roots {
+        let bin_dir = resource_dir.join("aria2").join("bin");
+        if cfg!(target_os = "windows") {
+            out.push(bin_dir.join("windows").join("aria2c.exe"));
+            out.push(bin_dir.join("aria2c.exe"));
+        } else if cfg!(target_os = "macos") {
+            out.push(bin_dir.join("macos").join("aria2c"));
+            out.push(bin_dir.join("darwin").join("aria2c"));
+            out.push(bin_dir.join("aria2c"));
+        } else {
+            out.push(bin_dir.join("linux").join("aria2c"));
+            out.push(bin_dir.join("aria2c"));
+        }
     }
     out
+}
+
+fn infer_resource_dir_from_current_exe() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    #[cfg(target_os = "macos")]
+    {
+        let contents = exe.parent()?.parent()?.parent()?;
+        return Some(contents.join("Resources"));
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let parent = exe.parent()?;
+        return Some(parent.join("resources"));
+    }
 }
 
 fn system_aria2_candidates() -> Vec<PathBuf> {
