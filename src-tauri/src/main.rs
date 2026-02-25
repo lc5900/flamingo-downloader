@@ -21,6 +21,8 @@ use sys_locale::get_locale;
 #[cfg(target_os = "macos")]
 use tauri::ActivationPolicy;
 #[cfg(not(target_os = "macos"))]
+use tauri::Theme;
+#[cfg(not(target_os = "macos"))]
 use tauri::include_image;
 #[cfg(not(target_os = "macos"))]
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
@@ -274,6 +276,22 @@ struct MenuI18n {
     rpc_ping: &'static str,
     startup_check: &'static str,
     about: &'static str,
+}
+
+#[cfg(not(target_os = "macos"))]
+fn preferred_menu_theme(
+    service: &flamingo_downloader::download_service::DownloadService,
+) -> Option<Theme> {
+    let ui_theme = service
+        .get_global_settings()
+        .ok()
+        .and_then(|s| s.ui_theme)
+        .unwrap_or_else(|| "system".to_string());
+    match ui_theme.trim().to_ascii_lowercase().as_str() {
+        "dark" => Some(Theme::Dark),
+        "light" => Some(Theme::Light),
+        _ => None,
+    }
 }
 
 fn menu_i18n() -> MenuI18n {
@@ -769,6 +787,13 @@ async fn set_app_locale(app: tauri::AppHandle, locale: String) -> Result<(), Str
     app.set_menu(menu).map_err(|e| e.to_string())?;
     #[cfg(not(target_os = "macos"))]
     {
+        if let Some(state) = app.try_state::<AppState>() {
+            let theme = preferred_menu_theme(&state.service);
+            app.set_theme(theme);
+            if let Some(main) = app.get_webview_window("main") {
+                let _ = main.set_theme(theme);
+            }
+        }
         if let Some(main) = app.get_webview_window("main") {
             let _ = main.show_menu();
         }
@@ -1127,6 +1152,11 @@ fn main() {
             });
             #[cfg(not(target_os = "macos"))]
             {
+                let theme = preferred_menu_theme(&app.state::<AppState>().service);
+                app.set_theme(theme);
+                if let Some(main) = app.get_webview_window("main") {
+                    let _ = main.set_theme(theme);
+                }
                 let _ = app.show_menu();
                 if let Some(main) = app.get_webview_window("main") {
                     let _ = main.show_menu();
