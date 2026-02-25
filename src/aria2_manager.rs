@@ -121,39 +121,7 @@ fn resolve_aria2_bin(base_dir: &Path) -> PathBuf {
             }
         });
 
-    stage_managed_aria2_copy_if_needed(base_dir, &selected).unwrap_or(selected)
-}
-
-fn stage_managed_aria2_copy_if_needed(base_dir: &Path, selected: &Path) -> Option<PathBuf> {
-    let bin_dir = base_dir.join("aria2").join("bin");
-    let managed_primary = if cfg!(target_os = "windows") {
-        bin_dir.join("aria2c.exe")
-    } else if cfg!(target_os = "macos") {
-        bin_dir.join("aria2c")
-    } else {
-        bin_dir.join("aria2c")
-    };
-
-    if managed_primary.exists() {
-        return Some(managed_primary);
-    }
-    if !selected.exists() || selected == managed_primary {
-        return None;
-    }
-
-    if let Some(parent) = managed_primary.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
-    let copy_ok = fs::copy(selected, &managed_primary).is_ok();
-    if !copy_ok {
-        return None;
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(&managed_primary, fs::Permissions::from_mode(0o755));
-    }
-    Some(managed_primary)
+    selected
 }
 
 fn bundled_aria2_candidates() -> Vec<PathBuf> {

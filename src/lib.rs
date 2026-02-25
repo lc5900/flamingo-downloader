@@ -46,7 +46,8 @@ pub async fn init_backend(
     let current_aria2_bin = db.get_setting("aria2_bin_path")?.unwrap_or_default();
     let should_reset_aria2_path = current_aria2_bin.trim().is_empty()
         || !Path::new(current_aria2_bin.trim()).exists()
-        || is_bundled_resource_aria2_path(current_aria2_bin.trim());
+        || is_bundled_resource_aria2_path(current_aria2_bin.trim())
+        || is_runtime_managed_aria2_path(base_dir, current_aria2_bin.trim());
     if should_reset_aria2_path {
         db.set_setting("aria2_bin_path", &resolved_aria2_default)?;
     }
@@ -216,21 +217,18 @@ fn is_bundled_resource_aria2_path(value: &str) -> bool {
     text.contains("/resources/aria2/bin/")
 }
 
+fn is_runtime_managed_aria2_path(base_dir: &Path, value: &str) -> bool {
+    let v = value.trim();
+    if v.is_empty() {
+        return false;
+    }
+    let p = Path::new(v);
+    let managed_root = base_dir.join("aria2").join("bin");
+    p.starts_with(&managed_root)
+}
+
 fn detect_existing_aria2_bin(base_dir: &Path) -> Option<String> {
     let mut candidates: Vec<PathBuf> = Vec::new();
-    let local_bin = base_dir.join("aria2").join("bin");
-    if cfg!(target_os = "windows") {
-        candidates.push(local_bin.join("aria2c.exe"));
-        candidates.push(local_bin.join("windows").join("aria2c.exe"));
-    } else if cfg!(target_os = "macos") {
-        candidates.push(local_bin.join("aria2c"));
-        candidates.push(local_bin.join("macos").join("aria2c"));
-        candidates.push(local_bin.join("darwin").join("aria2c"));
-    } else {
-        candidates.push(local_bin.join("aria2c"));
-        candidates.push(local_bin.join("linux").join("aria2c"));
-    }
-
     if let Some(resource_dir) = std::env::var_os("FLAMINGO_RESOURCE_DIR").map(PathBuf::from) {
         let resource_bin = resource_dir.join("aria2").join("bin");
         if cfg!(target_os = "windows") {
@@ -244,6 +242,19 @@ fn detect_existing_aria2_bin(base_dir: &Path) -> Option<String> {
             candidates.push(resource_bin.join("aria2c"));
             candidates.push(resource_bin.join("linux").join("aria2c"));
         }
+    }
+
+    let local_bin = base_dir.join("aria2").join("bin");
+    if cfg!(target_os = "windows") {
+        candidates.push(local_bin.join("aria2c.exe"));
+        candidates.push(local_bin.join("windows").join("aria2c.exe"));
+    } else if cfg!(target_os = "macos") {
+        candidates.push(local_bin.join("aria2c"));
+        candidates.push(local_bin.join("macos").join("aria2c"));
+        candidates.push(local_bin.join("darwin").join("aria2c"));
+    } else {
+        candidates.push(local_bin.join("aria2c"));
+        candidates.push(local_bin.join("linux").join("aria2c"));
     }
 
     if let Some(path_var) = std::env::var_os("PATH") {

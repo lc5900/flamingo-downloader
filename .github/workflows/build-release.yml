@@ -285,7 +285,6 @@ jobs:
           test -x "aria2/bin/aria2c"
           test -x "aria2/bin/${platform}/aria2c"
           test -x "src-tauri/resources/aria2/bin/aria2c"
-          test -x "src-tauri/resources/aria2/bin/${platform}/aria2c"
           aria2/bin/aria2c --version | head -n 1
           src-tauri/resources/aria2/bin/aria2c --version | head -n 1
 
@@ -297,8 +296,7 @@ jobs:
           $paths = @(
             "aria2/bin/aria2c.exe",
             "aria2/bin/windows/aria2c.exe",
-            "src-tauri/resources/aria2/bin/aria2c.exe",
-            "src-tauri/resources/aria2/bin/windows/aria2c.exe"
+            "src-tauri/resources/aria2/bin/aria2c.exe"
           )
           foreach ($p in $paths) {
             if (!(Test-Path $p)) { throw "missing staged aria2 binary: $p" }

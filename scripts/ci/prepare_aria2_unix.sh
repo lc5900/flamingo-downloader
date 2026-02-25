@@ -26,17 +26,14 @@ case "$(uname -s)" in
 esac
 
 mkdir -p "${ARIA2_BIN_DIR}/${platform}"
-mkdir -p "${TAURI_RESOURCE_ARIA2_DIR}/${platform}"
 cp "${binary_path}" "${ARIA2_BIN_DIR}/${platform}/aria2c"
 cp "${binary_path}" "${ARIA2_BIN_DIR}/aria2c"
-cp "${binary_path}" "${TAURI_RESOURCE_ARIA2_DIR}/${platform}/aria2c"
 cp "${binary_path}" "${TAURI_RESOURCE_ARIA2_DIR}/aria2c"
 chmod +x "${ARIA2_BIN_DIR}/${platform}/aria2c" "${ARIA2_BIN_DIR}/aria2c"
-chmod +x "${TAURI_RESOURCE_ARIA2_DIR}/${platform}/aria2c" "${TAURI_RESOURCE_ARIA2_DIR}/aria2c"
+chmod +x "${TAURI_RESOURCE_ARIA2_DIR}/aria2c"
 
 echo "Staged aria2 binary:"
 echo "  - ${ARIA2_BIN_DIR}/${platform}/aria2c"
 echo "  - ${ARIA2_BIN_DIR}/aria2c"
-echo "  - ${TAURI_RESOURCE_ARIA2_DIR}/${platform}/aria2c"
 echo "  - ${TAURI_RESOURCE_ARIA2_DIR}/aria2c"
 "${ARIA2_BIN_DIR}/aria2c" --version | head -n 1
