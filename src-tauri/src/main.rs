@@ -964,26 +964,33 @@ fn open_logs_window(app: tauri::AppHandle) -> Result<(), String> {
     }
     let label = "logs-window-external";
     if let Some(win) = app.get_webview_window(label) {
+        let _ = win.remove_menu();
+        let _ = win.hide_menu();
         let _ = win.show();
         let _ = win.set_focus();
         return Ok(());
     }
 
-    tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::App("logs.html".into()))
-        .title("Operation Logs")
-        .inner_size(780.0, 560.0)
-        .resizable(true)
-        .center()
-        .build()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    let win =
+        tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::App("logs.html".into()))
+            .title("Operation Logs")
+            .inner_size(780.0, 560.0)
+            .resizable(true)
+            .center()
+            .build()
+            .map_err(|e| e.to_string())?;
+    let _ = win.remove_menu();
+    let _ = win.hide_menu();
+    Ok(())
 }
 
 #[tauri::command]
 fn close_logs_window(app: tauri::AppHandle) -> Result<(), String> {
     let label = "logs-window-external";
     if let Some(win) = app.get_webview_window(label) {
-        win.hide().map_err(|e| e.to_string())?;
+        if win.close().is_err() {
+            let _ = win.hide();
+        }
     }
     Ok(())
 }
@@ -1015,11 +1022,6 @@ fn main() {
     let app = builder
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "logs-window-external" {
-                    api.prevent_close();
-                    let _ = window.hide();
-                    return;
-                }
                 if window.label() != "main" {
                     return;
                 }

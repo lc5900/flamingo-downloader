@@ -205,10 +205,15 @@ pub struct Aria2Client {
 
 impl Aria2Client {
     pub fn new(endpoint: String, secret: String) -> Self {
+        let http = Client::builder()
+            .connect_timeout(Duration::from_secs(2))
+            .timeout(Duration::from_secs(8))
+            .build()
+            .unwrap_or_else(|_| Client::new());
         Self {
             endpoint,
             secret,
-            http: Client::new(),
+            http,
         }
     }
 
