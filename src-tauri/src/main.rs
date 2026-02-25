@@ -754,6 +754,17 @@ async fn set_app_locale(app: tauri::AppHandle, locale: String) -> Result<(), Str
     set_app_locale_override(&locale);
     let menu = build_app_menu(&app).map_err(|e| e.to_string())?;
     app.set_menu(menu).map_err(|e| e.to_string())?;
+    #[cfg(not(target_os = "macos"))]
+    {
+        if let Some(main) = app.get_webview_window("main") {
+            let _ = main.show_menu();
+        }
+        if let Some(logs) = app.get_webview_window("logs-window-external") {
+            let empty_menu = MenuBuilder::new(&app).build().map_err(|e| e.to_string())?;
+            let _ = logs.set_menu(empty_menu);
+            let _ = logs.show_menu();
+        }
+    }
     Ok(())
 }
 
@@ -964,14 +975,21 @@ fn open_logs_window(app: tauri::AppHandle) -> Result<(), String> {
     }
     let label = "logs-window-external";
     if let Some(win) = app.get_webview_window(label) {
-        let _ = win.remove_menu();
-        let _ = win.hide_menu();
+        #[cfg(not(target_os = "macos"))]
+        {
+            let empty_menu = MenuBuilder::new(&app).build().map_err(|e| e.to_string())?;
+            let _ = win.set_menu(empty_menu);
+            let _ = win.show_menu();
+            if let Some(main) = app.get_webview_window("main") {
+                let _ = main.show_menu();
+            }
+        }
         let _ = win.show();
         let _ = win.set_focus();
         return Ok(());
     }
 
-    let win =
+    let _win =
         tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::App("logs.html".into()))
             .title("Operation Logs")
             .inner_size(780.0, 560.0)
@@ -979,8 +997,15 @@ fn open_logs_window(app: tauri::AppHandle) -> Result<(), String> {
             .center()
             .build()
             .map_err(|e| e.to_string())?;
-    let _ = win.remove_menu();
-    let _ = win.hide_menu();
+    #[cfg(not(target_os = "macos"))]
+    {
+        let empty_menu = MenuBuilder::new(&app).build().map_err(|e| e.to_string())?;
+        let _ = _win.set_menu(empty_menu);
+        let _ = _win.show_menu();
+        if let Some(main) = app.get_webview_window("main") {
+            let _ = main.show_menu();
+        }
+    }
     Ok(())
 }
 

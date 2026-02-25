@@ -61,6 +61,8 @@ import * as api from './api/client'
 import { ResizableTitle } from './components/ResizableTitle'
 import { defaultLayoutFor, useTableLayout } from './hooks/useTableLayout'
 import { detectLocale, I18N } from './i18n'
+import { DownloadedPage } from './pages/DownloadedPage'
+import { DownloadingPage } from './pages/DownloadingPage'
 import { useUiViewStore } from './stores/uiViewStore'
 import type {
   AddFormValues,
@@ -105,12 +107,6 @@ import 'react-resizable/css/styles.css'
 
 const AddDownloadPage = lazy(() =>
   import('./pages/AddDownloadPage').then((module) => ({ default: module.AddDownloadPage })),
-)
-const DownloadedPage = lazy(() =>
-  import('./pages/DownloadedPage').then((module) => ({ default: module.DownloadedPage })),
-)
-const DownloadingPage = lazy(() =>
-  import('./pages/DownloadingPage').then((module) => ({ default: module.DownloadingPage })),
 )
 const TaskDetailPage = lazy(() =>
   import('./pages/TaskDetailPage').then((module) => ({ default: module.TaskDetailPage })),
@@ -2952,20 +2948,26 @@ export default function App() {
                 </Card>
               </TaskPageShell>
               </Suspense>
-              <div className="content-status-bar">
-                <Space size={16}>
-                  <Typography.Text type="secondary">
-                    {t('navDownloading')}: <Typography.Text strong>{activeTaskCount}</Typography.Text>
-                  </Typography.Text>
-                  <Typography.Text type="secondary">
-                    {t('colSpeed')}: <Typography.Text strong>{fmtBytes(totalDownloadSpeed)}/s</Typography.Text>
-                  </Typography.Text>
-                  <Typography.Text type="secondary">
-                    {t('freeSpace')}:{' '}
-                    <Typography.Text strong>{fmtBytes(Number(storageSummary?.free_bytes || 0))}</Typography.Text>
-                  </Typography.Text>
-                </Space>
-              </div>
+              {section === 'downloading' && (
+                <div className="content-status-bar">
+                  <Space size={16}>
+                    <Typography.Text type="secondary">
+                      {t('navDownloading')}:{' '}
+                      <Typography.Text strong>{activeTaskCount}</Typography.Text>
+                    </Typography.Text>
+                    <Typography.Text type="secondary">
+                      {t('colSpeed')}:{' '}
+                      <Typography.Text strong>{fmtBytes(totalDownloadSpeed)}/s</Typography.Text>
+                    </Typography.Text>
+                    <Typography.Text type="secondary">
+                      {t('freeSpace')}:{' '}
+                      <Typography.Text strong>
+                        {fmtBytes(Number(storageSummary?.free_bytes || 0))}
+                      </Typography.Text>
+                    </Typography.Text>
+                  </Space>
+                </div>
+              )}
               </>
               )}
         {settingsOpen && (
