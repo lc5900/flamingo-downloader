@@ -285,8 +285,10 @@ jobs:
           test -x "aria2/bin/aria2c"
           test -x "aria2/bin/${platform}/aria2c"
           test -x "src-tauri/resources/aria2/bin/aria2c"
-          aria2/bin/aria2c --version | head -n 1
-          src-tauri/resources/aria2/bin/aria2c --version | head -n 1
+          aria2_ver="$(aria2/bin/aria2c --version)"
+          printf '%s\n' "${aria2_ver}" | sed -n '1p'
+          bundled_ver="$(src-tauri/resources/aria2/bin/aria2c --version)"
+          printf '%s\n' "${bundled_ver}" | sed -n '1p'
 
       - name: Verify staged aria2 (Windows)
         if: runner.os == 'Windows'

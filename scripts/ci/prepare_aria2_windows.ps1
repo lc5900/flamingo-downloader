@@ -6,6 +6,7 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot | Split-Path -Parent
 $Aria2BinDir = Join-Path $Root "aria2/bin"
 $TauriResourceAria2Dir = Join-Path $Root "src-tauri/resources/aria2/bin"
+New-Item -ItemType Directory -Path $TauriResourceAria2Dir -Force | Out-Null
 
 if ([string]::IsNullOrWhiteSpace($BinaryPath)) {
   $cmd = Get-Command aria2c.exe -ErrorAction SilentlyContinue
