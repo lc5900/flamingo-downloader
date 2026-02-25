@@ -27,7 +27,7 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 #[cfg(target_os = "macos")]
 use tauri::menu::{MenuBuilder as AppMenuBuilder, PredefinedMenuItem, SubmenuBuilder};
 #[cfg(not(target_os = "macos"))]
-use tauri::tray::{TrayIconBuilder, TrayIconEvent};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, LogicalSize, Manager, Size, State};
 #[cfg(target_os = "macos")]
 use tauri_plugin_liquid_glass::{GlassMaterialVariant, LiquidGlassConfig, LiquidGlassExt};
@@ -1233,7 +1233,18 @@ fn main() {
                         move |tray, event| {
                             service.append_operation_log("tray_icon_event", format!("{event:?}"));
                             match event {
-                                TrayIconEvent::Click { .. } | TrayIconEvent::DoubleClick { .. } => {
+                                TrayIconEvent::Click {
+                                    button,
+                                    button_state,
+                                    ..
+                                } if button == MouseButton::Left
+                                    && button_state == MouseButtonState::Up =>
+                                {
+                                    restore_main_window(tray.app_handle());
+                                }
+                                TrayIconEvent::DoubleClick { button, .. }
+                                    if button == MouseButton::Left =>
+                                {
                                     restore_main_window(tray.app_handle());
                                 }
                                 _ => {}
@@ -1251,7 +1262,18 @@ fn main() {
                     move |app, event| {
                         service.append_operation_log("app_tray_icon_event", format!("{event:?}"));
                         match event {
-                            TrayIconEvent::Click { .. } | TrayIconEvent::DoubleClick { .. } => {
+                            TrayIconEvent::Click {
+                                button,
+                                button_state,
+                                ..
+                            } if button == MouseButton::Left
+                                && button_state == MouseButtonState::Up =>
+                            {
+                                restore_main_window(app);
+                            }
+                            TrayIconEvent::DoubleClick { button, .. }
+                                if button == MouseButton::Left =>
+                            {
                                 restore_main_window(app);
                             }
                             _ => {}

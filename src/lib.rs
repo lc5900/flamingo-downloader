@@ -224,7 +224,15 @@ fn is_runtime_managed_aria2_path(base_dir: &Path, value: &str) -> bool {
     }
     let p = Path::new(v);
     let managed_root = base_dir.join("aria2").join("bin");
-    p.starts_with(&managed_root)
+    if p.starts_with(&managed_root) {
+        return true;
+    }
+    let managed_text = managed_root
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    let value_text = v.replace('\\', "/").to_ascii_lowercase();
+    value_text.starts_with(&managed_text)
 }
 
 fn detect_existing_aria2_bin(base_dir: &Path) -> Option<String> {

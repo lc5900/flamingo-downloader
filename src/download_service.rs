@@ -1107,7 +1107,8 @@ impl DownloadService {
     }
 
     pub async fn set_global_settings(&self, settings: GlobalSettings) -> Result<()> {
-        let manual_path = settings
+        let mut settings = settings;
+        let mut manual_path = settings
             .aria2_bin_path
             .as_ref()
             .map(|v| v.trim())
@@ -1117,13 +1118,37 @@ impl DownloadService {
         if let Some(path) = manual_path.as_deref() {
             let p = Path::new(path);
             if !p.exists() {
-                return Err(anyhow!("aria2_bin_path does not exist: {path}"));
+                self.push_log(
+                    "set_global_settings",
+                    format!("ignored invalid aria2_bin_path (does not exist): {path}"),
+                );
+                manual_path = None;
+                settings.aria2_bin_path = None;
+                self.db.set_setting("manual_aria2_bin_path", "")?;
             }
-            if !p.is_file() {
-                return Err(anyhow!("aria2_bin_path is not a file: {path}"));
+            if let Some(path) = manual_path.as_deref() {
+                let p = Path::new(path);
+                if !p.is_file() {
+                    self.push_log(
+                        "set_global_settings",
+                        format!("ignored invalid aria2_bin_path (not file): {path}"),
+                    );
+                    manual_path = None;
+                    settings.aria2_bin_path = None;
+                    self.db.set_setting("manual_aria2_bin_path", "")?;
+                }
             }
-            if !is_executable(p) {
-                return Err(anyhow!("aria2_bin_path is not executable: {path}"));
+            if let Some(path) = manual_path.as_deref() {
+                let p = Path::new(path);
+                if !is_executable(p) {
+                    self.push_log(
+                        "set_global_settings",
+                        format!("ignored invalid aria2_bin_path (not executable): {path}"),
+                    );
+                    manual_path = None;
+                    settings.aria2_bin_path = None;
+                    self.db.set_setting("manual_aria2_bin_path", "")?;
+                }
             }
         }
 

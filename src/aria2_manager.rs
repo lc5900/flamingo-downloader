@@ -105,8 +105,9 @@ fn resolve_aria2_bin(base_dir: &Path) -> PathBuf {
     } else {
         vec![bin_dir.join("linux").join("aria2c"), bin_dir.join("aria2c")]
     };
-    let mut candidates = base_candidates;
-    candidates.extend(bundled_aria2_candidates());
+    // Prefer packaged resources first (installed app), then local runtime paths.
+    let mut candidates = bundled_aria2_candidates();
+    candidates.extend(base_candidates);
 
     candidates.extend(system_aria2_candidates());
 
