@@ -335,7 +335,6 @@ impl Aria2Manager {
                 .stderr(std::process::Stdio::from(stderr_file));
             #[cfg(target_os = "windows")]
             {
-                use std::os::windows::process::CommandExt;
                 // Avoid flashing a terminal window when launching aria2 in GUI mode.
                 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
                 command.creation_flags(CREATE_NO_WINDOW);

@@ -256,6 +256,7 @@ fn ensure_main_window_bounds(win: &tauri::WebviewWindow) {
     }
 }
 
+#[allow(dead_code)]
 struct MenuI18n {
     file: &'static str,
     edit: &'static str,
@@ -411,7 +412,7 @@ fn emit_system_menu_action(app: &tauri::AppHandle, action: &str) {
 fn handle_app_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
     let id = event.id().as_ref().to_string();
     let logs_focused = app
-        .get_webview_window("logs-window-external")
+        .get_webview_window("logswindow")
         .and_then(|w| w.is_focused().ok())
         .unwrap_or(false);
     if let Some(state) = app.try_state::<AppState>() {
@@ -783,21 +784,12 @@ async fn reset_global_settings_to_defaults(state: State<'_, AppState>) -> Result
 #[tauri::command]
 async fn set_app_locale(app: tauri::AppHandle, locale: String) -> Result<(), String> {
     set_app_locale_override(&locale);
-    let menu = build_app_menu(&app).map_err(|e| e.to_string())?;
-    app.set_menu(menu).map_err(|e| e.to_string())?;
-    #[cfg(not(target_os = "macos"))]
-    {
-        if let Some(state) = app.try_state::<AppState>() {
-            let theme = preferred_menu_theme(&state.service);
-            app.set_theme(theme);
-            if let Some(main) = app.get_webview_window("main") {
-                let _ = main.set_theme(theme);
-            }
+    let app_clone = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Ok(menu) = build_app_menu(&app_clone) {
+            let _ = app_clone.set_menu(menu);
         }
-        if let Some(main) = app.get_webview_window("main") {
-            let _ = main.show_menu();
-        }
-    }
+    });
     Ok(())
 }
 
@@ -999,6 +991,8 @@ async fn get_app_update_strategy(state: State<'_, AppState>) -> Result<AppUpdate
         .map_err(|e| e.to_string())
 }
 
+static LOGS_WINDOW_CREATING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 #[tauri::command]
 fn open_logs_window(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(state) = app.try_state::<AppState>() {
@@ -1006,26 +1000,33 @@ fn open_logs_window(app: tauri::AppHandle) -> Result<(), String> {
             .service
             .append_operation_log("open_logs_window", "open logs window");
     }
-    let label = "logs-window-external";
+    let label = "logswindow";
     if let Some(win) = app.get_webview_window(label) {
         let _ = win.show();
         let _ = win.set_focus();
         return Ok(());
     }
 
-    tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::App("logs.html".into()))
+    if LOGS_WINDOW_CREATING.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return Ok(());
+    }
+
+    let result = tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::App("logs.html".into()))
         .title("Operation Logs")
         .inner_size(780.0, 560.0)
         .resizable(true)
         .center()
         .build()
         .map(|_| ())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string());
+
+    LOGS_WINDOW_CREATING.store(false, std::sync::atomic::Ordering::SeqCst);
+    result
 }
 
 #[tauri::command]
 fn close_logs_window(app: tauri::AppHandle) -> Result<(), String> {
-    let label = "logs-window-external";
+    let label = "logswindow";
     if let Some(win) = app.get_webview_window(label) {
         if win.destroy().is_err() && win.close().is_err() {
             let _ = win.hide();
@@ -1400,7 +1401,7 @@ fn main() {
         }
     };
 
-    app.run(|app_handle, event| {
+    app.run(|_app_handle, _event| {
         #[cfg(target_os = "macos")]
         if let tauri::RunEvent::Opened { urls } = &event {
             for url in urls {
