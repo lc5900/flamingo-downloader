@@ -2,11 +2,9 @@ import {
   App as AntApp,
   Button,
   Card,
-  Collapse,
   ConfigProvider,
   Divider,
   Drawer,
-  Dropdown,
   Empty,
   Form,
   Input,
@@ -19,13 +17,11 @@ import {
   Space,
   Switch,
   Table,
-  Tabs,
   Tag,
   Tooltip,
   Tree,
   Descriptions,
   Typography,
-  Upload,
   message,
   notification,
   theme,
@@ -34,20 +30,9 @@ import type { ColumnsType } from 'antd/es/table'
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
-  CloudDownloadOutlined,
   DeleteOutlined,
-  DownloadOutlined,
-  FileDoneOutlined,
-  FileSearchOutlined,
   FolderOpenOutlined,
-  GlobalOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
-  PlusOutlined,
-  ReloadOutlined,
-  SettingOutlined,
   SlidersOutlined,
-  SyncOutlined,
   VerticalAlignBottomOutlined,
   VerticalAlignTopOutlined,
 } from '@ant-design/icons'
@@ -59,6 +44,11 @@ import { readText as readClipboardText, writeText as writeClipboardText } from '
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import * as api from './api/client'
 import { ResizableTitle } from './components/ResizableTitle'
+import { Sidebar } from './components/layout/Sidebar'
+import { TopHeader } from './components/layout/TopHeader'
+import { AddDownloadDialog } from './components/dialogs/AddDownloadDialog'
+import { SettingsView } from './components/dialogs/SettingsView'
+import { ShortcutEditorDialog, ShortcutCheatsheetDialog } from './components/dialogs/ShortcutDialogs'
 import { defaultLayoutFor, useTableLayout } from './hooks/useTableLayout'
 import { detectLocale, I18N } from './i18n'
 import { DownloadedPage } from './pages/DownloadedPage'
@@ -102,6 +92,7 @@ import {
   shortcutFromKeyboardEvent,
   type ShortcutDisplayMode,
 } from './utils/shortcuts'
+import type { ShortcutAction, ShortcutBindings, ShortcutItem } from './types/shortcuts'
 import './App.css'
 import 'react-resizable/css/styles.css'
 
@@ -119,21 +110,6 @@ const LOCALE_KEY = 'flamingo.locale'
 const SHORTCUT_STORAGE_KEY = 'flamingo.shortcuts.v1'
 const SHORTCUT_DISPLAY_MODE_KEY = 'flamingo.shortcuts.display_mode.v1'
 const PROGRESS_ROW_BG_KEY = 'flamingo.progress_row_bg_enabled.v1'
-
-type ShortcutAction =
-  | 'new_download'
-  | 'focus_search'
-  | 'refresh_list'
-  | 'open_settings'
-  | 'open_logs'
-  | 'toggle_theme'
-  | 'pause_all'
-  | 'resume_all'
-  | 'retry_failed'
-  | 'switch_downloading'
-  | 'switch_downloaded'
-
-type ShortcutBindings = Record<ShortcutAction, string>
 
 const DEFAULT_SHORTCUT_BINDINGS: ShortcutBindings = {
   new_download: 'CmdOrCtrl+N',
@@ -446,6 +422,7 @@ export default function App() {
   const [siderCollapsed, setSiderCollapsed] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [addType, setAddType] = useState<'url' | 'magnet' | 'torrent'>('url')
+  const [addUrl, setAddUrl] = useState('')
   const [addTorrentFile, setAddTorrentFile] = useState<File | null>(null)
   const [addMatchedRule, setAddMatchedRule] = useState<DownloadRule | null>(null)
   const [addSubmitting, setAddSubmitting] = useState(false)
@@ -512,6 +489,14 @@ export default function App() {
   const [addForm] = Form.useForm<AddFormValues>()
   const currentLayout = tableLayouts[section]
   const columnWidths = currentLayout.columnWidths
+  const urlValidationStatus = useMemo(() => {
+    if (addType !== 'url') return ''
+    const trimmed = addUrl.trim()
+    if (!trimmed) return ''
+    const detected = detectAddSource(trimmed)
+    if (!detected) return 'warning'
+    return detected.kind === 'url' ? 'success' : 'error'
+  }, [addType, addUrl])
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -745,6 +730,7 @@ export default function App() {
   const onOpenAdd = useCallback(async () => {
     setAddOpen(true)
     setAddType('url')
+    setAddUrl('')
     setAddTorrentFile(null)
     setAddMatchedRule(null)
     addForm.setFieldsValue({
@@ -778,6 +764,7 @@ export default function App() {
     if (inferred.kind === 'magnet') {
       setAddType('magnet')
       addForm.setFieldValue('magnet', inferred.value)
+      setAddUrl('')
       try {
         await suggestAndSetSaveDir('magnet', inferred.value)
       } catch {
@@ -786,6 +773,7 @@ export default function App() {
     } else {
       setAddType('url')
       addForm.setFieldValue('url', inferred.value)
+      setAddUrl(inferred.value)
       try {
         await suggestAndSetSaveDir('http', inferred.value)
       } catch {
@@ -1508,6 +1496,7 @@ export default function App() {
       if (String(file.name || '').toLowerCase().endsWith('.torrent')) {
         await onOpenAdd()
         setAddType('torrent')
+        setAddUrl('')
         setAddTorrentFile(file)
         try {
           await suggestAndSetSaveDir('torrent', file.name)
@@ -2086,7 +2075,7 @@ export default function App() {
         { key: 'retry_failed', label: t('shortcutRetryFailed') },
         { key: 'switch_downloading', label: t('shortcutSwitchDownloading') },
         { key: 'switch_downloaded', label: t('shortcutSwitchDownloaded') },
-      ] as Array<{ key: ShortcutAction; label: string }>,
+      ] as ShortcutItem[],
     [t],
   )
   const filteredShortcutItems = useMemo(() => {
@@ -2267,22 +2256,6 @@ export default function App() {
     return () => window.clearTimeout(timer)
   }, [addOpen, addType])
 
-  const onChangeAddType = async (key: string) => {
-    const next = key as 'url' | 'magnet' | 'torrent'
-    setAddType(next)
-    addForm.setFieldValue('preset_selected', undefined)
-    try {
-      const source =
-        next === 'url'
-          ? addForm.getFieldValue('url')
-          : next === 'magnet'
-            ? addForm.getFieldValue('magnet')
-            : addTorrentFile?.name || null
-      await suggestAndSetSaveDir(next === 'url' ? 'http' : next, source)
-    } catch {
-      // no-op
-    }
-  }
 
   const onResizeColumn = useCallback(
     (key: string) =>
@@ -2375,8 +2348,12 @@ export default function App() {
         ellipsis: true,
         render: (_: unknown, row: Task) => (
           <Space size={6}>
-            <span>{inferDisplayName(row)}</span>
-            {!!String(row.category || '').trim() && <Tag>{String(row.category)}</Tag>}
+            <span style={{ fontWeight: 500 }}>{inferDisplayName(row)}</span>
+            {!!String(row.category || '').trim() && (
+              <Tag bordered={false} color="geekblue">
+                {String(row.category)}
+              </Tag>
+            )}
           </Space>
         ),
       }
@@ -2636,138 +2613,64 @@ export default function App() {
 
   const TaskPageShell = section === 'downloaded' ? DownloadedPage : DownloadingPage
 
-  return (
-    <ConfigProvider
+  return (    <ConfigProvider
       theme={{
         algorithm: effectiveTheme === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
         token: {
           borderRadius: 12,
-          colorPrimary: '#1677ff',
-          fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',
+          colorPrimary: effectiveTheme === 'dark' ? '#818cf8' : '#6366f1',
+          colorInfo: effectiveTheme === 'dark' ? '#818cf8' : '#6366f1',
+          colorSuccess: '#10b981',
+          colorWarning: '#f59e0b',
+          colorError: '#ef4444',
+          fontFamily: "'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
           colorBgLayout: 'transparent',
           colorBgContainer:
             effectiveTheme === 'dark'
-              ? 'rgba(16, 22, 32, 0.32)'
-              : 'rgba(246, 250, 255, 0.36)',
+              ? 'rgba(15, 23, 42, 0.45)'
+              : 'rgba(255, 255, 255, 0.65)',
           colorBgElevated:
             effectiveTheme === 'dark'
-              ? 'rgba(16, 22, 32, 0.4)'
-              : 'rgba(246, 250, 255, 0.44)',
+              ? 'rgba(30, 41, 59, 0.6)'
+              : 'rgba(255, 255, 255, 0.85)',
           colorBgMask:
             effectiveTheme === 'dark'
-              ? 'rgba(6, 10, 18, 0.2)'
-              : 'rgba(14, 22, 36, 0.12)',
+              ? 'rgba(0, 0, 0, 0.4)'
+              : 'rgba(0, 0, 0, 0.15)',
           boxShadowSecondary:
             effectiveTheme === 'dark'
-              ? '0 12px 30px rgba(0, 8, 22, 0.24)'
-              : '0 12px 30px rgba(44, 80, 130, 0.14)',
+              ? '0 16px 48px rgba(0, 0, 0, 0.6)'
+              : '0 16px 48px rgba(0, 0, 0, 0.08)',
         },
       }}
     >
       <AntApp>
         {msgCtx}
         <Layout className={`root-layout theme-${effectiveTheme} ${siderCollapsed ? 'sider-collapsed' : ''} ${windowMoving ? 'window-moving' : ''}`}>
-          <Layout.Sider
-            theme={effectiveTheme}
-            width={152}
-            collapsedWidth={88}
-            collapsed={siderCollapsed}
-            trigger={null}
-            className={`side ${siderCollapsed ? 'side-collapsed' : ''}`}
-          >
-            <div className="brand">🦩</div>
-            <div className="side-nav">
-              <Tooltip title={siderCollapsed ? `${t('navDownloading')} (${tasks.filter((x) => x.status !== 'completed').length})` : undefined} placement="right">
-                <button
-                  type="button"
-                  className={`side-nav-item ${!settingsOpen && section === 'downloading' ? 'active' : ''}`}
-                  onClick={() => {
-                    setSettingsOpen(false)
-                    setSection('downloading')
-                  }}
-                >
-                  <DownloadOutlined className="side-nav-icon" />
-                  {!siderCollapsed && (
-                    <span className="side-nav-label">
-                      {t('navDownloading')}
-                      <span className="side-nav-count">{tasks.filter((x) => x.status !== 'completed').length}</span>
-                    </span>
-                  )}
-                </button>
-              </Tooltip>
-              <Tooltip title={siderCollapsed ? `${t('navDownloaded')} (${tasks.filter((x) => x.status === 'completed').length})` : undefined} placement="right">
-                <button
-                  type="button"
-                  className={`side-nav-item ${!settingsOpen && section === 'downloaded' ? 'active' : ''}`}
-                  onClick={() => {
-                    setSettingsOpen(false)
-                    setSection('downloaded')
-                  }}
-                >
-                  <FileDoneOutlined className="side-nav-icon" />
-                  {!siderCollapsed && (
-                    <span className="side-nav-label">
-                      {t('navDownloaded')}
-                      <span className="side-nav-count">{tasks.filter((x) => x.status === 'completed').length}</span>
-                    </span>
-                  )}
-                </button>
-              </Tooltip>
-              <Tooltip title={siderCollapsed ? t('settings') : undefined} placement="right">
-                <button
-                  type="button"
-                  className={`side-nav-item ${settingsOpen ? 'active' : ''}`}
-                  onClick={openSettings}
-                >
-                  <SettingOutlined className="side-nav-icon" />
-                  {!siderCollapsed && <span className="side-nav-label">{t('settings')}</span>}
-                </button>
-              </Tooltip>
-            </div>
-            <div className="side-footer">
-              <Tooltip title={siderCollapsed ? t('expandSidebar') : t('collapseSidebar')} placement="right">
-                <button
-                  type="button"
-                  className="side-collapse-btn"
-                  onClick={() => setSiderCollapsed((v) => !v)}
-                >
-                  {siderCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                </button>
-              </Tooltip>
-            </div>
-          </Layout.Sider>
+          <Sidebar
+            effectiveTheme={effectiveTheme}
+            siderCollapsed={siderCollapsed}
+            settingsOpen={settingsOpen}
+            section={section}
+            tasks={tasks}
+            t={t}
+            setSettingsOpen={setSettingsOpen}
+            setSection={setSection}
+            openSettings={openSettings}
+            setSiderCollapsed={setSiderCollapsed}
+          />
 
           <Layout>
-            <Layout.Header className="header">
-              <Space wrap>
-                <Button type="primary" icon={<CloudDownloadOutlined />} onClick={onOpenAdd}>
-                  {t('newDownload')}
-                </Button>
-                <Button icon={<FileSearchOutlined />} onClick={openLogsWindow}>
-                  {t('logsWindow')}
-                </Button>
-                <Button icon={<SyncOutlined />} onClick={quickToggleTheme}>
-                  {t('darkLight')}
-                </Button>
-                <Button icon={<ReloadOutlined />} onClick={refresh} loading={loading}>
-                  {t('refresh')}
-                </Button>
-                <Dropdown
-                  menu={{
-                    selectedKeys: [locale],
-                    items: [
-                      { key: 'en-US', label: 'English' },
-                      { key: 'zh-CN', label: '简体中文' },
-                    ],
-                    onClick: ({ key }) => setLocale(key as Locale),
-                  }}
-                >
-                  <Button icon={<GlobalOutlined />}>
-                    {locale === 'zh-CN' ? '简体中文' : 'English'}
-                  </Button>
-                </Dropdown>
-              </Space>
-            </Layout.Header>
+            <TopHeader
+              t={t}
+              locale={locale}
+              setLocale={setLocale}
+              onOpenAdd={onOpenAdd}
+              openLogsWindow={openLogsWindow}
+              quickToggleTheme={quickToggleTheme}
+              refresh={refresh}
+              loading={loading}
+            />
 
             <Layout.Content
               className="content"
@@ -2973,539 +2876,63 @@ export default function App() {
         {settingsOpen && (
           <Suspense fallback={null}>
         <SettingsPage>
-            <Card
-              className="main-card settings-card"
-              title={t('settingsTitle')}
-              extra={
-                <Space>
-                  <Button onClick={() => setSettingsOpen(false)}>{t('cancel')}</Button>
-                  <Button type="primary" onClick={saveSettings} loading={settingsSaving}>
-                    {t('save')}
-                  </Button>
-                </Space>
-              }
-            >
-            <div className="settings-inline-body">
-            <div className="settings-shell">
-            <Tabs
-              className="settings-tabs"
-              activeKey={settingsTab}
-              onChange={setSettingsTab}
-              items={[
-              {
-                key: 'basic',
-                label: t('tabBasic'),
-                children: (
-                  <Form form={settingsForm} layout="vertical" className="settings-form">
-                    <Form.Item name="first_run_done" hidden>
-                      <Input />
-                    </Form.Item>
-                    <Typography.Title level={5}>{t('grpAppearance')}</Typography.Title>
-                    <Form.Item name="ui_theme" label={t('themeMode')}>
-                      <Select
-                        options={[
-                          { label: t('themeSystem'), value: 'system' },
-                          { label: t('themeLight'), value: 'light' },
-                          { label: t('themeDark'), value: 'dark' },
-                        ]}
-                      />
-                    </Form.Item>
-                    <Form.Item label={t('progressRowBackground')} style={{ marginTop: -2, marginBottom: 8 }}>
-                      <Switch
-                        checked={progressRowBackgroundEnabled}
-                        checkedChildren={t('enabled')}
-                        unCheckedChildren={t('disabled')}
-                        onChange={(checked) => {
-                          setProgressRowBackgroundEnabled(checked)
-                          saveProgressRowBackgroundEnabled(checked)
-                        }}
-                      />
-                    </Form.Item>
-                    <Typography.Text type="secondary" style={{ display: 'block', marginTop: -6, marginBottom: 8 }}>
-                      {t('shortcutHint')}
-                    </Typography.Text>
-                    <Typography.Title level={5}>{t('grpShortcuts')}</Typography.Title>
-                    {isMac && (
-                      <Form.Item label={t('shortcutDisplayMode')} style={{ maxWidth: 260, marginBottom: 10 }}>
-                        <Select
-                          value={shortcutDisplayMode}
-                          onChange={(v) => {
-                            const mode = (v === 'symbol' ? 'symbol' : 'text') as ShortcutDisplayMode
-                            setShortcutDisplayMode(mode)
-                            saveShortcutDisplayMode(mode)
-                          }}
-                          options={[
-                            { label: t('shortcutDisplayText'), value: 'text' },
-                            { label: t('shortcutDisplaySymbol'), value: 'symbol' },
-                          ]}
-                        />
-                      </Form.Item>
-                    )}
-                    <Space direction="vertical" style={{ width: '100%' }}>
-                      {shortcutItems.map((item) => (
-                        <div key={item.key} className="grid-2" style={{ alignItems: 'center' }}>
-                          <Typography.Text>{item.label}</Typography.Text>
-                          <Space.Compact block>
-                            <Input
-                              value={displayShortcut(shortcutDraft[item.key])}
-                              readOnly
-                              placeholder={t('shortcutPress')}
-                            />
-                            <Button onClick={() => openShortcutEditor(item.key)}>{t('shortcutEdit')}</Button>
-                            <Button onClick={() => setShortcutBinding(item.key, '')}>{t('shortcutClear')}</Button>
-                          </Space.Compact>
-                        </div>
-                      ))}
-                      <Space>
-                        <Button onClick={() => setShortcutHelpOpen(true)}>{t('shortcutCheatsheet')}</Button>
-                        <Button
-                          onClick={() => {
-                            setShortcutDraft({ ...DEFAULT_SHORTCUT_BINDINGS })
-                          }}
-                        >
-                          {t('shortcutResetDefaults')}
-                        </Button>
-                      </Space>
-                    </Space>
-
-                    <Divider />
-                    <Typography.Title level={5}>{t('grpDownload')}</Typography.Title>
-                    <div className="grid-2">
-                      <Form.Item name="download_dir" label={t('downloadDir')}>
-                        <Input />
-                      </Form.Item>
-                      <Form.Item name="max_concurrent_downloads" label={t('maxConcurrent')}>
-                        <InputNumber min={1} style={{ width: '100%' }} />
-                      </Form.Item>
-                      <Form.Item name="max_connection_per_server" label={t('maxConn')}>
-                        <InputNumber min={1} style={{ width: '100%' }} />
-                      </Form.Item>
-                      <Form.Item name="max_overall_download_limit" label={t('maxLimit')}>
-                        <Input placeholder="0 / 10M / 2M" />
-                      </Form.Item>
-                    </div>
-                    <Form.Item name="bt_tracker" label={t('btTracker')}>
-                      <Input.TextArea rows={2} />
-                    </Form.Item>
-                    <Space wrap style={{ marginBottom: 12 }}>
-                      <Typography.Text type="secondary">{t('trackerPresets')}:</Typography.Text>
-                      <Button
-                        size="small"
-                        onClick={() =>
-                          settingsForm.setFieldValue(
-                            'bt_tracker',
-                            'udp://tracker.opentrackr.org:1337/announce,udp://open.demonii.com:1337/announce',
-                          )
-                        }
-                      >
-                        Public A
-                      </Button>
-                      <Button
-                        size="small"
-                        onClick={() =>
-                          settingsForm.setFieldValue(
-                            'bt_tracker',
-                            'udp://tracker.torrent.eu.org:451/announce,udp://tracker.moeking.me:6969/announce',
-                          )
-                        }
-                      >
-                        Public B
-                      </Button>
-                    </Space>
-
-                    <Divider />
-                    <Typography.Title level={5}>{t('grpAria2')}</Typography.Title>
-                    <Form.Item name="aria2_bin_path" label={t('aria2Path')}>
-                      <Input />
-                    </Form.Item>
-                    <Space style={{ marginBottom: 12 }}>
-                      <Button onClick={browseAria2Path}>{t('browse')}</Button>
-                      <Button onClick={detectAria2Path}>{t('detectAria2')}</Button>
-                      <Button onClick={loadSettings}>{t('reload')}</Button>
-                      <Button onClick={openImportExport}>{t('importExport')}</Button>
-                    </Space>
-                    <Form.Item name="enable_upnp" label={t('enableUpnp')} valuePropName="checked">
-                      <Switch />
-                    </Form.Item>
-
-                    <Divider />
-                    <Typography.Title level={5}>{t('grpIntegration')}</Typography.Title>
-                    <div className="grid-2">
-                      <Form.Item name="github_cdn" label={t('githubCdn')}>
-                        <Input />
-                      </Form.Item>
-                      <Form.Item name="github_token" label={t('githubToken')}>
-                        <Input.Password />
-                      </Form.Item>
-                      <Form.Item name="browser_bridge_enabled" label={t('bridgeEnabled')} valuePropName="checked">
-                        <Switch />
-                      </Form.Item>
-                      <Form.Item name="browser_bridge_port" label={t('bridgePort')}>
-                        <InputNumber min={1} max={65535} style={{ width: '100%' }} />
-                      </Form.Item>
-                    </div>
-                    <Form.Item name="browser_bridge_token" label={t('bridgeToken')}>
-                      <Input />
-                    </Form.Item>
-                    <Form.Item name="browser_bridge_allowed_origins" label={t('bridgeAllowedOrigins')}>
-                      <Input placeholder="chrome-extension://,moz-extension://" />
-                    </Form.Item>
-                    <Space wrap style={{ marginBottom: 8 }}>
-                      <Button loading={bridgeChecking} onClick={checkBridgeStatus}>
-                        {t('bridgeCheck')}
-                      </Button>
-                      <Button
-                        onClick={async () => {
-                          try {
-                            const token = await api.call<string>('rotate_browser_bridge_token')
-                            settingsForm.setFieldValue('browser_bridge_token', token)
-                            msg.success(t('settingsSaved'))
-                          } catch (err) {
-                            msg.error(parseErr(err))
-                          }
-                        }}
-                      >
-                        {t('rotateBridgeToken')}
-                      </Button>
-                      <Button
-                        loading={bridgeChecking}
-                        onClick={async () => {
-                          await saveSettings()
-                          await checkBridgeStatus()
-                        }}
-                      >
-                        {t('bridgeReconnect')}
-                      </Button>
-                      <Button onClick={() => setBridgeWizardOpen(true)}>{t('bridgePairWizard')}</Button>
-                      <Tag color={bridgeStatus?.connected ? 'green' : 'orange'}>
-                        {t('bridgeStatus')}: {bridgeStatus?.connected ? t('bridgeConnected') : t('bridgeDisconnected')}
-                      </Tag>
-                    </Space>
-                    <Typography.Text type="secondary" style={{ display: 'block', marginTop: -4, marginBottom: 8 }}>
-                      {bridgeStatus?.endpoint ? `${bridgeStatus.endpoint} - ${bridgeStatus.message}` : bridgeStatus?.message || '-'}
-                    </Typography.Text>
-                    <Form.Item name="clipboard_watch_enabled" label={t('clipboardWatchEnabled')} valuePropName="checked">
-                      <Switch />
-                    </Form.Item>
-
-                    <Divider />
-                    <Typography.Title level={5}>{t('grpReliability')}</Typography.Title>
-                    <div className="grid-2">
-                      <Form.Item name="retry_max_attempts" label={t('retryMaxAttempts')}>
-                        <InputNumber min={0} max={20} style={{ width: '100%' }} />
-                      </Form.Item>
-                      <Form.Item name="retry_backoff_secs" label={t('retryBackoff')}>
-                        <InputNumber min={1} max={3600} style={{ width: '100%' }} />
-                      </Form.Item>
-                      <Form.Item name="metadata_timeout_secs" label={t('metadataTimeout')}>
-                        <InputNumber min={30} max={3600} style={{ width: '100%' }} />
-                      </Form.Item>
-                    </div>
-                    <Form.Item name="retry_fallback_mirrors" label={t('retryMirrors')}>
-                      <Input.TextArea rows={2} placeholder="https://mirror1.example.com\nhttps://mirror2.example.com" />
-                    </Form.Item>
-                    <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
-                      {t('speedPlan')}
-                    </Typography.Text>
-                    <Space wrap style={{ marginBottom: 10 }}>
-                      <Typography.Text type="secondary">{t('scheduleMode')}</Typography.Text>
-                      <Select
-                        style={{ width: 260 }}
-                        value={speedPlanMode}
-                        onChange={(v) => onSpeedPlanModeChange(v as SpeedPlanMode)}
-                        options={[
-                          { label: t('scheduleManual'), value: 'manual' },
-                          { label: t('scheduleOff'), value: 'off' },
-                          { label: t('scheduleWorkdayLimited'), value: 'workday_limited' },
-                          { label: t('scheduleNightBoost'), value: 'night_boost' },
-                        ]}
-                      />
-                    </Space>
-                    <Form.List name="speed_plan_rules">
-                      {(fields, { add, remove }) => (
-                        <Space direction="vertical" style={{ width: '100%' }}>
-                          {fields.map((field) => (
-                            <Card key={field.key} size="small">
-                              <div className="grid-rule">
-                                <Form.Item name={[field.name, 'days']} label={t('speedDays')}>
-                                  <Input placeholder="1,2,3,4,5 (Mon=1..Sun=7)" />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'start']} label={t('speedStart')}>
-                                  <Input placeholder="09:00" />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'end']} label={t('speedEnd')}>
-                                  <Input placeholder="18:00" />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'limit']} label={t('speedLimit')}>
-                                  <Input placeholder="0 / 2M / 10M" />
-                                </Form.Item>
-                              </div>
-                              <Button danger onClick={() => remove(field.name)}>
-                                {t('removeRule')}
-                              </Button>
-                            </Card>
-                          ))}
-                          <Button
-                            icon={<PlusOutlined />}
-                            onClick={() =>
-                              add({
-                                days: '',
-                                start: '',
-                                end: '',
-                                limit: '0',
-                              })
-                            }
-                          >
-                            {t('addRule')}
-                          </Button>
-                        </Space>
-                      )}
-                    </Form.List>
-                    <Form.Item name="speed_plan" hidden>
-                      <Input />
-                    </Form.Item>
-                    <Form.Item
-                      name="auto_delete_control_files"
-                      label={t('autoDeleteControlFiles')}
-                      valuePropName="checked"
-                    >
-                      <Switch />
-                    </Form.Item>
-                    <Form.Item name="auto_clear_completed_days" label={t('autoClearCompletedDays')}>
-                      <InputNumber min={0} max={3650} style={{ width: '100%' }} />
-                    </Form.Item>
-
-                    <Divider />
-                    <Typography.Title level={5}>{isMac ? t('trayPrefsMac') : t('trayPrefs')}</Typography.Title>
-                    <div className="grid-2">
-                      <Form.Item name="start_minimized" label={t('startMinimized')} valuePropName="checked">
-                        <Switch />
-                      </Form.Item>
-                      <Form.Item
-                        name="minimize_to_tray"
-                        label={isMac ? t('minimizeToTrayMac') : t('minimizeToTray')}
-                        valuePropName="checked"
-                      >
-                        <Switch />
-                      </Form.Item>
-                      {isMac && (
-                        <Typography.Text type="secondary" style={{ display: 'block', marginTop: -8 }}>
-                          {t('trayRecoverHintMac')}
-                        </Typography.Text>
-                      )}
-                      {isMac && (
-                        <Typography.Text type="secondary" style={{ display: 'block', marginTop: 4 }}>
-                          {t('trayDisabledMac')}
-                        </Typography.Text>
-                      )}
-                      <Form.Item name="notify_on_complete" label={t('notifyOnComplete')} valuePropName="checked">
-                        <Switch />
-                      </Form.Item>
-                      <Form.Item name="post_complete_action" label={t('postCompleteAction')}>
-                        <Select
-                          options={[
-                            { label: t('postCompleteNone'), value: 'none' },
-                            { label: t('postCompleteOpenDir'), value: 'open_dir' },
-                            { label: t('postCompleteOpenFile'), value: 'open_file' },
-                          ]}
-                        />
-                      </Form.Item>
-                    </div>
-                    <Space style={{ marginBottom: 8 }}>
-                      <Button onClick={resetUiLayout}>{t('resetUiLayout')}</Button>
-                      <Button danger onClick={resetSettingsToDefaults}>{t('resetSettingsDefaults')}</Button>
-                    </Space>
-
-                    <Divider />
-                    <Typography.Title level={5}>{t('rulesTitle')}</Typography.Title>
-                    <Form.List name="download_dir_rules">
-                      {(fields, { add, remove }) => (
-                        <Space direction="vertical" style={{ width: '100%' }}>
-                          {fields.map((field) => (
-                            <Card key={field.key} size="small">
-                              <div className="grid-rule">
-                                <Form.Item name={[field.name, 'enabled']} label={t('enabled')} valuePropName="checked">
-                                  <Switch />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'matcher']} label={t('matcher')}>
-                                  <Select
-                                    options={[
-                                      { label: 'ext', value: 'ext' },
-                                      { label: 'domain', value: 'domain' },
-                                      { label: 'type', value: 'type' },
-                                    ]}
-                                  />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'pattern']} label={t('pattern')}>
-                                  <Input placeholder="mp4,mkv or github.com or torrent" />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'save_dir']} label={t('saveDir')}>
-                                  <Input placeholder="/path/to/save" />
-                                </Form.Item>
-                                <Form.Item
-                                  name={[field.name, 'subdir_by_domain']}
-                                  label={t('subdirByDomain')}
-                                  valuePropName="checked"
-                                >
-                                  <Switch />
-                                </Form.Item>
-                                <Form.Item
-                                  name={[field.name, 'subdir_by_date']}
-                                  label={t('subdirByDate')}
-                                  valuePropName="checked"
-                                >
-                                  <Switch />
-                                </Form.Item>
-                              </div>
-                              <Button danger onClick={() => remove(field.name)}>
-                                {t('removeRule')}
-                              </Button>
-                            </Card>
-                          ))}
-                          <Button
-                            icon={<PlusOutlined />}
-                            onClick={() =>
-                              add({
-                                enabled: true,
-                                matcher: 'ext',
-                                subdir_by_domain: false,
-                                subdir_by_date: false,
-                              })
-                            }
-                          >
-                            {t('addRule')}
-                          </Button>
-                        </Space>
-                      )}
-                    </Form.List>
-                    <Divider />
-                    <Typography.Title level={5}>{t('categoryRulesTitle')}</Typography.Title>
-                    <Form.List name="category_rules">
-                      {(fields, { add, remove }) => (
-                        <Space direction="vertical" style={{ width: '100%' }}>
-                          {fields.map((field) => (
-                            <Card key={field.key} size="small">
-                              <div className="grid-rule">
-                                <Form.Item name={[field.name, 'enabled']} label={t('enabled')} valuePropName="checked">
-                                  <Switch />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'matcher']} label={t('matcher')}>
-                                  <Select
-                                    options={[
-                                      { label: 'ext', value: 'ext' },
-                                      { label: 'domain', value: 'domain' },
-                                      { label: 'type', value: 'type' },
-                                    ]}
-                                  />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'pattern']} label={t('pattern')}>
-                                  <Input placeholder="mp4,mkv or github.com or torrent" />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'category']} label={t('categoryName')}>
-                                  <Input placeholder="video / docs / work" />
-                                </Form.Item>
-                              </div>
-                              <Button danger onClick={() => remove(field.name)}>
-                                {t('removeRule')}
-                              </Button>
-                            </Card>
-                          ))}
-                          <Button
-                            icon={<PlusOutlined />}
-                            onClick={() =>
-                              add({
-                                enabled: true,
-                                matcher: 'ext',
-                                category: '',
-                              })
-                            }
-                          >
-                            {t('addRule')}
-                          </Button>
-                        </Space>
-                      )}
-                    </Form.List>
-                  </Form>
-                ),
-              },
-              {
-                key: 'diagnostics',
-                label: t('tabDiagnostics'),
-                children: (
-                  <Space direction="vertical" style={{ width: '100%' }}>
-                    <Card size="small" title={t('startupSelfCheck')}>
-                      <Space direction="vertical" style={{ width: '100%' }}>
-                        <Typography.Text>
-                          aria2: <Typography.Text code>{startupSummary?.aria2_bin_path || '-'}</Typography.Text>
-                        </Typography.Text>
-                        <Typography.Text>
-                          {t('aria2PathSource')}:{' '}
-                          <Typography.Text code>
-                            {startupSummary?.aria2_path_source === 'manual'
-                              ? t('aria2SourceManual')
-                              : startupSummary?.aria2_path_source === 'bundled'
-                                ? t('aria2SourceBundled')
-                                : t('aria2SourceSystem')}
-                          </Typography.Text>
-                        </Typography.Text>
-                        <Space wrap>
-                          <Tag color={startupSummary?.aria2_bin_exists ? 'green' : 'red'}>
-                            bin {startupSummary?.aria2_bin_exists ? t('statusOk') : t('statusFail')}
-                          </Tag>
-                          <Tag color={startupSummary?.aria2_bin_executable ? 'green' : 'red'}>
-                            exec {startupSummary?.aria2_bin_executable ? t('statusOk') : t('statusFail')}
-                          </Tag>
-                          <Tag color={startupSummary?.download_dir_exists ? 'green' : 'red'}>
-                            dir {startupSummary?.download_dir_exists ? t('statusOk') : t('statusFail')}
-                          </Tag>
-                          <Tag color={startupSummary?.download_dir_writable ? 'green' : 'red'}>
-                            writable {startupSummary?.download_dir_writable ? t('statusOk') : t('statusFail')}
-                          </Tag>
-                          <Tag color={startupSummary?.rpc_ready ? 'green' : 'orange'}>
-                            rpc {startupSummary?.rpc_ready ? t('statusOk') : t('statusFail')}
-                          </Tag>
-                        </Space>
-                        <Typography.Text>
-                          download dir:{' '}
-                          <Typography.Text code>{startupSummary?.download_dir || '-'}</Typography.Text>
-                        </Typography.Text>
-                        <Typography.Text>
-                          rpc endpoint:{' '}
-                          <Typography.Text code>{startupSummary?.rpc_endpoint || '-'}</Typography.Text>
-                        </Typography.Text>
-                      </Space>
-                    </Card>
-                    <Space wrap>
-                      <Button onClick={doRpcPing}>{t('rpcPing')}</Button>
-                      <Button onClick={doRestart}>{t('restartAria2')}</Button>
-                      <Button onClick={doStartupCheck}>{t('startupCheck')}</Button>
-                      <Button onClick={doSaveSession}>{t('saveSession')}</Button>
-                      <Button onClick={doExportDebugBundle}>{t('exportDebug')}</Button>
-                      <Button icon={<ReloadOutlined />} onClick={loadDiagnostics}>{t('refresh')}</Button>
-                    </Space>
-                    <Input.TextArea value={diagnosticsText} autoSize={{ minRows: 12, maxRows: 22 }} readOnly />
-                  </Space>
-                ),
-              },
-              {
-                key: 'updates',
-                label: t('tabUpdates'),
-                children: (
-                  <Space direction="vertical" style={{ width: '100%' }}>
-                    <Space wrap>
-                      <Button onClick={loadUpdateInfo}>{t('checkUpdate')}</Button>
-                      <Button type="primary" onClick={doUpdateAria2Now}>{t('updateNow')}</Button>
-                    </Space>
-                    <Input.TextArea value={updateText} autoSize={{ minRows: 10, maxRows: 20 }} readOnly />
-                    <Input.TextArea value={appUpdateStrategyText} autoSize={{ minRows: 4, maxRows: 10 }} readOnly />
-                  </Space>
-                ),
-              },
-              ]}
+            <SettingsView
+              t={t}
+              setSettingsOpen={setSettingsOpen}
+              settingsTab={settingsTab}
+              setSettingsTab={setSettingsTab}
+              settingsForm={settingsForm}
+              saveSettings={saveSettings}
+              settingsSaving={settingsSaving}
+              progressRowBackgroundEnabled={progressRowBackgroundEnabled}
+              setProgressRowBackgroundEnabled={setProgressRowBackgroundEnabled}
+              saveProgressRowBackgroundEnabled={saveProgressRowBackgroundEnabled}
+              isMac={isMac}
+              shortcutDisplayMode={shortcutDisplayMode}
+              setShortcutDisplayMode={setShortcutDisplayMode}
+              saveShortcutDisplayMode={saveShortcutDisplayMode}
+              shortcutItems={shortcutItems}
+              shortcutDraft={shortcutDraft}
+              setShortcutDraft={setShortcutDraft}
+              displayShortcut={displayShortcut}
+              openShortcutEditor={(key) => openShortcutEditor(key as ShortcutAction)}
+              setShortcutBinding={(key, binding) => setShortcutBinding(key as ShortcutAction, binding)}
+              setShortcutHelpOpen={setShortcutHelpOpen}
+              DEFAULT_SHORTCUT_BINDINGS={DEFAULT_SHORTCUT_BINDINGS}
+              browseAria2Path={browseAria2Path}
+              detectAria2Path={detectAria2Path}
+              loadSettings={loadSettings}
+              openImportExport={openImportExport}
+              bridgeChecking={bridgeChecking}
+              checkBridgeStatus={checkBridgeStatus}
+              setBridgeWizardOpen={setBridgeWizardOpen}
+              bridgeStatus={bridgeStatus}
+              rotateBrowserBridgeToken={async () => {
+                try {
+                  const token = await api.call<string>('rotate_browser_bridge_token')
+                  settingsForm.setFieldValue('browser_bridge_token', token)
+                  msg.success(t('settingsSaved'))
+                } catch (err) {
+                  msg.error(parseErr(err))
+                }
+              }}
+              speedPlanMode={speedPlanMode}
+              onSpeedPlanModeChange={onSpeedPlanModeChange}
+              resetUiLayout={resetUiLayout}
+              resetSettingsToDefaults={resetSettingsToDefaults}
+              startupSummary={startupSummary}
+              doRpcPing={doRpcPing}
+              doRestart={doRestart}
+              doStartupCheck={doStartupCheck}
+              doSaveSession={doSaveSession}
+              doExportDebugBundle={doExportDebugBundle}
+              loadDiagnostics={loadDiagnostics}
+              diagnosticsText={diagnosticsText}
+              loadUpdateInfo={loadUpdateInfo}
+              doUpdateAria2Now={doUpdateAria2Now}
+              updateText={updateText}
+              appUpdateStrategyText={appUpdateStrategyText}
             />
-            </div>
-            </div>
-            </Card>
         </SettingsPage>
           </Suspense>
         )}
@@ -3514,283 +2941,56 @@ export default function App() {
           </Layout>
         </Layout>
 
-        <Modal
-          title={t('shortcutEditTitle')}
-          open={shortcutEditorOpen}
-          onCancel={() => {
-            setShortcutEditorOpen(false)
-            setShortcutEditingAction(null)
-          }}
-          onOk={applyShortcutEditor}
-          okText={t('save')}
-        >
-          <Space direction="vertical" style={{ width: '100%' }} size={10}>
-            <Typography.Text>
-              {t('shortcutCurrent')}:{' '}
-              <Typography.Text code>
-                {shortcutEditingAction
-                  ? displayShortcut(shortcutDraft[shortcutEditingAction]) || '-'
-                  : '-'}
-              </Typography.Text>
-            </Typography.Text>
-            <Typography.Text>
-              {t('shortcutNew')}:{' '}
-              <Typography.Text code>
-                {displayShortcut(shortcutCaptured) || t('shortcutPress')}
-              </Typography.Text>
-            </Typography.Text>
-            {shortcutConflictAction && (
-              <Typography.Text type="warning">
-                {i18nFormat(t('shortcutConflictWith'), {
-                  action: shortcutLabelMap.get(shortcutConflictAction) || shortcutConflictAction,
-                })}
-              </Typography.Text>
-            )}
-            <Typography.Text type="secondary">{t('shortcutRecording')}</Typography.Text>
-          </Space>
-        </Modal>
+        <ShortcutEditorDialog
+          t={t}
+          shortcutEditorOpen={shortcutEditorOpen}
+          setShortcutEditorOpen={setShortcutEditorOpen}
+          setShortcutEditingAction={(value) => setShortcutEditingAction(value as ShortcutAction | null)}
+          applyShortcutEditor={applyShortcutEditor}
+          shortcutEditingAction={shortcutEditingAction}
+          displayShortcut={displayShortcut}
+          shortcutDraft={shortcutDraft}
+          shortcutCaptured={shortcutCaptured}
+          shortcutConflictAction={shortcutConflictAction}
+          shortcutLabelMap={shortcutLabelMap}
+          i18nFormat={i18nFormat}
+        />
 
-        <Modal
-          title={t('shortcutCheatsheet')}
-          open={shortcutHelpOpen}
-          onCancel={() => setShortcutHelpOpen(false)}
-          footer={null}
-          width={680}
-        >
-          <Space direction="vertical" style={{ width: '100%' }} size={10}>
-            <Input
-              allowClear
-              value={shortcutHelpQuery}
-              onChange={(e) => setShortcutHelpQuery(e.target.value)}
-              placeholder={t('shortcutSearchPlaceholder')}
-            />
-            <div className="shortcut-help-list">
-              {filteredShortcutItems.map((item) => (
-                <div key={item.key} className="shortcut-help-row">
-                  <Typography.Text>{item.label}</Typography.Text>
-                  <Typography.Text code>
-                    {displayShortcut(shortcutDraft[item.key]) || '-'}
-                  </Typography.Text>
-                </div>
-              ))}
-            </div>
-          </Space>
-        </Modal>
+        <ShortcutCheatsheetDialog
+          t={t}
+          shortcutHelpOpen={shortcutHelpOpen}
+          setShortcutHelpOpen={setShortcutHelpOpen}
+          shortcutHelpQuery={shortcutHelpQuery}
+          setShortcutHelpQuery={setShortcutHelpQuery}
+          filteredShortcutItems={filteredShortcutItems}
+          displayShortcut={displayShortcut}
+          shortcutDraft={shortcutDraft}
+        />
 
         {addOpen && (
           <Suspense fallback={null}>
         <AddDownloadPage>
-          <Modal
-            title={addType === 'url' ? t('addUrlTitle') : addType === 'magnet' ? t('addMagnetTitle') : t('addTorrentTitle')}
-            open={addOpen}
-            onCancel={() => setAddOpen(false)}
-            onOk={onAddUrl}
-            okText={t('add')}
-            confirmLoading={addSubmitting}
-            className="add-modal"
-            rootClassName="add-modal-root"
-            style={{ top: 24 }}
-            styles={{
-              body: {
-                display: 'flex',
-                flexDirection: 'column',
-                minHeight: 0,
-                maxHeight: 'calc(100vh - 200px)',
-                overflowY: 'auto',
-                overflowX: 'hidden',
-              },
-            }}
-          >
-            <div className="add-modal-body">
-            <Tabs
-              activeKey={addType}
-              onChange={onChangeAddType}
-              items={[
-                { key: 'url', label: t('tabUrl') },
-                { key: 'magnet', label: t('tabMagnet') },
-                { key: 'torrent', label: t('tabTorrent') },
-              ]}
-            />
-            <Form form={addForm} layout="vertical">
-              {addType === 'url' && (
-                <Form.Item name="url" label={t('url')} rules={[{ required: true, message: t('urlRequired') }]}>
-                  <Input.TextArea
-                    id="add-url-input"
-                    autoSize={{ minRows: 2, maxRows: 8 }}
-                    placeholder="https://example.com/file.zip\nhttps://example.com/file2.zip"
-                    onPaste={(e) => {
-                      const pasted = e.clipboardData.getData('text')
-                      const inferred = detectAddSource(pasted)
-                      if (!inferred) return
-                      if (inferred.kind === 'magnet') {
-                        setAddType('magnet')
-                        addForm.setFieldValue('magnet', inferred.value)
-                        e.preventDefault()
-                      }
-                    }}
-                    onChange={async (e) => {
-                      try {
-                        await suggestAndSetSaveDir('http', e.target.value || null)
-                      } catch {
-                        setAddMatchedRule(null)
-                      }
-                    }}
-                  />
-                </Form.Item>
-              )}
-              {addType === 'magnet' && (
-                <Form.Item name="magnet" label={t('magnet')} rules={[{ required: true, message: t('magnetRequired') }]}>
-                  <Input.TextArea
-                    id="add-magnet-input"
-                    autoSize={{ minRows: 2, maxRows: 8 }}
-                    placeholder="magnet:?xt=urn:btih:..."
-                    onPaste={(e) => {
-                      const pasted = e.clipboardData.getData('text')
-                      const inferred = detectAddSource(pasted)
-                      if (!inferred) return
-                      if (inferred.kind === 'url') {
-                        setAddType('url')
-                        addForm.setFieldValue('url', inferred.value)
-                        e.preventDefault()
-                      }
-                    }}
-                    onChange={async (e) => {
-                      try {
-                        await suggestAndSetSaveDir('magnet', e.target.value || null)
-                      } catch {
-                        setAddMatchedRule(null)
-                      }
-                    }}
-                  />
-                </Form.Item>
-              )}
-              {addType === 'torrent' && (
-                <Form.Item label={t('torrentFile')} required help={!addTorrentFile ? t('torrentRequired') : undefined}>
-                  <Upload
-                    maxCount={1}
-                    beforeUpload={(file) => {
-                      setAddTorrentFile(file as File)
-                      suggestAndSetSaveDir('torrent', file.name)
-                        .catch(() => {
-                          setAddMatchedRule(null)
-                        })
-                      return false
-                    }}
-                    onRemove={() => {
-                      setAddTorrentFile(null)
-                    }}
-                  >
-                    <Button icon={<PlusOutlined />}>{t('selectFile')}</Button>
-                  </Upload>
-                </Form.Item>
-              )}
-              <Form.Item name="save_dir" label={t('saveDirOptional')}>
-                <Input placeholder="/path/to/downloads" />
-              </Form.Item>
-              <Typography.Text type="secondary" style={{ marginTop: -8, display: 'block', marginBottom: 8 }}>
-                {t('matchedRule')}:{' '}
-                {addMatchedRule
-                  ? `${addMatchedRule.matcher}=${addMatchedRule.pattern} -> ${addMatchedRule.save_dir}`
-                  : t('noMatchedRule')}
-              </Typography.Text>
-              <Collapse
-                size="small"
-                items={[
-                  {
-                    key: 'advanced',
-                    label: t('addAdvanced'),
-                    children: (
-                      <>
-                        <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
-                          {t('taskPresets')}
-                        </Typography.Text>
-                        <div className="grid-2">
-                          <Form.Item name="preset_name" label={t('presetName')}>
-                            <Input placeholder="default-http" />
-                          </Form.Item>
-                          <Form.Item name="preset_selected" label={t('presetSelect')}>
-                            <Select
-                              allowClear
-                              options={presetOptionsForCurrentType.map((preset) => ({
-                                label: preset.name,
-                                value: preset.name,
-                              }))}
-                            />
-                          </Form.Item>
-                        </div>
-                        <Space wrap style={{ marginBottom: 12 }}>
-                          <Button size="small" onClick={onSaveCurrentPreset}>
-                            {t('savePreset')}
-                          </Button>
-                          <Button size="small" onClick={onApplySelectedPreset}>
-                            {t('applyPreset')}
-                          </Button>
-                          <Button size="small" onClick={onExportPresets}>
-                            {t('exportPresets')}
-                          </Button>
-                          <Button size="small" onClick={onImportPresets}>
-                            {t('importPresets')}
-                          </Button>
-                        </Space>
-                        <div className="grid-2">
-                          <Form.Item name="out" label={t('outName')}>
-                            <Input placeholder="example.zip" />
-                          </Form.Item>
-                          {addType === 'url' && (
-                            <Form.Item name="merge_format" label={t('mergeOutputFormat')}>
-                              <Select
-                                options={[
-                                  { label: 'MP4', value: 'mp4' },
-                                  { label: 'MKV', value: 'mkv' },
-                                  { label: 'MOV', value: 'mov' },
-                                  { label: 'WEBM', value: 'webm' },
-                                ]}
-                              />
-                            </Form.Item>
-                          )}
-                          <Form.Item name="max_download_limit" label={t('maxDownloadLimit')}>
-                            <Input placeholder="0 / 2M / 10M" />
-                          </Form.Item>
-                          <Form.Item name="max_upload_limit" label={t('taskMaxUploadLimit')}>
-                            <Input placeholder="0 / 1M / 5M" />
-                          </Form.Item>
-                          {(addType === 'magnet' || addType === 'torrent') && (
-                            <Form.Item name="seed_ratio" label={t('seedRatio')}>
-                              <InputNumber min={0} step={0.1} style={{ width: '100%' }} />
-                            </Form.Item>
-                          )}
-                          {(addType === 'magnet' || addType === 'torrent') && (
-                            <Form.Item name="seed_time" label={t('seedTime')}>
-                              <InputNumber min={0} style={{ width: '100%' }} />
-                            </Form.Item>
-                          )}
-                          <Form.Item name="max_connection_per_server" label={t('taskMaxConn')}>
-                            <InputNumber min={1} style={{ width: '100%' }} />
-                          </Form.Item>
-                          <Form.Item name="split" label={t('taskSplit')}>
-                            <InputNumber min={1} style={{ width: '100%' }} />
-                          </Form.Item>
-                          <Form.Item name="user_agent" label={t('userAgent')}>
-                            <Input placeholder="Mozilla/5.0 ..." />
-                          </Form.Item>
-                          <Form.Item name="referer" label={t('referer')}>
-                            <Input placeholder="https://example.com" />
-                          </Form.Item>
-                          <Form.Item name="cookie" label={t('cookie')}>
-                            <Input placeholder="SESSION=xxx; token=yyy" />
-                          </Form.Item>
-                        </div>
-                        <Form.Item name="headers_text" label={t('extraHeaders')} style={{ marginBottom: 4 }}>
-                          <Input.TextArea rows={3} placeholder={t('extraHeadersPlaceholder')} />
-                        </Form.Item>
-                      </>
-                    ),
-                  },
-                ]}
-              />
-            </Form>
-            </div>
-          </Modal>
+          <AddDownloadDialog
+            t={t}
+            addOpen={addOpen}
+            setAddOpen={setAddOpen}
+            addType={addType}
+            onAddUrl={onAddUrl}
+            addSubmitting={addSubmitting}
+            addForm={addForm}
+            urlValidationStatus={urlValidationStatus}
+            setAddUrl={setAddUrl}
+            suggestAndSetSaveDir={suggestAndSetSaveDir}
+            addMatchedRule={addMatchedRule}
+            setAddMatchedRule={setAddMatchedRule}
+            addTorrentFile={addTorrentFile}
+            setAddTorrentFile={setAddTorrentFile}
+            presetOptionsForCurrentType={presetOptionsForCurrentType}
+            onSaveCurrentPreset={onSaveCurrentPreset}
+            onApplySelectedPreset={onApplySelectedPreset}
+            onExportPresets={onExportPresets}
+            onImportPresets={onImportPresets}
+          />
         </AddDownloadPage>
           </Suspense>
         )}
@@ -4257,3 +3457,5 @@ export default function App() {
     </ConfigProvider>
   )
 }
+
+
