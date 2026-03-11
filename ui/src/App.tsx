@@ -2348,8 +2348,12 @@ export default function App() {
         ellipsis: true,
         render: (_: unknown, row: Task) => (
           <Space size={6}>
-            <span>{inferDisplayName(row)}</span>
-            {!!String(row.category || '').trim() && <Tag>{String(row.category)}</Tag>}
+            <span style={{ fontWeight: 500 }}>{inferDisplayName(row)}</span>
+            {!!String(row.category || '').trim() && (
+              <Tag bordered={false} color="geekblue">
+                {String(row.category)}
+              </Tag>
+            )}
           </Space>
         ),
       }
@@ -2609,32 +2613,34 @@ export default function App() {
 
   const TaskPageShell = section === 'downloaded' ? DownloadedPage : DownloadingPage
 
-  return (
-    <ConfigProvider
+  return (    <ConfigProvider
       theme={{
         algorithm: effectiveTheme === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
         token: {
-          borderRadius: 14,
-          colorPrimary: '#0A84FF',
-          colorInfo: '#0A84FF',
-          fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+          borderRadius: 12,
+          colorPrimary: effectiveTheme === 'dark' ? '#818cf8' : '#6366f1',
+          colorInfo: effectiveTheme === 'dark' ? '#818cf8' : '#6366f1',
+          colorSuccess: '#10b981',
+          colorWarning: '#f59e0b',
+          colorError: '#ef4444',
+          fontFamily: "'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
           colorBgLayout: 'transparent',
           colorBgContainer:
             effectiveTheme === 'dark'
-              ? 'rgba(20, 28, 40, 0.35)'
-              : 'rgba(255, 255, 255, 0.55)',
+              ? 'rgba(15, 23, 42, 0.45)'
+              : 'rgba(255, 255, 255, 0.65)',
           colorBgElevated:
             effectiveTheme === 'dark'
-              ? 'rgba(30, 40, 56, 0.6)'
-              : 'rgba(255, 255, 255, 0.75)',
+              ? 'rgba(30, 41, 59, 0.6)'
+              : 'rgba(255, 255, 255, 0.85)',
           colorBgMask:
             effectiveTheme === 'dark'
-              ? 'rgba(0, 0, 0, 0.3)'
+              ? 'rgba(0, 0, 0, 0.4)'
               : 'rgba(0, 0, 0, 0.15)',
           boxShadowSecondary:
             effectiveTheme === 'dark'
-              ? '0 16px 40px rgba(0, 0, 0, 0.4)'
-              : '0 16px 40px rgba(0, 0, 0, 0.1)',
+              ? '0 16px 48px rgba(0, 0, 0, 0.6)'
+              : '0 16px 48px rgba(0, 0, 0, 0.08)',
         },
       }}
     >

@@ -33,16 +33,16 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   return (
     <Layout.Header className="header">
       <Space wrap>
-        <Button type="primary" icon={<CloudDownloadOutlined />} onClick={onOpenAdd}>
+        <Button type="primary" shape="round" icon={<CloudDownloadOutlined />} onClick={onOpenAdd}>
           {t('newDownload')}
         </Button>
-        <Button icon={<FileSearchOutlined />} onClick={openLogsWindow}>
+        <Button shape="round" icon={<FileSearchOutlined />} onClick={openLogsWindow}>
           {t('logsWindow')}
         </Button>
-        <Button icon={<SyncOutlined />} onClick={quickToggleTheme}>
+        <Button shape="round" icon={<SyncOutlined />} onClick={quickToggleTheme}>
           {t('darkLight')}
         </Button>
-        <Button icon={<ReloadOutlined />} onClick={refresh} loading={loading}>
+        <Button shape="round" icon={<ReloadOutlined />} onClick={refresh} loading={loading}>
           {t('refresh')}
         </Button>
         <Dropdown
@@ -55,7 +55,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             onClick: ({ key }) => setLocale(key as Locale),
           }}
         >
-          <Button icon={<GlobalOutlined />}>
+          <Button shape="round" icon={<GlobalOutlined />}>
             {locale === 'zh-CN' ? '简体中文' : 'English'}
           </Button>
         </Dropdown>
