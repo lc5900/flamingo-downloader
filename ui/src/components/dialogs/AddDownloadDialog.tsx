@@ -13,6 +13,7 @@ import {
 } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import type { FormInstance } from 'antd'
+import type { AddFormValues, DownloadRule, TaskOptionPreset } from '../../types'
 
 export interface AddDownloadDialogProps {
   t: (k: string) => string
@@ -21,15 +22,15 @@ export interface AddDownloadDialogProps {
   addType: 'url' | 'magnet' | 'torrent'
   onAddUrl: () => void
   addSubmitting: boolean
-  addForm: FormInstance<any>
+  addForm: FormInstance<AddFormValues>
   urlValidationStatus: '' | 'success' | 'warning' | 'error' | 'validating'
   setAddUrl: (v: string) => void
   suggestAndSetSaveDir: (type: 'http' | 'magnet' | 'torrent', v: string | null) => Promise<void>
-  addMatchedRule: any
-  setAddMatchedRule: (v: any) => void
+  addMatchedRule: DownloadRule | null
+  setAddMatchedRule: (v: DownloadRule | null) => void
   addTorrentFile: File | null
   setAddTorrentFile: (v: File | null) => void
-  presetOptionsForCurrentType: any[]
+  presetOptionsForCurrentType: TaskOptionPreset[]
   onSaveCurrentPreset: () => void
   onApplySelectedPreset: () => void
   onExportPresets: () => void

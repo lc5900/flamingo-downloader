@@ -92,6 +92,7 @@ import {
   shortcutFromKeyboardEvent,
   type ShortcutDisplayMode,
 } from './utils/shortcuts'
+import type { ShortcutAction, ShortcutBindings, ShortcutItem } from './types/shortcuts'
 import './App.css'
 import 'react-resizable/css/styles.css'
 
@@ -109,21 +110,6 @@ const LOCALE_KEY = 'flamingo.locale'
 const SHORTCUT_STORAGE_KEY = 'flamingo.shortcuts.v1'
 const SHORTCUT_DISPLAY_MODE_KEY = 'flamingo.shortcuts.display_mode.v1'
 const PROGRESS_ROW_BG_KEY = 'flamingo.progress_row_bg_enabled.v1'
-
-type ShortcutAction =
-  | 'new_download'
-  | 'focus_search'
-  | 'refresh_list'
-  | 'open_settings'
-  | 'open_logs'
-  | 'toggle_theme'
-  | 'pause_all'
-  | 'resume_all'
-  | 'retry_failed'
-  | 'switch_downloading'
-  | 'switch_downloaded'
-
-type ShortcutBindings = Record<ShortcutAction, string>
 
 const DEFAULT_SHORTCUT_BINDINGS: ShortcutBindings = {
   new_download: 'CmdOrCtrl+N',
@@ -2089,7 +2075,7 @@ export default function App() {
         { key: 'retry_failed', label: t('shortcutRetryFailed') },
         { key: 'switch_downloading', label: t('shortcutSwitchDownloading') },
         { key: 'switch_downloaded', label: t('shortcutSwitchDownloaded') },
-      ] as Array<{ key: ShortcutAction; label: string }>,
+      ] as ShortcutItem[],
     [t],
   )
   const filteredShortcutItems = useMemo(() => {

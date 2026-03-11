@@ -991,7 +991,8 @@ async fn get_app_update_strategy(state: State<'_, AppState>) -> Result<AppUpdate
         .map_err(|e| e.to_string())
 }
 
-static LOGS_WINDOW_CREATING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static LOGS_WINDOW_CREATING: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 #[tauri::command]
 fn open_logs_window(app: tauri::AppHandle) -> Result<(), String> {
@@ -1011,14 +1012,15 @@ fn open_logs_window(app: tauri::AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    let result = tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::App("logs.html".into()))
-        .title("Operation Logs")
-        .inner_size(780.0, 560.0)
-        .resizable(true)
-        .center()
-        .build()
-        .map(|_| ())
-        .map_err(|e| e.to_string());
+    let result =
+        tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::App("logs.html".into()))
+            .title("Operation Logs")
+            .inner_size(780.0, 560.0)
+            .resizable(true)
+            .center()
+            .build()
+            .map(|_| ())
+            .map_err(|e| e.to_string());
 
     LOGS_WINDOW_CREATING.store(false, std::sync::atomic::Ordering::SeqCst);
     result

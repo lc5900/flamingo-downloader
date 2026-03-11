@@ -15,30 +15,36 @@ import {
 } from 'antd'
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import type { FormInstance } from 'antd'
+import type { Dispatch, SetStateAction } from 'react'
+import type { BrowserBridgeStatus, GlobalSettings, StartupSelfCheck } from '../../types'
+import type { ShortcutAction, ShortcutBindings, ShortcutItem } from '../../types/shortcuts'
+import type { ShortcutDisplayMode } from '../../utils/shortcuts'
+
+type SpeedPlanMode = 'manual' | 'off' | 'workday_limited' | 'night_boost'
 
 export interface SettingsViewProps {
   t: (k: string) => string
   setSettingsOpen: (v: boolean) => void
   settingsTab: string
   setSettingsTab: (v: string) => void
-  settingsForm: FormInstance<any>
+  settingsForm: FormInstance<GlobalSettings>
   saveSettings: () => Promise<void>
   settingsSaving: boolean
   progressRowBackgroundEnabled: boolean
   setProgressRowBackgroundEnabled: (v: boolean) => void
   saveProgressRowBackgroundEnabled: (v: boolean) => void
   isMac: boolean
-  shortcutDisplayMode: any
-  setShortcutDisplayMode: (v: any) => void
-  saveShortcutDisplayMode: (v: any) => void
-  shortcutItems: any[]
-  shortcutDraft: Record<string, any>
-  setShortcutDraft: (v: any) => void
-  displayShortcut: (s: any) => string
-  openShortcutEditor: (k: string) => void
-  setShortcutBinding: (k: string, b: string) => void
+  shortcutDisplayMode: ShortcutDisplayMode
+  setShortcutDisplayMode: (v: ShortcutDisplayMode) => void
+  saveShortcutDisplayMode: (v: ShortcutDisplayMode) => void
+  shortcutItems: ShortcutItem[]
+  shortcutDraft: ShortcutBindings
+  setShortcutDraft: Dispatch<SetStateAction<ShortcutBindings>>
+  displayShortcut: (s: string) => string
+  openShortcutEditor: (k: ShortcutAction) => void
+  setShortcutBinding: (k: ShortcutAction, b: string) => void
   setShortcutHelpOpen: (v: boolean) => void
-  DEFAULT_SHORTCUT_BINDINGS: Record<string, any>
+  DEFAULT_SHORTCUT_BINDINGS: ShortcutBindings
   browseAria2Path: () => void
   detectAria2Path: () => void
   loadSettings: () => void
@@ -46,13 +52,13 @@ export interface SettingsViewProps {
   bridgeChecking: boolean
   checkBridgeStatus: () => Promise<void>
   setBridgeWizardOpen: (v: boolean) => void
-  bridgeStatus: any
+  bridgeStatus: BrowserBridgeStatus | null
   rotateBrowserBridgeToken: () => void
-  speedPlanMode: string
-  onSpeedPlanModeChange: (v: any) => void
+  speedPlanMode: SpeedPlanMode
+  onSpeedPlanModeChange: (v: SpeedPlanMode) => void
   resetUiLayout: () => void
   resetSettingsToDefaults: () => void
-  startupSummary: any
+  startupSummary: StartupSelfCheck | null
   doRpcPing: () => void
   doRestart: () => void
   doStartupCheck: () => void
@@ -345,7 +351,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       <Select
                         style={{ width: 260 }}
                         value={speedPlanMode}
-                        onChange={(v) => onSpeedPlanModeChange(v)}
+                        onChange={(v) => onSpeedPlanModeChange(v as SpeedPlanMode)}
                         options={[
                           { label: t('scheduleManual'), value: 'manual' },
                           { label: t('scheduleOff'), value: 'off' },

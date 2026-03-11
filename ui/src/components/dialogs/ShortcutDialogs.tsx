@@ -1,18 +1,19 @@
 import type React from 'react'
 import { Modal, Space, Typography, Input } from 'antd'
+import type { ShortcutAction, ShortcutBindings, ShortcutItem } from '../../types/shortcuts'
 
 export interface ShortcutEditorDialogProps {
   t: (k: string) => string
   shortcutEditorOpen: boolean
   setShortcutEditorOpen: (v: boolean) => void
-  setShortcutEditingAction: (v: string | null) => void
+  setShortcutEditingAction: (v: ShortcutAction | null) => void
   applyShortcutEditor: () => void
-  shortcutEditingAction: string | null
-  displayShortcut: (s: any) => string
-  shortcutDraft: Record<string, any>
-  shortcutCaptured: any
-  shortcutConflictAction: string | null
-  shortcutLabelMap: Map<string, string>
+  shortcutEditingAction: ShortcutAction | null
+  displayShortcut: (s: string) => string
+  shortcutDraft: ShortcutBindings
+  shortcutCaptured: string
+  shortcutConflictAction: ShortcutAction | null
+  shortcutLabelMap: Map<ShortcutAction, string>
   i18nFormat: (str: string, vars: Record<string, string>) => string
 }
 
@@ -75,9 +76,9 @@ export interface ShortcutCheatsheetDialogProps {
   setShortcutHelpOpen: (v: boolean) => void
   shortcutHelpQuery: string
   setShortcutHelpQuery: (v: string) => void
-  filteredShortcutItems: { key: string; label: string }[]
-  displayShortcut: (s: any) => string
-  shortcutDraft: Record<string, any>
+  filteredShortcutItems: ShortcutItem[]
+  displayShortcut: (s: string) => string
+  shortcutDraft: ShortcutBindings
 }
 
 export const ShortcutCheatsheetDialog: React.FC<ShortcutCheatsheetDialogProps> = ({
