@@ -366,13 +366,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p target/release/bundle/metadata
           if [ "${{ steps.macos_signed_build.outcome || '' }}" = "failure" ]; then
             echo "WARNING: macOS signed build failed. Falling back to unsigned build."
           else
-            echo "WARNING: Missing macOS signing secrets (APPLE_CERTIFICATE/APPLE_CERTIFICATE_PASSWORD/APPLE_SIGNING_IDENTITY). Building unsigned artifact."
+            echo "WARNING: Missing macOS signing secrets (APPLE_CERTIFICATE/APPLE_CERTIFICATE_PASSWORD/APPLE_SIGNING_IDENTITY). Skipping unsigned macOS bundle on GitHub Actions."
+            printf '%s\n' \
+              'Skipped macOS bundle build on GitHub Actions because Apple signing secrets are not configured.' \
+              'Unsigned fallback packaging is currently unstable on the hosted macOS runner for this project.' \
+              'Configure APPLE_CERTIFICATE/APPLE_CERTIFICATE_PASSWORD/APPLE_SIGNING_IDENTITY (and notarization secrets if needed) to restore macOS artifacts.' \
+              > target/release/bundle/metadata/UNSIGNED-MACOS-BUILD.txt
+            exit 0
           fi
           unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
-          mkdir -p target/release/bundle/metadata
           if cargo tauri build 2>&1 | tee target/release/bundle/metadata/macos-unsigned-build.log; then
             true
           else
