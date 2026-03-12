@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { invoke } from '@tauri-apps/api/core'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+
 import { App as AntApp, Button, Card, ConfigProvider, Input, Select, Space, Switch, Table, Typography, message, theme } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import './logs.css'
@@ -32,16 +32,16 @@ export default function LogsApp() {
   const [followTail, setFollowTail] = useState(true)
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([])
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (background = false) => {
     if (window.getSelection()?.toString()) return
-    setLoading(true)
+    if (!background) setLoading(true)
     try {
       const list = await invoke<OperationLog[]>('list_operation_logs', { limit: 500 })
       setRows(Array.isArray(list) ? list : [])
     } catch (err) {
       msg.error(parseErr(err))
     } finally {
-      setLoading(false)
+      if (!background) setLoading(false)
     }
   }, [msg])
 
@@ -49,7 +49,7 @@ export default function LogsApp() {
     void refresh()
     const timer = setInterval(() => {
       if (!followTail) return
-      void refresh()
+      void refresh(true)
     }, 2000)
     return () => clearInterval(timer)
   }, [followTail, refresh])
@@ -65,13 +65,9 @@ export default function LogsApp() {
 
   const closeWindow = async () => {
     try {
-      await getCurrentWindow().destroy()
+      await invoke('close_logs_window')
     } catch (err) {
-      try {
-        await invoke('close_logs_window')
-      } catch (err2) {
-        msg.error(parseErr(err2 || err))
-      }
+      msg.error(parseErr(err))
     }
   }
 
