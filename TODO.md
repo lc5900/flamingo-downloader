@@ -15,6 +15,7 @@
 - [x] Tooling: add an early Node.js version check to preflight with warning/strict modes
 - [x] CI/tooling: enforce the supported Node baseline in GitHub Actions and strict CI checks
 - [x] UI maintainability: extract settings-related pure helpers from `ui/src/App.tsx` into a dedicated util with tests
+- [x] Tests: add coverage for table layout sanitization rules
 
 ## 2026-02-22 Backlog (Next)
 
