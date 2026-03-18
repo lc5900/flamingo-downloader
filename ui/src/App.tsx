@@ -46,9 +46,6 @@ import * as api from './api/client'
 import { ResizableTitle } from './components/ResizableTitle'
 import { Sidebar } from './components/layout/Sidebar'
 import { TopHeader } from './components/layout/TopHeader'
-import { AddDownloadDialog } from './components/dialogs/AddDownloadDialog'
-import { SettingsView } from './components/dialogs/SettingsView'
-import { ShortcutEditorDialog, ShortcutCheatsheetDialog } from './components/dialogs/ShortcutDialogs'
 import { defaultLayoutFor, useTableLayout } from './hooks/useTableLayout'
 import { detectLocale, I18N } from './i18n'
 import { DownloadedPage } from './pages/DownloadedPage'
@@ -99,11 +96,31 @@ import 'react-resizable/css/styles.css'
 const AddDownloadPage = lazy(() =>
   import('./pages/AddDownloadPage').then((module) => ({ default: module.AddDownloadPage })),
 )
+const AddDownloadDialog = lazy(() =>
+  import('./components/dialogs/AddDownloadDialog').then((module) => ({
+    default: module.AddDownloadDialog,
+  })),
+)
 const TaskDetailPage = lazy(() =>
   import('./pages/TaskDetailPage').then((module) => ({ default: module.TaskDetailPage })),
 )
+const SettingsView = lazy(() =>
+  import('./components/dialogs/SettingsView').then((module) => ({
+    default: module.SettingsView,
+  })),
+)
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })),
+)
+const ShortcutEditorDialog = lazy(() =>
+  import('./components/dialogs/ShortcutDialogs').then((module) => ({
+    default: module.ShortcutEditorDialog,
+  })),
+)
+const ShortcutCheatsheetDialog = lazy(() =>
+  import('./components/dialogs/ShortcutDialogs').then((module) => ({
+    default: module.ShortcutCheatsheetDialog,
+  })),
 )
 
 const LOCALE_KEY = 'flamingo.locale'
@@ -2941,31 +2958,33 @@ export default function App() {
           </Layout>
         </Layout>
 
-        <ShortcutEditorDialog
-          t={t}
-          shortcutEditorOpen={shortcutEditorOpen}
-          setShortcutEditorOpen={setShortcutEditorOpen}
-          setShortcutEditingAction={(value) => setShortcutEditingAction(value as ShortcutAction | null)}
-          applyShortcutEditor={applyShortcutEditor}
-          shortcutEditingAction={shortcutEditingAction}
-          displayShortcut={displayShortcut}
-          shortcutDraft={shortcutDraft}
-          shortcutCaptured={shortcutCaptured}
-          shortcutConflictAction={shortcutConflictAction}
-          shortcutLabelMap={shortcutLabelMap}
-          i18nFormat={i18nFormat}
-        />
+        <Suspense fallback={null}>
+          <ShortcutEditorDialog
+            t={t}
+            shortcutEditorOpen={shortcutEditorOpen}
+            setShortcutEditorOpen={setShortcutEditorOpen}
+            setShortcutEditingAction={(value) => setShortcutEditingAction(value as ShortcutAction | null)}
+            applyShortcutEditor={applyShortcutEditor}
+            shortcutEditingAction={shortcutEditingAction}
+            displayShortcut={displayShortcut}
+            shortcutDraft={shortcutDraft}
+            shortcutCaptured={shortcutCaptured}
+            shortcutConflictAction={shortcutConflictAction}
+            shortcutLabelMap={shortcutLabelMap}
+            i18nFormat={i18nFormat}
+          />
 
-        <ShortcutCheatsheetDialog
-          t={t}
-          shortcutHelpOpen={shortcutHelpOpen}
-          setShortcutHelpOpen={setShortcutHelpOpen}
-          shortcutHelpQuery={shortcutHelpQuery}
-          setShortcutHelpQuery={setShortcutHelpQuery}
-          filteredShortcutItems={filteredShortcutItems}
-          displayShortcut={displayShortcut}
-          shortcutDraft={shortcutDraft}
-        />
+          <ShortcutCheatsheetDialog
+            t={t}
+            shortcutHelpOpen={shortcutHelpOpen}
+            setShortcutHelpOpen={setShortcutHelpOpen}
+            shortcutHelpQuery={shortcutHelpQuery}
+            setShortcutHelpQuery={setShortcutHelpQuery}
+            filteredShortcutItems={filteredShortcutItems}
+            displayShortcut={displayShortcut}
+            shortcutDraft={shortcutDraft}
+          />
+        </Suspense>
 
         {addOpen && (
           <Suspense fallback={null}>

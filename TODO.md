@@ -7,6 +7,7 @@
 - [x] Backend: make `cargo clippy -- -D warnings` pass cleanly, including ffmpeg merge path cleanup and nested-condition simplification
 - [x] Config safety: expand runtime settings validation to cover retry/bridge/JSON-backed settings and add focused unit tests
 - [x] UI: remove remaining `react-hooks/exhaustive-deps` warnings in `ui/src/App.tsx`
+- [x] UI build: split oversized Ant Design vendor chunk into smaller stable bundles and tighten bundle-size checks
 
 ## 2026-02-22 Backlog (Next)
 
