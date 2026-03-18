@@ -52,6 +52,7 @@ npm run check:bundle
 ## Important Scripts
 
 - `build`: i18n checks, TypeScript build, then Vite production build
+- `check:node`: verifies that the current Node runtime matches the supported Vite baseline
 - `check:i18n`: validates locale keys/placeholders and regenerates typed i18n keys
 - `check:bundle`: validates generated bundle sizes against project budgets
 - `test:unit`: runs Vitest unit tests
@@ -85,4 +86,5 @@ npm run check:bundle
 - Keep user-visible strings in `src/i18n/*.json`; do not hardcode new UI copy in components.
 - Prefer focused dialog/page components over growing `src/App.tsx`.
 - If a UI change increases bundle size, run `npm run build` and `npm run check:bundle` before merging.
+- `scripts/preflight.(ps1|sh)` calls `npm run check:node`; set `STRICT_NODE_VERSION=true` to turn the warning into a hard failure.
 - When adding shortcuts, update both the shortcut utilities and their tests.

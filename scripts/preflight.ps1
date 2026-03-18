@@ -15,6 +15,8 @@ if (!(Test-Path "src-tauri/tauri.conf.json")) {
   throw "Missing src-tauri/tauri.conf.json"
 }
 
+npm --prefix ui run check:node
+
 if ($Mode -eq "build-ui") {
   npm --prefix ui run build
 }

@@ -14,16 +14,19 @@ if [[ ! -f "src-tauri/tauri.conf.json" ]]; then
   exit 1
 fi
 
+npm --prefix ui run check:node
+
 mode="${1:-build-ui}"
 
 find_text() {
   local pattern="$1"
   local file="$2"
   if command -v rg >/dev/null 2>&1; then
-    rg -n "$pattern" "$file" >/dev/null
-  else
-    grep -E -n "$pattern" "$file" >/dev/null
+    if rg -n "$pattern" "$file" >/dev/null 2>&1; then
+      return 0
+    fi
   fi
+  grep -E -n "$pattern" "$file" >/dev/null
 }
 
 if [[ "$mode" == "build-ui" ]]; then

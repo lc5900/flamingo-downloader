@@ -12,6 +12,7 @@
 - [x] Docs: replace the default Vite template in `ui/README.md` with project-specific frontend developer notes
 - [x] Docs/tooling: align declared Node.js requirement with the current Vite 7 baseline
 - [x] Tests: add unit coverage for `ui/src/utils/format.ts`
+- [x] Tooling: add an early Node.js version check to preflight with warning/strict modes
 
 ## 2026-02-22 Backlog (Next)
 
