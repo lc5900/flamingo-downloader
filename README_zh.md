@@ -43,7 +43,7 @@ English README: [`README.md`](README.md)
 ### 环境准备
 
 - Rust（stable）
-- Node.js 20+
+- Node.js 20.19+ 或 22.12+
 - 对应系统的 Tauri 2 构建依赖
 - 可用 `aria2c`（当前版本使用手动路径配置）
 
@@ -60,6 +60,8 @@ cd ui
 npm install
 npm run dev
 ```
+
+如果 Vite 提示当前 Node.js 版本不受支持，先升级 Node，再继续排查前端构建问题。
 
 ### 首次使用建议
 

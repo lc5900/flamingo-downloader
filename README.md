@@ -43,7 +43,7 @@ Latest screenshots are in `docs/screenshots/`.
 ### Prerequisites
 
 - Rust (stable)
-- Node.js 20+
+- Node.js 20.19+ or 22.12+
 - Tauri 2 build dependencies for your OS
 - A usable `aria2c` binary (current app flow uses manual path setting)
 
@@ -60,6 +60,8 @@ cd ui
 npm install
 npm run dev
 ```
+
+If Vite reports that your Node.js release is unsupported, upgrade Node before debugging the UI build itself.
 
 ### First launch checklist
 
