@@ -302,7 +302,7 @@ fn infer_resource_dir_from_current_exe() -> Option<PathBuf> {
     #[cfg(not(target_os = "macos"))]
     {
         let parent = exe.parent()?;
-        return Some(parent.join("resources"));
+        Some(parent.join("resources"))
     }
 }
 

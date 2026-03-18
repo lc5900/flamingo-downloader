@@ -59,6 +59,29 @@ struct SpeedPlanRule {
     limit: String,         // "0" / "2M"
 }
 
+#[derive(Debug, Clone)]
+struct FfmpegMergeRequest {
+    save_dir: Option<String>,
+    referer: Option<String>,
+    user_agent: Option<String>,
+    headers: Vec<String>,
+    output_name: Option<String>,
+    output_format: Option<String>,
+}
+
+impl From<AddTaskOptions> for FfmpegMergeRequest {
+    fn from(options: AddTaskOptions) -> Self {
+        Self {
+            save_dir: options.save_dir,
+            referer: options.referer,
+            user_agent: options.user_agent,
+            headers: options.headers,
+            output_name: options.out,
+            output_format: options.merge_format,
+        }
+    }
+}
+
 impl DownloadService {
     pub fn new(db: Arc<Database>, aria2: Arc<dyn Aria2Api>, emitter: SharedEmitter) -> Self {
         Self {
@@ -83,15 +106,7 @@ impl DownloadService {
             .unwrap_or(false);
         if merge_enabled && is_stream_manifest_url(url) {
             let (task_id, _) = self
-                .spawn_ffmpeg_merge(
-                    url,
-                    options.save_dir.clone(),
-                    options.referer.clone(),
-                    options.user_agent.clone(),
-                    options.headers.clone(),
-                    options.out.clone(),
-                    options.merge_format.clone(),
-                )
+                .spawn_ffmpeg_merge(url, FfmpegMergeRequest::from(options))
                 .await?;
             return Ok(task_id);
         }
@@ -165,6 +180,13 @@ impl DownloadService {
         }
         let normalized_referer = normalize_bridge_referer(referer)?;
         let normalized_headers = normalize_bridge_headers(headers)?;
+        let bridge_options = AddTaskOptions {
+            save_dir,
+            referer: normalized_referer,
+            user_agent,
+            headers: normalized_headers,
+            ..AddTaskOptions::default()
+        };
 
         let merge_enabled = self
             .db
@@ -173,15 +195,7 @@ impl DownloadService {
             .unwrap_or(false);
         if merge_enabled && is_stream_manifest_url(clean_url) {
             let output = self
-                .spawn_ffmpeg_merge(
-                    clean_url,
-                    save_dir,
-                    normalized_referer.clone(),
-                    user_agent.clone(),
-                    normalized_headers.clone(),
-                    None,
-                    None,
-                )
+                .spawn_ffmpeg_merge(clean_url, FfmpegMergeRequest::from(bridge_options.clone()))
                 .await?;
             return Ok(json!({
                 "ok": true,
@@ -192,16 +206,7 @@ impl DownloadService {
         }
 
         let task_id = self
-            .add_url(
-                clean_url,
-                AddTaskOptions {
-                    save_dir,
-                    referer: normalized_referer,
-                    user_agent,
-                    headers: normalized_headers,
-                    ..AddTaskOptions::default()
-                },
-            )
+            .add_url(clean_url, bridge_options)
             .await?;
         Ok(json!({ "ok": true, "mode": "aria2", "task_id": task_id }))
     }
@@ -209,13 +214,16 @@ impl DownloadService {
     async fn spawn_ffmpeg_merge(
         &self,
         url: &str,
-        save_dir: Option<String>,
-        referer: Option<String>,
-        user_agent: Option<String>,
-        headers: Vec<String>,
-        output_name: Option<String>,
-        output_format: Option<String>,
+        request: FfmpegMergeRequest,
     ) -> Result<(String, String)> {
+        let FfmpegMergeRequest {
+            save_dir,
+            referer,
+            user_agent,
+            headers,
+            output_name,
+            output_format,
+        } = request;
         let ffmpeg_bin = self
             .db
             .get_setting("ffmpeg_bin_path")?
@@ -248,6 +256,7 @@ impl DownloadService {
         .unwrap_or(1);
         let task_id = Uuid::new_v4().to_string();
         let now = now_ts();
+        let output_path_text = output_path.to_string_lossy().to_string();
         let mut ffmpeg_args = vec![
             "-y".to_string(),
             "-nostdin".to_string(),
@@ -256,12 +265,48 @@ impl DownloadService {
             "-progress".to_string(),
             "pipe:2".to_string(),
             "-nostats".to_string(),
-            "-i".to_string(),
-            url.to_string(),
-            "-c".to_string(),
-            "copy".to_string(),
-            output_path.to_string_lossy().to_string(),
         ];
+        let mut cmd = tokio::process::Command::new(&ffmpeg_bin);
+        cmd.arg("-y")
+            .arg("-nostdin")
+            .arg("-loglevel")
+            .arg("warning")
+            .arg("-progress")
+            .arg("pipe:2")
+            .arg("-nostats");
+        if let Some(v) = user_agent
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+        {
+            cmd.arg("-user_agent").arg(v);
+            ffmpeg_args.push("-user_agent".to_string());
+            ffmpeg_args.push(v.to_string());
+        }
+        if let Some(v) = referer.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+            cmd.arg("-referer").arg(v);
+            ffmpeg_args.push("-referer".to_string());
+            ffmpeg_args.push(v.to_string());
+        }
+        if !cleaned_headers.is_empty() {
+            let mut merged = cleaned_headers.join("\r\n");
+            merged.push_str("\r\n");
+            cmd.arg("-headers").arg(merged);
+            ffmpeg_args.push("-headers".to_string());
+            ffmpeg_args.push("<custom headers>".to_string());
+        }
+        cmd.arg("-i")
+            .arg(url)
+            .arg("-c")
+            .arg("copy")
+            .arg(&output_path)
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped());
+        ffmpeg_args.push("-i".to_string());
+        ffmpeg_args.push(url.to_string());
+        ffmpeg_args.push("-c".to_string());
+        ffmpeg_args.push("copy".to_string());
+        ffmpeg_args.push(output_path_text.clone());
         let task = Task {
             id: task_id.clone(),
             aria2_gid: None,
@@ -286,7 +331,7 @@ impl DownloadService {
         self.db.upsert_task(&task)?;
         let initial_files = vec![TaskFile {
             task_id: task_id.clone(),
-            path: output_path.to_string_lossy().to_string(),
+            path: output_path_text.clone(),
             length: 0,
             completed_length: 0,
             selected: true,
@@ -295,7 +340,7 @@ impl DownloadService {
         let merge_job = MediaMergeJob {
             task_id: task_id.clone(),
             input_url: url.to_string(),
-            output_path: output_path.to_string_lossy().to_string(),
+            output_path: output_path_text.clone(),
             ffmpeg_bin: ffmpeg_bin.clone(),
             ffmpeg_args: ffmpeg_args.join(" "),
             status: "active".to_string(),
@@ -304,43 +349,6 @@ impl DownloadService {
             updated_at: now,
         };
         let _ = self.db.upsert_media_merge_job(&merge_job);
-
-        let mut cmd = tokio::process::Command::new(&ffmpeg_bin);
-        cmd.arg("-y")
-            .arg("-nostdin")
-            .arg("-loglevel")
-            .arg("warning")
-            .arg("-progress")
-            .arg("pipe:2")
-            .arg("-nostats")
-            .arg("-i")
-            .arg(url)
-            .arg("-c")
-            .arg("copy")
-            .arg(&output_path)
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped());
-        if let Some(v) = user_agent
-            .as_deref()
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-        {
-            cmd.arg("-user_agent").arg(v);
-            ffmpeg_args.push("-user_agent".to_string());
-            ffmpeg_args.push(v.to_string());
-        }
-        if let Some(v) = referer.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
-            cmd.arg("-referer").arg(v);
-            ffmpeg_args.push("-referer".to_string());
-            ffmpeg_args.push(v.to_string());
-        }
-        if !cleaned_headers.is_empty() {
-            let mut merged = cleaned_headers.join("\r\n");
-            merged.push_str("\r\n");
-            cmd.arg("-headers").arg(merged);
-            ffmpeg_args.push("-headers".to_string());
-            ffmpeg_args.push("<custom headers>".to_string());
-        }
         #[cfg(target_os = "windows")]
         {
             use std::os::windows::process::CommandExt;
@@ -2642,15 +2650,15 @@ fn to_aria2_options(options: AddTaskOptions) -> Value {
             m.insert("max-upload-limit".to_string(), json!(limit));
         }
     }
-    if let Some(v) = options.seed_ratio {
-        if v > 0.0 {
-            m.insert("seed-ratio".to_string(), json!(v.to_string()));
-        }
+    if let Some(v) = options.seed_ratio
+        && v > 0.0
+    {
+        m.insert("seed-ratio".to_string(), json!(v.to_string()));
     }
-    if let Some(v) = options.seed_time {
-        if v > 0 {
-            m.insert("seed-time".to_string(), json!(v.to_string()));
-        }
+    if let Some(v) = options.seed_time
+        && v > 0
+    {
+        m.insert("seed-time".to_string(), json!(v.to_string()));
     }
     if let Some(v) = options.user_agent {
         let ua = v.trim();
@@ -3714,8 +3722,6 @@ fn select_release_asset(assets: &[ReleaseAsset], repo: &str) -> Option<ReleaseAs
 
     let preferred_ext: &[&str] = if cfg!(target_os = "windows") {
         &[".zip", ".exe"]
-    } else if cfg!(target_os = "macos") {
-        &[".tar.xz", ".tar.gz", ".tgz", ".zip"]
     } else {
         &[".tar.xz", ".tar.gz", ".tgz", ".zip"]
     };
@@ -4524,6 +4530,6 @@ fn infer_resource_dir_from_current_exe() -> Option<PathBuf> {
     #[cfg(not(target_os = "macos"))]
     {
         let parent = exe.parent()?;
-        return Some(parent.join("resources"));
+        Some(parent.join("resources"))
     }
 }

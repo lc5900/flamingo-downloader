@@ -111,7 +111,7 @@ fn resolve_aria2_bin(base_dir: &Path) -> PathBuf {
 
     candidates.extend(system_aria2_candidates());
 
-    let selected = candidates
+    candidates
         .into_iter()
         .find(|p| p.exists())
         .unwrap_or_else(|| {
@@ -120,9 +120,7 @@ fn resolve_aria2_bin(base_dir: &Path) -> PathBuf {
             } else {
                 bin_dir.join("aria2c")
             }
-        });
-
-    selected
+        })
 }
 
 fn bundled_aria2_candidates() -> Vec<PathBuf> {
@@ -161,7 +159,7 @@ fn infer_resource_dir_from_current_exe() -> Option<PathBuf> {
     #[cfg(not(target_os = "macos"))]
     {
         let parent = exe.parent()?;
-        return Some(parent.join("resources"));
+        Some(parent.join("resources"))
     }
 }
 
@@ -918,17 +916,17 @@ async fn wait_for_rpc_ready(manager: &Aria2Manager, client: &Aria2Client) -> Res
         }
         {
             let mut child_guard = manager.child.lock().await;
-            if let Some(child) = child_guard.as_mut() {
-                if let Some(status) = child.try_wait()? {
-                    *child_guard = None;
-                    let detail = read_aria2_stderr_tail(&manager.cfg.work_dir).unwrap_or_default();
-                    if detail.is_empty() {
-                        return Err(anyhow!("aria2 exited before rpc became ready: {status}"));
-                    }
-                    return Err(anyhow!(
-                        "aria2 exited before rpc became ready: {status}. stderr: {detail}"
-                    ));
+            if let Some(child) = child_guard.as_mut()
+                && let Some(status) = child.try_wait()?
+            {
+                *child_guard = None;
+                let detail = read_aria2_stderr_tail(&manager.cfg.work_dir).unwrap_or_default();
+                if detail.is_empty() {
+                    return Err(anyhow!("aria2 exited before rpc became ready: {status}"));
                 }
+                return Err(anyhow!(
+                    "aria2 exited before rpc became ready: {status}. stderr: {detail}"
+                ));
             }
         }
         time::sleep(Duration::from_millis(200)).await;

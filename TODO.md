@@ -1,5 +1,13 @@
 # Flamingo Downloader TODO
 
+## 2026-03-19 Iteration
+
+### P1 - Engineering Health
+
+- [x] Backend: make `cargo clippy -- -D warnings` pass cleanly, including ffmpeg merge path cleanup and nested-condition simplification
+- [x] Config safety: expand runtime settings validation to cover retry/bridge/JSON-backed settings and add focused unit tests
+- [x] UI: remove remaining `react-hooks/exhaustive-deps` warnings in `ui/src/App.tsx`
+
 ## 2026-02-22 Backlog (Next)
 
 ### P0 - CI Speed and Reliability

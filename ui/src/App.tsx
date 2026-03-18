@@ -1880,7 +1880,7 @@ export default function App() {
     settingsForm.setFieldValue('speed_plan_rules', buildSpeedPlanPreset(mode))
   }
 
-  const doRpcPing = async () => {
+  const doRpcPing = useCallback(async () => {
     try {
       const res = await api.call<string>('rpc_ping')
       msg.success(res)
@@ -1888,7 +1888,7 @@ export default function App() {
     } catch (err) {
       msg.error(parseErr(err))
     }
-  }
+  }, [loadDiagnostics, msg])
 
   const doRestart = async () => {
     try {
@@ -1900,7 +1900,7 @@ export default function App() {
     }
   }
 
-  const doStartupCheck = async () => {
+  const doStartupCheck = useCallback(async () => {
     try {
       const res = await api.call<string>('startup_check_aria2')
       msg.success(res)
@@ -1908,7 +1908,7 @@ export default function App() {
     } catch (err) {
       msg.error(parseErr(err))
     }
-  }
+  }, [loadDiagnostics, msg])
 
   const doSaveSession = async () => {
     try {
@@ -1939,7 +1939,7 @@ export default function App() {
     }
   }
 
-  const openImportExport = async () => {
+  const openImportExport = useCallback(async () => {
     setIoOpen(true)
     try {
       const payload = await api.call<string>('export_task_list_json')
@@ -1947,7 +1947,7 @@ export default function App() {
     } catch (err) {
       msg.error(parseErr(err))
     }
-  }
+  }, [msg])
 
   const copyExportJson = async () => {
     try {
