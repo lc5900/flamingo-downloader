@@ -403,7 +403,10 @@ impl Database {
             set("post_complete_action", v)?;
         }
         if let Some(v) = settings.auto_delete_control_files {
-            set("auto_delete_control_files", if v { "true" } else { "false" })?;
+            set(
+                "auto_delete_control_files",
+                if v { "true" } else { "false" },
+            )?;
         }
         if let Some(v) = settings.auto_clear_completed_days {
             set("auto_clear_completed_days", &v.to_string())?;
@@ -426,7 +429,14 @@ impl Database {
         let category_rules_json =
             serde_json::to_string(&settings.category_rules).context("serialize category_rules")?;
         set("category_rules", &category_rules_json)?;
-        validate_runtime_settings_with_conn(&tx, &["download_dir", "max_concurrent_downloads", "max_connection_per_server"])?;
+        validate_runtime_settings_with_conn(
+            &tx,
+            &[
+                "download_dir",
+                "max_concurrent_downloads",
+                "max_connection_per_server",
+            ],
+        )?;
         tx.commit()?;
         Ok(())
     }
@@ -789,7 +799,11 @@ fn validate_runtime_settings_with_conn(conn: &Connection, must_exist: &[&str]) -
     if let Some(theme) = get_optional_setting_from_conn(conn, "ui_theme")? {
         match theme.trim() {
             "system" | "light" | "dark" => {}
-            _ => return Err(anyhow!("invalid setting ui_theme={theme}, expected system|light|dark")),
+            _ => {
+                return Err(anyhow!(
+                    "invalid setting ui_theme={theme}, expected system|light|dark"
+                ));
+            }
         }
     }
 
@@ -811,7 +825,9 @@ fn validate_runtime_settings_with_conn(conn: &Connection, must_exist: &[&str]) -
     {
         for (index, rule) in rules.iter().enumerate() {
             if rule.limit.trim().is_empty() {
-                return Err(anyhow!("invalid speed_plan[{index}].limit, expected non-empty value"));
+                return Err(anyhow!(
+                    "invalid speed_plan[{index}].limit, expected non-empty value"
+                ));
             }
             if let Some(days) = rule.days.as_deref() {
                 validate_speed_plan_days(days, index)?;
@@ -895,7 +911,9 @@ fn parse_optional_bool_setting(conn: &Connection, key: &str) -> Result<Option<bo
     match value.as_str() {
         "true" => Ok(Some(true)),
         "false" => Ok(Some(false)),
-        _ => Err(anyhow!("invalid setting {key}={value}, expected true|false")),
+        _ => Err(anyhow!(
+            "invalid setting {key}={value}, expected true|false"
+        )),
     }
 }
 
@@ -932,12 +950,12 @@ fn validate_speed_plan_time(value: &str, field: &str, index: usize) -> Result<()
             "invalid speed_plan[{index}].{field}={value}, expected HH:MM"
         ));
     }
-    let hour = parts[0].parse::<u8>().map_err(|_| {
-        anyhow!("invalid speed_plan[{index}].{field}={value}, expected HH:MM")
-    })?;
-    let minute = parts[1].parse::<u8>().map_err(|_| {
-        anyhow!("invalid speed_plan[{index}].{field}={value}, expected HH:MM")
-    })?;
+    let hour = parts[0]
+        .parse::<u8>()
+        .map_err(|_| anyhow!("invalid speed_plan[{index}].{field}={value}, expected HH:MM"))?;
+    let minute = parts[1]
+        .parse::<u8>()
+        .map_err(|_| anyhow!("invalid speed_plan[{index}].{field}={value}, expected HH:MM"))?;
     if hour > 23 || minute > 59 {
         return Err(anyhow!(
             "invalid speed_plan[{index}].{field}={value}, expected HH:MM"
@@ -1179,8 +1197,7 @@ mod tests {
             .expect("set max_concurrent_downloads");
         db.set_setting("max_connection_per_server", "8")
             .expect("set max_connection_per_server");
-        db.set_setting("speed_plan", "[]")
-            .expect("set speed_plan");
+        db.set_setting("speed_plan", "[]").expect("set speed_plan");
         db.set_setting("task_option_presets", "[]")
             .expect("set task_option_presets");
     }

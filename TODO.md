@@ -8,6 +8,7 @@
 - [x] Config safety: expand runtime settings validation to cover retry/bridge/JSON-backed settings and add focused unit tests
 - [x] UI: remove remaining `react-hooks/exhaustive-deps` warnings in `ui/src/App.tsx`
 - [x] UI build: split oversized Ant Design vendor chunk into smaller stable bundles and tighten bundle-size checks
+- [x] Backend: restore `cargo fmt --check` to clean after the settings-validation refactor
 
 ## 2026-02-22 Backlog (Next)
 

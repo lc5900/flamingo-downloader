@@ -205,9 +205,7 @@ impl DownloadService {
             }));
         }
 
-        let task_id = self
-            .add_url(clean_url, bridge_options)
-            .await?;
+        let task_id = self.add_url(clean_url, bridge_options).await?;
         Ok(json!({ "ok": true, "mode": "aria2", "task_id": task_id }))
     }
 
