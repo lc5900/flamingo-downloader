@@ -11,6 +11,7 @@
 - [x] Backend: restore `cargo fmt --check` to clean after the settings-validation refactor
 - [x] Docs: replace the default Vite template in `ui/README.md` with project-specific frontend developer notes
 - [x] Docs/tooling: align declared Node.js requirement with the current Vite 7 baseline
+- [x] Tests: add unit coverage for `ui/src/utils/format.ts`
 
 ## 2026-02-22 Backlog (Next)
 
