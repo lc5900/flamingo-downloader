@@ -13,6 +13,7 @@
 - [x] Docs/tooling: align declared Node.js requirement with the current Vite 7 baseline
 - [x] Tests: add unit coverage for `ui/src/utils/format.ts`
 - [x] Tooling: add an early Node.js version check to preflight with warning/strict modes
+- [x] CI/tooling: enforce the supported Node baseline in GitHub Actions and strict CI checks
 
 ## 2026-02-22 Backlog (Next)
 

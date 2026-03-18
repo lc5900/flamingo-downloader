@@ -28,7 +28,10 @@ function minVersionsText() {
   return supported.map((v) => `${v.major}.${v.minor}.${v.patch}`).join(' or ')
 }
 
-const strict = process.argv.includes('--strict') || process.env.STRICT_NODE_VERSION === 'true'
+const strict =
+  process.argv.includes('--strict') ||
+  process.env.STRICT_NODE_VERSION === 'true' ||
+  process.env.CI === 'true'
 const current = parseVersion(process.version)
 
 if (!current) {

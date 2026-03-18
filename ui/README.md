@@ -86,5 +86,5 @@ npm run check:bundle
 - Keep user-visible strings in `src/i18n/*.json`; do not hardcode new UI copy in components.
 - Prefer focused dialog/page components over growing `src/App.tsx`.
 - If a UI change increases bundle size, run `npm run build` and `npm run check:bundle` before merging.
-- `scripts/preflight.(ps1|sh)` calls `npm run check:node`; set `STRICT_NODE_VERSION=true` to turn the warning into a hard failure.
+- `scripts/preflight.(ps1|sh)` calls `npm run check:node`; CI runs this in strict mode automatically, and you can force the same behavior locally with `STRICT_NODE_VERSION=true`.
 - When adding shortcuts, update both the shortcut utilities and their tests.
