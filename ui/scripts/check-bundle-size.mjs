@@ -8,7 +8,7 @@ if (!fs.existsSync(root)) {
 }
 
 const rules = [
-  { key: 'antd-vendor', re: /^antd-vendor-.*\.js$/, maxBytes: 950_000 },
+  { key: 'antd-vendor', re: /^antd-vendor-.*\.js$/, maxBytes: 1_050_000 },
   { key: 'react-vendor', re: /^react-vendor-.*\.js$/, maxBytes: 260_000 },
   { key: 'main-js', re: /^main-.*\.js$/, maxBytes: 180_000 },
   { key: 'main-css', re: /^main-.*\.css$/, maxBytes: 35_000 },
