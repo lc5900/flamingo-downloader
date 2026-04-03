@@ -15,7 +15,10 @@ export default defineConfig({
         manualChunks(id) {
           if (!id.includes('node_modules')) return
           if (id.includes('/react/') || id.includes('/react-dom/')) return 'react-vendor'
-          if (id.includes('/antd/') || id.includes('/@ant-design/') || id.includes('/rc-')) return 'antd-vendor'
+          if (id.includes('/@ant-design/icons/')) return 'antd-icons-vendor'
+          if (id.includes('/@rc-component/') || id.includes('/rc-')) return 'rc-vendor'
+          if (id.includes('/@emotion/')) return 'emotion-vendor'
+          if (id.includes('/antd/') || id.includes('/@ant-design/')) return 'antd-vendor'
           if (id.includes('/@tauri-apps/')) return 'tauri-vendor'
         },
       },
