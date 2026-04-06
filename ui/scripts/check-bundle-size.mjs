@@ -8,9 +8,10 @@ if (!fs.existsSync(root)) {
 }
 
 const rules = [
-  { key: 'antd-vendor', re: /^antd-vendor-.*\.js$/, maxBytes: 1_050_000 },
+  { key: 'antd-vendor', re: /^antd-vendor-.*\.js$/, maxBytes: 880_000 },
+  { key: 'ant-icons-vendor', re: /^ant-icons-vendor-.*\.js$/, maxBytes: 40_000 },
   { key: 'react-vendor', re: /^react-vendor-.*\.js$/, maxBytes: 260_000 },
-  { key: 'main-js', re: /^main-.*\.js$/, maxBytes: 180_000 },
+  { key: 'main-js', re: /^main-.*\.js$/, maxBytes: 150_000 },
   { key: 'main-css', re: /^main-.*\.css$/, maxBytes: 35_000 },
   { key: 'tauri-vendor', re: /^tauri-vendor-.*\.js$/, maxBytes: 30_000 },
 ]
@@ -20,11 +21,11 @@ const report = []
 let hasError = false
 
 for (const rule of rules) {
-  const matched = files.find((name) => rule.re.test(name))
-  if (!matched) {
+  const matched = files.filter((name) => rule.re.test(name))
+  if (matched.length === 0) {
     report.push({
       key: rule.key,
-      file: null,
+      files: [],
       bytes: null,
       maxBytes: rule.maxBytes,
       status: 'missing',
@@ -32,13 +33,14 @@ for (const rule of rules) {
     hasError = true
     continue
   }
-  const fp = path.join(root, matched)
-  const bytes = fs.statSync(fp).size
+  const bytes = matched
+    .map((name) => fs.statSync(path.join(root, name)).size)
+    .reduce((a, b) => a + b, 0)
   const status = bytes <= rule.maxBytes ? 'ok' : 'over'
   if (status !== 'ok') hasError = true
   report.push({
     key: rule.key,
-    file: matched,
+    files: matched,
     bytes,
     maxBytes: rule.maxBytes,
     status,
@@ -53,8 +55,8 @@ const totalJs = files
 const summary = {
   generatedAt: new Date().toISOString(),
   totalJsBytes: totalJs,
-  totalJsMaxBytes: 1_700_000,
-  totalJsStatus: totalJs <= 1_700_000 ? 'ok' : 'over',
+  totalJsMaxBytes: 1_600_000,
+  totalJsStatus: totalJs <= 1_600_000 ? 'ok' : 'over',
   report,
 }
 if (summary.totalJsStatus !== 'ok') hasError = true
@@ -65,7 +67,7 @@ fs.writeFileSync(outPath, JSON.stringify(summary, null, 2))
 console.log('[bundle-size] report:')
 for (const row of report) {
   console.log(
-    ` - ${row.key}: ${row.file || 'missing'} | ${row.bytes ?? '-'} / ${row.maxBytes} | ${row.status}`,
+    ` - ${row.key}: ${row.files?.join(', ') || 'missing'} | ${row.bytes ?? '-'} / ${row.maxBytes} | ${row.status}`,
   )
 }
 console.log(

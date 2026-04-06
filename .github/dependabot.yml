@@ -30,6 +30,12 @@ updates:
       time: "04:20"
     open-pull-requests-limit: 10
     groups:
+      ui-vite-stack:
+        patterns:
+          - "vite"
+          - "@vitejs/plugin-react"
+          - "vitest"
+          - "@vitest/*"
       ui-lint-stack:
         patterns:
           - "eslint"

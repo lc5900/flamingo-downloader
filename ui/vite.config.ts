@@ -6,20 +6,38 @@ import { resolve } from 'node:path'
 export default defineConfig({
   plugins: [react()],
   build: {
-    rollupOptions: {
+    chunkSizeWarningLimit: 900,
+    rolldownOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
         logs: resolve(__dirname, 'logs.html'),
       },
       output: {
-        manualChunks(id) {
-          if (!id.includes('node_modules')) return
-          if (id.includes('/react/') || id.includes('/react-dom/')) return 'react-vendor'
-          if (id.includes('/@ant-design/icons/')) return 'antd-icons-vendor'
-          if (id.includes('/@rc-component/') || id.includes('/rc-')) return 'rc-vendor'
-          if (id.includes('/@emotion/')) return 'emotion-vendor'
-          if (id.includes('/antd/') || id.includes('/@ant-design/')) return 'antd-vendor'
-          if (id.includes('/@tauri-apps/')) return 'tauri-vendor'
+        codeSplitting: {
+          groups: [
+            {
+              name: 'react-vendor',
+              test: /[\\/]node_modules[\\/](react|react-dom|scheduler)([\\/]|$)/,
+              priority: 30,
+            },
+            {
+              name: 'tauri-vendor',
+              test: /[\\/]node_modules[\\/]@tauri-apps[\\/]/,
+              priority: 25,
+            },
+            {
+              name: 'ant-icons-vendor',
+              test: /[\\/]node_modules[\\/]@ant-design[\\/]icons-svg([\\/]|$)/,
+              priority: 22,
+            },
+            {
+              name: 'antd-vendor',
+              test: /[\\/]node_modules[\\/](antd|@ant-design[\\/]|@rc-component[\\/])/,
+              priority: 20,
+              minSize: 100_000,
+              maxSize: 700_000,
+            },
+          ],
         },
       },
     },
