@@ -46,7 +46,7 @@ export default function LogsApp() {
   }, [msg])
 
   useEffect(() => {
-    void refresh()
+    void Promise.resolve().then(() => refresh())
     const timer = setInterval(() => {
       if (!followTail) return
       void refresh(true)

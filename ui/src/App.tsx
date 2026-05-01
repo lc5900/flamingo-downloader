@@ -680,10 +680,12 @@ export default function App() {
       }
     }
 
-    void refresh()
-    void loadSettings()
-    void loadStorageSummary()
-    void bindTaskUpdate()
+    void Promise.resolve().then(() => {
+      void refresh()
+      void loadSettings()
+      void loadStorageSummary()
+      void bindTaskUpdate()
+    })
 
     const timer = setInterval(() => {
       if (disposed) return
@@ -1016,10 +1018,10 @@ export default function App() {
     setSelectedTaskIds(keys.map((k) => String(k)))
   }, [])
 
-  useEffect(() => {
+  const visibleSelectedTaskIds = useMemo(() => {
     const visibleIds = new Set(list.map((task) => task.id))
-    setSelectedTaskIds((prev) => prev.filter((id) => visibleIds.has(id)))
-  }, [list])
+    return selectedTaskIds.filter((id) => visibleIds.has(id))
+  }, [list, selectedTaskIds])
 
   const activeTaskCount = useMemo(
     () => tasks.filter((task) => String(task.status || '').toLowerCase() !== 'completed').length,
@@ -1081,10 +1083,10 @@ export default function App() {
   }
 
   const onRequestBatchRemove = () => {
-    if (selectedTaskIds.length === 0) return
-    const first = list.find((task) => task.id === selectedTaskIds[0]) || null
+    if (visibleSelectedTaskIds.length === 0) return
+    const first = list.find((task) => task.id === visibleSelectedTaskIds[0]) || null
     setRemoveTask(first)
-    setRemoveTaskIds(selectedTaskIds.slice())
+    setRemoveTaskIds(visibleSelectedTaskIds.slice())
     setRemoveDeleteFiles(false)
     setRemoveDialogOpen(true)
   }
@@ -1107,7 +1109,7 @@ export default function App() {
 
   const onBatchPause = async () => {
     try {
-      for (const taskId of selectedTaskIds) {
+      for (const taskId of visibleSelectedTaskIds) {
         const task = list.find((x) => x.id === taskId)
         if (!task) continue
         if (String(task.status).toLowerCase() !== 'completed') {
@@ -1122,7 +1124,7 @@ export default function App() {
 
   const onBatchResume = async () => {
     try {
-      for (const taskId of selectedTaskIds) {
+      for (const taskId of visibleSelectedTaskIds) {
         const task = list.find((x) => x.id === taskId)
         if (!task) continue
         if (String(task.status).toLowerCase() !== 'completed') {
@@ -2759,14 +2761,14 @@ export default function App() {
                         {t('clearCompleted')}
                       </Button>
                     )}
-                    <Tag>{`${t('selectedCount')}: ${selectedTaskIds.length}`}</Tag>
-                    <Button size="small" onClick={onBatchPause} disabled={selectedTaskIds.length === 0 || section === 'downloaded'}>
+                    <Tag>{`${t('selectedCount')}: ${visibleSelectedTaskIds.length}`}</Tag>
+                    <Button size="small" onClick={onBatchPause} disabled={visibleSelectedTaskIds.length === 0 || section === 'downloaded'}>
                       {t('batchPause')}
                     </Button>
-                    <Button size="small" onClick={onBatchResume} disabled={selectedTaskIds.length === 0 || section === 'downloaded'}>
+                    <Button size="small" onClick={onBatchResume} disabled={visibleSelectedTaskIds.length === 0 || section === 'downloaded'}>
                       {t('batchResume')}
                     </Button>
-                    <Button size="small" danger onClick={onRequestBatchRemove} disabled={selectedTaskIds.length === 0}>
+                    <Button size="small" danger onClick={onRequestBatchRemove} disabled={visibleSelectedTaskIds.length === 0}>
                       {t('batchRemove')}
                     </Button>
                   </Space>
@@ -2792,7 +2794,7 @@ export default function App() {
                     }}
                     scroll={tableScroll}
                     rowSelection={{
-                      selectedRowKeys: selectedTaskIds,
+                      selectedRowKeys: visibleSelectedTaskIds,
                       onChange: onRowSelectionChange,
                     }}
                     onRow={(row) => {
