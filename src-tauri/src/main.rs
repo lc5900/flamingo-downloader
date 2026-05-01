@@ -603,6 +603,15 @@ async fn resume_task(state: State<'_, AppState>, task_id: String) -> Result<(), 
 }
 
 #[tauri::command]
+async fn retry_task(state: State<'_, AppState>, task_id: String) -> Result<(), String> {
+    state
+        .service
+        .retry_task(&task_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn stop_seeding(state: State<'_, AppState>, task_id: String) -> Result<(), String> {
     state
         .service
@@ -1350,6 +1359,7 @@ fn main() {
             add_torrent,
             pause_task,
             resume_task,
+            retry_task,
             stop_seeding,
             move_task_position,
             pause_all,

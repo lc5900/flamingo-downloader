@@ -1084,27 +1084,7 @@ export default function App() {
   }, [t])
 
   const retrySingleTask = async (task: Task) => {
-    const options = {
-      saveDir: task.save_dir || null,
-      out: task.name || null,
-    }
-    if (task.task_type === 'http') {
-      await api.call('add_url', { url: task.source, options })
-      return
-    }
-    if (task.task_type === 'magnet') {
-      await api.call('add_magnet', { magnet: task.source, options })
-      return
-    }
-    if (task.task_type === 'torrent') {
-      await api.call('add_torrent', {
-        torrentFilePath: task.source,
-        torrentBase64: null,
-        options,
-      })
-      return
-    }
-    throw new Error(`unsupported retry task type: ${task.task_type}`)
+    await api.call('retry_task', { taskId: task.id })
   }
 
   const onGlobalPauseAll = useCallback(async () => {

@@ -97,7 +97,7 @@
 - [x] 后端：新增 `TaskHealth`/`FailureReason` 数据结构，并从 aria2/ffmpeg/IO 错误映射到稳定 code
 - [x] DB：为任务表增加 health/error_code/remediation/last_retry_at/retry_count 字段，提供迁移
 - [x] UI：失败任务行和详情页展示原因、下一步动作和复制诊断
-- [ ] Service：按错误类型实现自动/手动重试策略，并写入 operation log
+- [x] Service：按错误类型实现自动/手动重试策略，并写入 operation log
 - [x] Tests：覆盖错误映射、重试策略、DB 迁移、UI 格式化展示
 - [ ] Docs：在 README 增加“失败诊断与限制”小节
 

@@ -2178,6 +2178,9 @@ impl DownloadService {
                     }
                 }
                 TaskStatus::Error => {
+                    if !should_auto_retry(&task) {
+                        continue;
+                    }
                     if retry_max_attempts == 0 {
                         continue;
                     }
@@ -2245,6 +2248,41 @@ impl DownloadService {
             }
         }
 
+        Ok(())
+    }
+
+    pub async fn retry_task(&self, task_id: &str) -> Result<()> {
+        let mut task = self
+            .db
+            .get_task(task_id)?
+            .ok_or_else(|| anyhow!("task not found"))?;
+        let settings = self.get_global_settings()?;
+        let mirrors = settings
+            .retry_fallback_mirrors
+            .unwrap_or_default()
+            .split([',', '\n'])
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>();
+        let now = now_ts();
+        let attempt = usize::try_from(task.retry_count.max(0)).unwrap_or_default();
+        let new_gid = self
+            .retry_task_with_fallback(&task, attempt, &mirrors)
+            .await?;
+        task.aria2_gid = Some(new_gid);
+        task.status = TaskStatus::Queued;
+        task.health = Some(TaskHealth::Normal.as_str().to_string());
+        task.error_code = None;
+        task.error_message = None;
+        task.remediation = None;
+        task.retry_count += 1;
+        task.last_retry_at = Some(now);
+        task.updated_at = now;
+        self.db.upsert_task(&task)?;
+        self.push_log(
+            "manual_retry",
+            format!("retried task {} attempt {}", task.id, task.retry_count),
+        );
         Ok(())
     }
 
@@ -2609,6 +2647,14 @@ fn apply_task_failure(task: &mut Task, failure: TaskFailureReason) {
     task.error_code = Some(failure.code);
     task.error_message = Some(failure.message);
     task.remediation = Some(failure.remediation);
+}
+
+fn should_auto_retry(task: &Task) -> bool {
+    let health = task.health.as_deref().unwrap_or_default();
+    !matches!(
+        health,
+        "auth_required" | "url_expired" | "disk_full" | "merge_failed"
+    )
 }
 
 fn is_dir_writable(path: &Path) -> bool {
@@ -4086,7 +4132,7 @@ mod tests {
 
     use super::{
         DownloadService, SpeedPlanRule, absolute_path, compute_next_retry_at, is_subpath,
-        normalize_ffmpeg_failure, rule_matches, select_speed_limit,
+        normalize_ffmpeg_failure, rule_matches, select_speed_limit, should_auto_retry,
     };
 
     #[test]
@@ -4219,6 +4265,41 @@ mod tests {
         let redirect = normalize_ffmpeg_failure(Some(1), "Too many redirects");
         assert_eq!(redirect.health, TaskHealth::UrlExpired);
         assert_eq!(redirect.code, "FFMPEG_REDIRECT_ERROR");
+    }
+
+    #[test]
+    fn auto_retry_skips_failures_requiring_user_action() {
+        let now = super::now_ts();
+        let task = Task {
+            id: "task".to_string(),
+            aria2_gid: Some("gid".to_string()),
+            task_type: TaskType::Http,
+            source: "https://example.com/file.bin".to_string(),
+            status: TaskStatus::Error,
+            name: None,
+            category: None,
+            save_dir: "/tmp".to_string(),
+            total_length: 0,
+            completed_length: 0,
+            download_speed: 0,
+            upload_speed: 0,
+            connections: 0,
+            health: Some(TaskHealth::AuthRequired.as_str().to_string()),
+            error_code: Some("HTTP_403".to_string()),
+            error_message: Some("forbidden".to_string()),
+            remediation: Some("refresh headers".to_string()),
+            retry_count: 0,
+            last_retry_at: None,
+            created_at: now,
+            updated_at: now,
+        };
+        assert!(!should_auto_retry(&task));
+
+        let retryable = Task {
+            health: Some(TaskHealth::NetworkUnstable.as_str().to_string()),
+            ..task
+        };
+        assert!(should_auto_retry(&retryable));
     }
 
     #[derive(Default)]
