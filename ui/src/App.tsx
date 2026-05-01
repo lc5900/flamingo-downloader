@@ -2443,8 +2443,12 @@ export default function App() {
                       ? t('downloadResultFailed')
                       : t('downloadResultInProgress')
                   const tag = <Tag color={statusColor(String(v))}>{label}</Tag>
-                  if (isError && (row.error_message || row.error_code)) {
-                    const errText = `${row.error_code ? `[${row.error_code}] ` : ''}${row.error_message || ''}`.trim()
+                  if (isError && (row.error_message || row.error_code || row.remediation)) {
+                    const errText = [
+                      row.health ? `${t('taskHealth')}: ${row.health}` : '',
+                      `${row.error_code ? `[${row.error_code}] ` : ''}${row.error_message || ''}`.trim(),
+                      row.remediation ? `${t('remediation')}: ${row.remediation}` : '',
+                    ].filter(Boolean).join('\n')
                     return (
                       <Tooltip title={errText}>
                         {tag}
@@ -2722,7 +2726,11 @@ export default function App() {
                       return { className, style }
                     }}
                     expandable={{
-                      rowExpandable: (row) => !!row.error_message || !!row.error_code || !!row.source,
+                      rowExpandable: (row) =>
+                        !!row.error_message ||
+                        !!row.error_code ||
+                        !!row.remediation ||
+                        !!row.source,
                       expandedRowRender: (row) => (
                         <Space direction="vertical" size={4} style={{ width: '100%' }}>
                           <Typography.Text type="secondary">
@@ -2735,6 +2743,22 @@ export default function App() {
                             <Typography.Text type="danger" className="error-detail">
                               {t('errorDetails')}: {row.error_code ? `[${row.error_code}] ` : ''}
                               {row.error_message || '-'}
+                            </Typography.Text>
+                          )}
+                          {!!row.health && (
+                            <Typography.Text type="secondary">
+                              {t('taskHealth')}: {row.health}
+                            </Typography.Text>
+                          )}
+                          {!!row.remediation && (
+                            <Typography.Text type="secondary">
+                              {t('remediation')}: {row.remediation}
+                            </Typography.Text>
+                          )}
+                          {!!row.retry_count && (
+                            <Typography.Text type="secondary">
+                              {t('retryCount')}: {row.retry_count}
+                              {row.last_retry_at ? `, ${t('lastRetryAt')}: ${fmtDateTime(row.last_retry_at)}` : ''}
                             </Typography.Text>
                           )}
                         </Space>

@@ -29,7 +29,8 @@ use crate::{
         AddTaskOptions, AppUpdateStrategy, Aria2UpdateApplyResult, Aria2UpdateInfo,
         BrowserBridgeStatus, CategoryRule, Diagnostics, DownloadDirRule, GlobalSettings,
         ImportTaskListResult, MediaMergeJob, OperationLog, SaveDirSuggestion, StartupSelfCheck,
-        StorageSummary, Task, TaskFile, TaskListSnapshot, TaskStatus, TaskType,
+        StorageSummary, Task, TaskFailureReason, TaskFile, TaskHealth, TaskListSnapshot,
+        TaskStatus, TaskType,
     },
 };
 
@@ -143,8 +144,12 @@ impl DownloadService {
             download_speed: 0,
             upload_speed: 0,
             connections: 0,
+            health: Some(TaskHealth::Normal.as_str().to_string()),
             error_code: None,
             error_message: None,
+            remediation: None,
+            retry_count: 0,
+            last_retry_at: None,
             created_at: now,
             updated_at: now,
         })?;
@@ -321,8 +326,12 @@ impl DownloadService {
             download_speed: 0,
             upload_speed: 0,
             connections: 0,
+            health: Some(TaskHealth::Normal.as_str().to_string()),
             error_code: None,
             error_message: None,
+            remediation: None,
+            retry_count: 0,
+            last_retry_at: None,
             created_at: now,
             updated_at: now,
         };
@@ -470,11 +479,9 @@ impl DownloadService {
                             .rev()
                             .collect::<Vec<_>>()
                             .join(" | ");
-                        let (normalized_code, normalized_message) =
-                            normalize_ffmpeg_failure(exit.code(), &detail);
+                        let failure = normalize_ffmpeg_failure(exit.code(), &detail);
                         t.status = TaskStatus::Error;
-                        t.error_code = Some(normalized_code);
-                        t.error_message = Some(normalized_message);
+                        apply_task_failure(&mut t, failure);
                         t.updated_at = now_ts();
                         let _ = db.upsert_task(&t);
                         let _ = db.append_operation_logs(&[OperationLog {
@@ -504,8 +511,16 @@ impl DownloadService {
                 Err(e) => {
                     if let Ok(Some(mut t)) = db.get_task(&task_id_bg) {
                         t.status = TaskStatus::Error;
-                        t.error_code = Some("FFMPEG_WAIT_ERROR".to_string());
-                        t.error_message = Some(format!("ffmpeg wait failed: {e}"));
+                        apply_task_failure(
+                            &mut t,
+                            TaskFailureReason {
+                                health: TaskHealth::MergeFailed,
+                                code: "FFMPEG_WAIT_ERROR".to_string(),
+                                message: format!("ffmpeg wait failed: {e}"),
+                                remediation: "Check ffmpeg availability and retry the merge task."
+                                    .to_string(),
+                            },
+                        );
                         t.updated_at = now_ts();
                         let _ = db.upsert_task(&t);
                         let _ = db.append_operation_logs(&[OperationLog {
@@ -564,8 +579,15 @@ impl DownloadService {
             download_speed: 0,
             upload_speed: 0,
             connections: 0,
+            health: Some(TaskHealth::MetadataPending.as_str().to_string()),
             error_code: None,
             error_message: None,
+            remediation: Some(
+                "Wait for metadata, add trackers, or retry the magnet link if it times out."
+                    .to_string(),
+            ),
+            retry_count: 0,
+            last_retry_at: None,
             created_at: now,
             updated_at: now,
         })?;
@@ -627,8 +649,12 @@ impl DownloadService {
             download_speed: 0,
             upload_speed: 0,
             connections: 0,
+            health: Some(TaskHealth::Normal.as_str().to_string()),
             error_code: None,
             error_message: None,
+            remediation: None,
+            retry_count: 0,
+            last_retry_at: None,
             created_at: now,
             updated_at: now,
         })?;
@@ -1746,7 +1772,7 @@ impl DownloadService {
                 aria2_gid: Some(snapshot.gid.clone()),
                 task_type: TaskType::Http,
                 source: format!("aria2:recovered:{}", snapshot.gid),
-                status,
+                status: status.clone(),
                 name: snapshot.name.clone(),
                 category: None,
                 save_dir: default_dir.clone(),
@@ -1755,8 +1781,23 @@ impl DownloadService {
                 download_speed: snapshot.download_speed,
                 upload_speed: snapshot.upload_speed,
                 connections: snapshot.connections,
+                health: Some(
+                    match status {
+                        TaskStatus::Metadata => TaskHealth::MetadataPending.as_str(),
+                        TaskStatus::Error => TaskHealth::UnknownError.as_str(),
+                        _ => TaskHealth::Normal.as_str(),
+                    }
+                    .to_string(),
+                ),
                 error_code: snapshot.error_code.clone(),
                 error_message: snapshot.error_message.clone(),
+                remediation: if matches!(status, TaskStatus::Error) {
+                    Some("Open task details or export a debug bundle for diagnosis.".to_string())
+                } else {
+                    None
+                },
+                retry_count: 0,
+                last_retry_at: None,
                 created_at: now,
                 updated_at: now,
             })?;
@@ -2114,11 +2155,20 @@ impl DownloadService {
                 TaskStatus::Metadata => {
                     if now - task.created_at > metadata_timeout_secs && task.total_length == 0 {
                         task.status = TaskStatus::Error;
-                        task.error_code = Some("METADATA_TIMEOUT".to_string());
-                        task.error_message = Some(format!(
-                            "magnet metadata timed out after {}s",
-                            metadata_timeout_secs
-                        ));
+                        apply_task_failure(
+                            &mut task,
+                            TaskFailureReason {
+                                health: TaskHealth::NetworkUnstable,
+                                code: "METADATA_TIMEOUT".to_string(),
+                                message: format!(
+                                    "magnet metadata timed out after {}s",
+                                    metadata_timeout_secs
+                                ),
+                                remediation:
+                                    "Add more trackers, check DHT/network connectivity, or retry the magnet link."
+                                        .to_string(),
+                            },
+                        );
                         task.updated_at = now;
                         self.db.upsert_task(&task)?;
                         self.push_log(
@@ -2153,6 +2203,8 @@ impl DownloadService {
                         task.status = TaskStatus::Queued;
                         task.error_code = None;
                         task.error_message = None;
+                        task.health = Some(TaskHealth::Normal.as_str().to_string());
+                        task.remediation = None;
                         task.updated_at = now;
                         self.db.upsert_task(&task)?;
                         let mut lock = self.retry_state.lock().expect("retry_state mutex poisoned");
@@ -2163,6 +2215,9 @@ impl DownloadService {
                         state.attempts += 1;
                         state.next_retry_at =
                             compute_next_retry_at(now, retry_backoff_secs, state.attempts);
+                        task.retry_count = state.attempts as i64;
+                        task.last_retry_at = Some(now);
+                        self.db.upsert_task(&task)?;
                         self.push_log(
                             "auto_retry",
                             format!("retried task {} attempt {}", task.id, state.attempts),
@@ -2176,6 +2231,9 @@ impl DownloadService {
                         state.attempts += 1;
                         state.next_retry_at =
                             compute_next_retry_at(now, retry_backoff_secs, state.attempts);
+                        task.retry_count = state.attempts as i64;
+                        task.last_retry_at = Some(now);
+                        self.db.upsert_task(&task)?;
                     }
                 }
                 _ => {
@@ -2472,7 +2530,7 @@ fn probe_media_duration_ms(
     Some((secs * 1000.0).round() as i64)
 }
 
-fn normalize_ffmpeg_failure(exit_code: Option<i32>, detail: &str) -> (String, String) {
+fn normalize_ffmpeg_failure(exit_code: Option<i32>, detail: &str) -> TaskFailureReason {
     let fallback_code = format!("FFMPEG_EXIT_{}", exit_code.unwrap_or(-1));
     let fallback_msg = if detail.trim().is_empty() {
         "ffmpeg merge failed with unknown error".to_string()
@@ -2481,47 +2539,76 @@ fn normalize_ffmpeg_failure(exit_code: Option<i32>, detail: &str) -> (String, St
     };
     let lower = detail.to_ascii_lowercase();
     if lower.contains("403 forbidden") || lower.contains("http error 403") {
-        return (
-            "FFMPEG_HTTP_403".to_string(),
-            "request forbidden (403). try adding referer/cookie or refresh source URL".to_string(),
-        );
+        return TaskFailureReason {
+            health: TaskHealth::AuthRequired,
+            code: "FFMPEG_HTTP_403".to_string(),
+            message: "request forbidden (403). try adding referer/cookie or refresh source URL"
+                .to_string(),
+            remediation: "Refresh the browser capture, add referer/cookie headers, then retry."
+                .to_string(),
+        };
     }
     if lower.contains("401 unauthorized") || lower.contains("http error 401") {
-        return (
-            "FFMPEG_HTTP_401".to_string(),
-            "request unauthorized (401). authentication token/cookie may be expired".to_string(),
-        );
+        return TaskFailureReason {
+            health: TaskHealth::AuthRequired,
+            code: "FFMPEG_HTTP_401".to_string(),
+            message: "request unauthorized (401). authentication token/cookie may be expired"
+                .to_string(),
+            remediation: "Refresh the source page and capture a new URL with valid cookies."
+                .to_string(),
+        };
     }
     if lower.contains("protocol not found")
         || lower.contains("protocol whitelist")
         || lower.contains("unsafe file name")
     {
-        return (
-            "FFMPEG_PROTOCOL_BLOCKED".to_string(),
-            "source protocol blocked by ffmpeg. try a direct media URL or update ffmpeg"
+        return TaskFailureReason {
+            health: TaskHealth::MergeFailed,
+            code: "FFMPEG_PROTOCOL_BLOCKED".to_string(),
+            message: "source protocol blocked by ffmpeg. try a direct media URL or update ffmpeg"
                 .to_string(),
-        );
+            remediation: "Use a direct media URL, change ffmpeg build, or disable the merge path."
+                .to_string(),
+        };
     }
     if lower.contains("cors")
         || lower.contains("access-control-allow-origin")
         || lower.contains("origin not allowed")
     {
-        return (
-            "FFMPEG_CORS_RESTRICTED".to_string(),
-            "source blocked by CORS/origin policy. add referer headers or use browser bridge capture".to_string(),
-        );
+        return TaskFailureReason {
+            health: TaskHealth::AuthRequired,
+            code: "FFMPEG_CORS_RESTRICTED".to_string(),
+            message: "source blocked by CORS/origin policy. add referer headers or use browser bridge capture".to_string(),
+            remediation: "Send the media from the browser extension so referer headers are preserved."
+                .to_string(),
+        };
     }
     if lower.contains("too many redirects")
         || lower.contains("redirect")
         || lower.contains("moved permanently")
     {
-        return (
-            "FFMPEG_REDIRECT_ERROR".to_string(),
-            "redirect chain failed. source URL may be temporary or requires fresh capture"
+        return TaskFailureReason {
+            health: TaskHealth::UrlExpired,
+            code: "FFMPEG_REDIRECT_ERROR".to_string(),
+            message: "redirect chain failed. source URL may be temporary or requires fresh capture"
                 .to_string(),
-        );
+            remediation: "Refresh the source page and capture a fresh media URL.".to_string(),
+        };
     }
-    (fallback_code, fallback_msg)
+    TaskFailureReason {
+        health: TaskHealth::MergeFailed,
+        code: fallback_code,
+        message: fallback_msg,
+        remediation: "Open task details, inspect ffmpeg arguments, or export a debug bundle."
+            .to_string(),
+    }
+}
+
+fn apply_task_failure(task: &mut Task, failure: TaskFailureReason) {
+    task.health = Some(failure.health.as_str().to_string());
+    task.error_code = Some(failure.code);
+    task.error_message = Some(failure.message);
+    task.remediation = Some(failure.remediation);
 }
 
 fn is_dir_writable(path: &Path) -> bool {
@@ -3193,8 +3280,12 @@ fn redact_tasks(tasks: &[Task]) -> Vec<Task> {
             download_speed: task.download_speed,
             upload_speed: task.upload_speed,
             connections: task.connections,
+            health: task.health.clone(),
             error_code: task.error_code.clone(),
             error_message: task.error_message.as_deref().map(redact_sensitive_text),
+            remediation: task.remediation.as_deref().map(redact_sensitive_text),
+            retry_count: task.retry_count,
+            last_retry_at: task.last_retry_at,
             created_at: task.created_at,
             updated_at: task.updated_at,
         })
@@ -3990,12 +4081,12 @@ mod tests {
         aria2_manager::{Aria2Api, Aria2Endpoint},
         db::Database,
         events::EventEmitter,
-        models::{Aria2TaskSnapshot, DownloadDirRule, Task, TaskStatus, TaskType},
+        models::{Aria2TaskSnapshot, DownloadDirRule, Task, TaskHealth, TaskStatus, TaskType},
     };
 
     use super::{
         DownloadService, SpeedPlanRule, absolute_path, compute_next_retry_at, is_subpath,
-        rule_matches, select_speed_limit,
+        normalize_ffmpeg_failure, rule_matches, select_speed_limit,
     };
 
     #[test]
@@ -4116,6 +4207,18 @@ mod tests {
         let backoff = 15_i64;
         assert_eq!(compute_next_retry_at(now, backoff, 1), now + 30);
         assert_eq!(compute_next_retry_at(now, backoff, 2), now + 45);
+    }
+
+    #[test]
+    fn ffmpeg_failure_normalization_maps_actionable_reasons() {
+        let forbidden = normalize_ffmpeg_failure(Some(1), "Server returned 403 Forbidden");
+        assert_eq!(forbidden.health, TaskHealth::AuthRequired);
+        assert_eq!(forbidden.code, "FFMPEG_HTTP_403");
+        assert!(forbidden.remediation.contains("cookie"));
+
+        let redirect = normalize_ffmpeg_failure(Some(1), "Too many redirects");
+        assert_eq!(redirect.health, TaskHealth::UrlExpired);
+        assert_eq!(redirect.code, "FFMPEG_REDIRECT_ERROR");
     }
 
     #[derive(Default)]
@@ -4414,8 +4517,12 @@ mod tests {
             download_speed: 0,
             upload_speed: 0,
             connections: 0,
+            health: Some(TaskHealth::Normal.as_str().to_string()),
             error_code: None,
             error_message: None,
+            remediation: None,
+            retry_count: 0,
+            last_retry_at: None,
             created_at: now,
             updated_at: now,
         })

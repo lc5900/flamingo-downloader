@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use crate::models::{
     Aria2TaskSnapshot, CategoryRule, DownloadDirRule, GlobalSettings, MediaMergeJob, Task,
-    TaskFile, TaskStatus, TaskType,
+    TaskFile, TaskHealth, TaskStatus, TaskType,
 };
 
 pub struct Database {
@@ -19,7 +19,7 @@ pub struct Database {
     db_path: PathBuf,
 }
 
-const SCHEMA_VERSION: i64 = 6;
+const SCHEMA_VERSION: i64 = 7;
 
 #[derive(Debug, serde::Deserialize)]
 struct StoredSpeedPlanRule {
@@ -67,8 +67,12 @@ impl Database {
               download_speed INTEGER DEFAULT 0,
               upload_speed INTEGER DEFAULT 0,
               connections INTEGER DEFAULT 0,
+              health TEXT,
               error_code TEXT,
               error_message TEXT,
+              remediation TEXT,
+              retry_count INTEGER DEFAULT 0,
+              last_retry_at INTEGER,
               created_at INTEGER NOT NULL,
               updated_at INTEGER NOT NULL
             );
@@ -113,8 +117,9 @@ impl Database {
                 id, aria2_gid, type, source, status, name, save_dir,
                 category,
                 total_length, completed_length, download_speed, upload_speed,
-                connections, error_code, error_message, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+                connections, health, error_code, error_message, remediation,
+                retry_count, last_retry_at, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
             ON CONFLICT(id) DO UPDATE SET
               aria2_gid=excluded.aria2_gid,
               type=excluded.type,
@@ -128,8 +133,12 @@ impl Database {
               download_speed=excluded.download_speed,
               upload_speed=excluded.upload_speed,
               connections=excluded.connections,
+              health=excluded.health,
               error_code=excluded.error_code,
               error_message=excluded.error_message,
+              remediation=excluded.remediation,
+              retry_count=excluded.retry_count,
+              last_retry_at=excluded.last_retry_at,
               updated_at=excluded.updated_at
             "#,
             params![
@@ -146,8 +155,12 @@ impl Database {
                 task.download_speed,
                 task.upload_speed,
                 task.connections,
+                task.health,
                 task.error_code,
                 task.error_message,
+                task.remediation,
+                task.retry_count,
+                task.last_retry_at,
                 task.created_at,
                 task.updated_at,
             ],
@@ -165,8 +178,8 @@ impl Database {
         let mut rows = if let Some(status) = status {
             let mut stmt = conn.prepare(
                 r#"SELECT id, aria2_gid, type, source, status, name, save_dir, category, total_length,
-                   completed_length, download_speed, upload_speed, connections, error_code,
-                   error_message, created_at, updated_at
+                   completed_length, download_speed, upload_speed, connections, health, error_code,
+                   error_message, remediation, retry_count, last_retry_at, created_at, updated_at
                    FROM tasks WHERE status = ?1 ORDER BY created_at DESC LIMIT ?2 OFFSET ?3"#,
             )?;
             stmt.query_map(params![status.as_str(), limit, offset], row_to_task)?
@@ -174,8 +187,8 @@ impl Database {
         } else {
             let mut stmt = conn.prepare(
                 r#"SELECT id, aria2_gid, type, source, status, name, save_dir, category, total_length,
-                   completed_length, download_speed, upload_speed, connections, error_code,
-                   error_message, created_at, updated_at
+                   completed_length, download_speed, upload_speed, connections, health, error_code,
+                   error_message, remediation, retry_count, last_retry_at, created_at, updated_at
                    FROM tasks ORDER BY created_at DESC LIMIT ?1 OFFSET ?2"#,
             )?;
             stmt.query_map(params![limit, offset], row_to_task)?
@@ -189,8 +202,8 @@ impl Database {
         let conn = self.conn.lock().expect("db mutex poisoned");
         conn.query_row(
             r#"SELECT id, aria2_gid, type, source, status, name, save_dir, category, total_length,
-               completed_length, download_speed, upload_speed, connections, error_code,
-               error_message, created_at, updated_at
+               completed_length, download_speed, upload_speed, connections, health, error_code,
+               error_message, remediation, retry_count, last_retry_at, created_at, updated_at
                FROM tasks WHERE id = ?1"#,
             params![task_id],
             row_to_task,
@@ -203,8 +216,8 @@ impl Database {
         let conn = self.conn.lock().expect("db mutex poisoned");
         conn.query_row(
             r#"SELECT id, aria2_gid, type, source, status, name, save_dir, category, total_length,
-               completed_length, download_speed, upload_speed, connections, error_code,
-               error_message, created_at, updated_at
+               completed_length, download_speed, upload_speed, connections, health, error_code,
+               error_message, remediation, retry_count, last_retry_at, created_at, updated_at
                FROM tasks WHERE aria2_gid = ?1"#,
             params![gid],
             row_to_task,
@@ -231,8 +244,7 @@ impl Database {
                 task.download_speed = snapshot.download_speed;
                 task.upload_speed = snapshot.upload_speed;
                 task.connections = snapshot.connections;
-                task.error_code = snapshot.error_code.clone();
-                task.error_message = snapshot.error_message.clone();
+                apply_snapshot_failure(&mut task, snapshot);
                 if task.name.is_none() {
                     task.name = snapshot.name.clone();
                 }
@@ -981,11 +993,101 @@ fn row_to_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         download_speed: row.get(10)?,
         upload_speed: row.get(11)?,
         connections: row.get(12)?,
-        error_code: row.get(13)?,
-        error_message: row.get(14)?,
-        created_at: row.get(15)?,
-        updated_at: row.get(16)?,
+        health: row.get(13)?,
+        error_code: row.get(14)?,
+        error_message: row.get(15)?,
+        remediation: row.get(16)?,
+        retry_count: row.get(17)?,
+        last_retry_at: row.get(18)?,
+        created_at: row.get(19)?,
+        updated_at: row.get(20)?,
     })
+}
+
+fn apply_snapshot_failure(task: &mut Task, snapshot: &Aria2TaskSnapshot) {
+    task.error_code = snapshot.error_code.clone();
+    task.error_message = snapshot.error_message.clone();
+    match task.status {
+        TaskStatus::Completed | TaskStatus::Active | TaskStatus::Paused | TaskStatus::Queued => {
+            task.health = Some(TaskHealth::Normal.as_str().to_string());
+            task.remediation = None;
+            if matches!(task.status, TaskStatus::Completed) {
+                task.error_code = None;
+                task.error_message = None;
+            }
+        }
+        TaskStatus::Metadata => {
+            task.health = Some(TaskHealth::MetadataPending.as_str().to_string());
+            task.remediation = Some(
+                "Wait for metadata, add trackers, or retry the magnet link if it times out."
+                    .to_string(),
+            );
+        }
+        TaskStatus::Error => {
+            let (health, remediation) = classify_aria2_failure(
+                snapshot.error_code.as_deref(),
+                snapshot.error_message.as_deref(),
+            );
+            task.health = Some(health.as_str().to_string());
+            task.remediation = Some(remediation.to_string());
+        }
+        TaskStatus::Removed => {}
+    }
+}
+
+fn classify_aria2_failure(code: Option<&str>, message: Option<&str>) -> (TaskHealth, &'static str) {
+    let haystack = format!(
+        "{} {}",
+        code.unwrap_or_default(),
+        message.unwrap_or_default()
+    )
+    .to_ascii_lowercase();
+    if haystack.contains("401") || haystack.contains("unauthorized") {
+        return (
+            TaskHealth::AuthRequired,
+            "Refresh the source page or add valid cookies/authorization headers.",
+        );
+    }
+    if haystack.contains("403") || haystack.contains("forbidden") {
+        return (
+            TaskHealth::AuthRequired,
+            "Add referer/cookies, use browser capture, or refresh the source URL.",
+        );
+    }
+    if haystack.contains("404")
+        || haystack.contains("not found")
+        || haystack.contains("expired")
+        || haystack.contains("gone")
+    {
+        return (
+            TaskHealth::UrlExpired,
+            "Refresh or replace the URL, then retry the task.",
+        );
+    }
+    if haystack.contains("disk")
+        || haystack.contains("no space")
+        || haystack.contains("quota")
+        || haystack.contains("permission denied")
+    {
+        return (
+            TaskHealth::DiskFull,
+            "Free disk space or choose a writable save directory before retrying.",
+        );
+    }
+    if haystack.contains("timeout")
+        || haystack.contains("connection")
+        || haystack.contains("network")
+        || haystack.contains("resolve")
+    {
+        return (
+            TaskHealth::NetworkUnstable,
+            "Check the network connection, proxy, DNS, or retry later.",
+        );
+    }
+    (
+        TaskHealth::UnknownError,
+        "Open task details or export a debug bundle for diagnosis.",
+    )
 }
 
 fn table_has_column(conn: &Connection, table: &str, column: &str) -> Result<bool> {
@@ -1121,6 +1223,31 @@ fn apply_migration(conn: &Connection, version: i64) -> Result<()> {
                 CREATE INDEX IF NOT EXISTS idx_media_merge_jobs_updated_at
                 ON media_merge_jobs(updated_at);
                 "#,
+            )?;
+        }
+        7 => {
+            if !table_has_column(conn, "tasks", "health")? {
+                conn.execute("ALTER TABLE tasks ADD COLUMN health TEXT", [])?;
+            }
+            if !table_has_column(conn, "tasks", "remediation")? {
+                conn.execute("ALTER TABLE tasks ADD COLUMN remediation TEXT", [])?;
+            }
+            if !table_has_column(conn, "tasks", "retry_count")? {
+                conn.execute(
+                    "ALTER TABLE tasks ADD COLUMN retry_count INTEGER DEFAULT 0",
+                    [],
+                )?;
+            }
+            if !table_has_column(conn, "tasks", "last_retry_at")? {
+                conn.execute("ALTER TABLE tasks ADD COLUMN last_retry_at INTEGER", [])?;
+            }
+            conn.execute(
+                "UPDATE tasks SET health = CASE WHEN status = 'error' THEN 'unknown_error' WHEN status = 'metadata' THEN 'metadata_pending' ELSE 'normal' END WHERE health IS NULL",
+                [],
+            )?;
+            conn.execute(
+                "UPDATE tasks SET retry_count = 0 WHERE retry_count IS NULL",
+                [],
             )?;
         }
         _ => {}
@@ -1437,5 +1564,19 @@ mod tests {
         assert_eq!(pruned, 1);
         assert!(!db.is_gid_deleted("gid-test").expect("check deleted gid"));
         let _ = std::fs::remove_file(db_path);
+    }
+
+    #[test]
+    fn classify_aria2_failure_maps_common_reasons() {
+        let (health, remediation) = classify_aria2_failure(
+            Some("3"),
+            Some("HTTP response header was bad or unexpected: 403 Forbidden"),
+        );
+        assert_eq!(health, TaskHealth::AuthRequired);
+        assert!(remediation.contains("referer"));
+
+        let (health, remediation) = classify_aria2_failure(None, Some("No space left on device"));
+        assert_eq!(health, TaskHealth::DiskFull);
+        assert!(remediation.contains("disk"));
     }
 }
