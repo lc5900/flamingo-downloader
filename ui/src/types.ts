@@ -15,8 +15,12 @@ export type Task = {
   total_length: number
   completed_length: number
   download_speed: number
+  health?: string | null
   error_code?: string | null
   error_message?: string | null
+  remediation?: string | null
+  retry_count?: number | null
+  last_retry_at?: number | null
   created_at?: number
   updated_at?: number
 }

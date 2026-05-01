@@ -60,6 +60,11 @@ pub async fn resume_task(service: Arc<DownloadService>, task_id: String) -> Resu
 }
 
 #[allow(dead_code)]
+pub async fn retry_task(service: Arc<DownloadService>, task_id: String) -> Result<()> {
+    service.retry_task(&task_id).await
+}
+
+#[allow(dead_code)]
 pub async fn resume_all_tasks(service: Arc<DownloadService>) -> Result<()> {
     service.resume_all().await
 }

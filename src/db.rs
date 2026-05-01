@@ -6,10 +6,12 @@ use std::{
 
 use anyhow::{Context, Result, anyhow};
 use rusqlite::{Connection, OptionalExtension, params};
+use serde::de::DeserializeOwned;
+use serde_json::Value;
 
 use crate::models::{
     Aria2TaskSnapshot, CategoryRule, DownloadDirRule, GlobalSettings, MediaMergeJob, Task,
-    TaskFile, TaskStatus, TaskType,
+    TaskFile, TaskHealth, TaskStatus, TaskType,
 };
 
 pub struct Database {
@@ -17,7 +19,22 @@ pub struct Database {
     db_path: PathBuf,
 }
 
-const SCHEMA_VERSION: i64 = 6;
+const SCHEMA_VERSION: i64 = 7;
+
+#[derive(Debug, serde::Deserialize)]
+struct StoredSpeedPlanRule {
+    days: Option<String>,
+    start: Option<String>,
+    end: Option<String>,
+    limit: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct StoredTaskOptionPreset {
+    name: String,
+    task_type: String,
+    options: Value,
+}
 
 impl Database {
     pub fn new(path: impl AsRef<Path>) -> Result<Self> {
@@ -50,8 +67,12 @@ impl Database {
               download_speed INTEGER DEFAULT 0,
               upload_speed INTEGER DEFAULT 0,
               connections INTEGER DEFAULT 0,
+              health TEXT,
               error_code TEXT,
               error_message TEXT,
+              remediation TEXT,
+              retry_count INTEGER DEFAULT 0,
+              last_retry_at INTEGER,
               created_at INTEGER NOT NULL,
               updated_at INTEGER NOT NULL
             );
@@ -96,8 +117,9 @@ impl Database {
                 id, aria2_gid, type, source, status, name, save_dir,
                 category,
                 total_length, completed_length, download_speed, upload_speed,
-                connections, error_code, error_message, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+                connections, health, error_code, error_message, remediation,
+                retry_count, last_retry_at, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
             ON CONFLICT(id) DO UPDATE SET
               aria2_gid=excluded.aria2_gid,
               type=excluded.type,
@@ -111,8 +133,12 @@ impl Database {
               download_speed=excluded.download_speed,
               upload_speed=excluded.upload_speed,
               connections=excluded.connections,
+              health=excluded.health,
               error_code=excluded.error_code,
               error_message=excluded.error_message,
+              remediation=excluded.remediation,
+              retry_count=excluded.retry_count,
+              last_retry_at=excluded.last_retry_at,
               updated_at=excluded.updated_at
             "#,
             params![
@@ -129,8 +155,12 @@ impl Database {
                 task.download_speed,
                 task.upload_speed,
                 task.connections,
+                task.health,
                 task.error_code,
                 task.error_message,
+                task.remediation,
+                task.retry_count,
+                task.last_retry_at,
                 task.created_at,
                 task.updated_at,
             ],
@@ -148,8 +178,8 @@ impl Database {
         let mut rows = if let Some(status) = status {
             let mut stmt = conn.prepare(
                 r#"SELECT id, aria2_gid, type, source, status, name, save_dir, category, total_length,
-                   completed_length, download_speed, upload_speed, connections, error_code,
-                   error_message, created_at, updated_at
+                   completed_length, download_speed, upload_speed, connections, health, error_code,
+                   error_message, remediation, retry_count, last_retry_at, created_at, updated_at
                    FROM tasks WHERE status = ?1 ORDER BY created_at DESC LIMIT ?2 OFFSET ?3"#,
             )?;
             stmt.query_map(params![status.as_str(), limit, offset], row_to_task)?
@@ -157,8 +187,8 @@ impl Database {
         } else {
             let mut stmt = conn.prepare(
                 r#"SELECT id, aria2_gid, type, source, status, name, save_dir, category, total_length,
-                   completed_length, download_speed, upload_speed, connections, error_code,
-                   error_message, created_at, updated_at
+                   completed_length, download_speed, upload_speed, connections, health, error_code,
+                   error_message, remediation, retry_count, last_retry_at, created_at, updated_at
                    FROM tasks ORDER BY created_at DESC LIMIT ?1 OFFSET ?2"#,
             )?;
             stmt.query_map(params![limit, offset], row_to_task)?
@@ -172,8 +202,8 @@ impl Database {
         let conn = self.conn.lock().expect("db mutex poisoned");
         conn.query_row(
             r#"SELECT id, aria2_gid, type, source, status, name, save_dir, category, total_length,
-               completed_length, download_speed, upload_speed, connections, error_code,
-               error_message, created_at, updated_at
+               completed_length, download_speed, upload_speed, connections, health, error_code,
+               error_message, remediation, retry_count, last_retry_at, created_at, updated_at
                FROM tasks WHERE id = ?1"#,
             params![task_id],
             row_to_task,
@@ -186,8 +216,8 @@ impl Database {
         let conn = self.conn.lock().expect("db mutex poisoned");
         conn.query_row(
             r#"SELECT id, aria2_gid, type, source, status, name, save_dir, category, total_length,
-               completed_length, download_speed, upload_speed, connections, error_code,
-               error_message, created_at, updated_at
+               completed_length, download_speed, upload_speed, connections, health, error_code,
+               error_message, remediation, retry_count, last_retry_at, created_at, updated_at
                FROM tasks WHERE aria2_gid = ?1"#,
             params![gid],
             row_to_task,
@@ -214,8 +244,7 @@ impl Database {
                 task.download_speed = snapshot.download_speed;
                 task.upload_speed = snapshot.upload_speed;
                 task.connections = snapshot.connections;
-                task.error_code = snapshot.error_code.clone();
-                task.error_message = snapshot.error_message.clone();
+                apply_snapshot_failure(&mut task, snapshot);
                 if task.name.is_none() {
                     task.name = snapshot.name.clone();
                 }
@@ -287,48 +316,8 @@ impl Database {
             "max_concurrent_downloads",
             "max_connection_per_server",
         ];
-        for key in must_exist {
-            let value = self
-                .get_setting(key)?
-                .ok_or_else(|| anyhow::anyhow!("missing required setting: {key}"))?;
-            if value.trim().is_empty() {
-                return Err(anyhow::anyhow!("required setting is empty: {key}"));
-            }
-        }
-
-        let mc = self
-            .get_setting("max_concurrent_downloads")?
-            .ok_or_else(|| anyhow::anyhow!("missing required setting: max_concurrent_downloads"))?;
-        mc.parse::<u32>().map_err(|_| {
-            anyhow::anyhow!(
-                "invalid setting max_concurrent_downloads={mc}, expected positive integer"
-            )
-        })?;
-
-        let mcs = self
-            .get_setting("max_connection_per_server")?
-            .ok_or_else(|| {
-                anyhow::anyhow!("missing required setting: max_connection_per_server")
-            })?;
-        mcs.parse::<u32>().map_err(|_| {
-            anyhow::anyhow!(
-                "invalid setting max_connection_per_server={mcs}, expected positive integer"
-            )
-        })?;
-
-        if let Some(split) = self.get_setting("split")? {
-            split.parse::<u32>().map_err(|_| {
-                anyhow::anyhow!("invalid setting split={split}, expected positive integer")
-            })?;
-        }
-
-        if let Some(upnp) = self.get_setting("enable_upnp")? {
-            if upnp != "true" && upnp != "false" {
-                return Err(anyhow::anyhow!(
-                    "invalid setting enable_upnp={upnp}, expected true|false"
-                ));
-            }
-        }
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        validate_runtime_settings_with_conn(&conn, &must_exist)?;
         Ok(())
     }
 
@@ -344,105 +333,123 @@ impl Database {
     }
 
     pub fn save_global_settings(&self, settings: &GlobalSettings) -> Result<()> {
+        let mut conn = self.conn.lock().expect("db mutex poisoned");
+        let tx = conn.transaction()?;
+        let set = |key: &str, value: &str| -> Result<()> {
+            tx.execute(
+                "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                params![key, value],
+            )?;
+            Ok(())
+        };
         if let Some(v) = &settings.aria2_bin_path {
-            self.set_setting("manual_aria2_bin_path", v)?;
+            set("manual_aria2_bin_path", v)?;
         }
         if let Some(v) = &settings.download_dir {
-            self.set_setting("download_dir", v)?;
+            set("download_dir", v)?;
         }
         if let Some(v) = settings.max_concurrent_downloads {
-            self.set_setting("max_concurrent_downloads", &v.to_string())?;
+            set("max_concurrent_downloads", &v.to_string())?;
         }
         if let Some(v) = settings.max_connection_per_server {
-            self.set_setting("max_connection_per_server", &v.to_string())?;
+            set("max_connection_per_server", &v.to_string())?;
         }
         if let Some(v) = &settings.max_overall_download_limit {
-            self.set_setting("max_overall_download_limit", v)?;
+            set("max_overall_download_limit", v)?;
         }
         if let Some(v) = &settings.bt_tracker {
-            self.set_setting("bt_tracker", v)?;
+            set("bt_tracker", v)?;
         }
         if let Some(v) = settings.enable_upnp {
-            self.set_setting("enable_upnp", if v { "true" } else { "false" })?;
+            set("enable_upnp", if v { "true" } else { "false" })?;
         }
         if let Some(v) = &settings.github_cdn {
-            self.set_setting("github_cdn", v)?;
+            set("github_cdn", v)?;
         }
         if let Some(v) = &settings.github_token {
-            self.set_setting("github_token", v)?;
+            set("github_token", v)?;
         }
         if let Some(v) = settings.browser_bridge_enabled {
-            self.set_setting("browser_bridge_enabled", if v { "true" } else { "false" })?;
+            set("browser_bridge_enabled", if v { "true" } else { "false" })?;
         }
         if let Some(v) = settings.browser_bridge_port {
-            self.set_setting("browser_bridge_port", &v.to_string())?;
+            set("browser_bridge_port", &v.to_string())?;
         }
         if let Some(v) = &settings.browser_bridge_token {
-            self.set_setting("browser_bridge_token", v)?;
+            set("browser_bridge_token", v)?;
         }
         if let Some(v) = &settings.browser_bridge_allowed_origins {
-            self.set_setting("browser_bridge_allowed_origins", v)?;
+            set("browser_bridge_allowed_origins", v)?;
         }
         if let Some(v) = &settings.ffmpeg_bin_path {
-            self.set_setting("ffmpeg_bin_path", v)?;
+            set("ffmpeg_bin_path", v)?;
         }
         if let Some(v) = settings.media_merge_enabled {
-            self.set_setting("media_merge_enabled", if v { "true" } else { "false" })?;
+            set("media_merge_enabled", if v { "true" } else { "false" })?;
         }
         if let Some(v) = settings.clipboard_watch_enabled {
-            self.set_setting("clipboard_watch_enabled", if v { "true" } else { "false" })?;
+            set("clipboard_watch_enabled", if v { "true" } else { "false" })?;
         }
         if let Some(v) = &settings.ui_theme {
-            self.set_setting("ui_theme", v)?;
+            set("ui_theme", v)?;
         }
         if let Some(v) = settings.retry_max_attempts {
-            self.set_setting("retry_max_attempts", &v.to_string())?;
+            set("retry_max_attempts", &v.to_string())?;
         }
         if let Some(v) = settings.retry_backoff_secs {
-            self.set_setting("retry_backoff_secs", &v.to_string())?;
+            set("retry_backoff_secs", &v.to_string())?;
         }
         if let Some(v) = &settings.retry_fallback_mirrors {
-            self.set_setting("retry_fallback_mirrors", v)?;
+            set("retry_fallback_mirrors", v)?;
         }
         if let Some(v) = settings.metadata_timeout_secs {
-            self.set_setting("metadata_timeout_secs", &v.to_string())?;
+            set("metadata_timeout_secs", &v.to_string())?;
         }
         if let Some(v) = &settings.speed_plan {
-            self.set_setting("speed_plan", v)?;
+            set("speed_plan", v)?;
         }
         if let Some(v) = &settings.task_option_presets {
-            self.set_setting("task_option_presets", v)?;
+            set("task_option_presets", v)?;
         }
         if let Some(v) = &settings.post_complete_action {
-            self.set_setting("post_complete_action", v)?;
+            set("post_complete_action", v)?;
         }
         if let Some(v) = settings.auto_delete_control_files {
-            self.set_setting(
+            set(
                 "auto_delete_control_files",
                 if v { "true" } else { "false" },
             )?;
         }
         if let Some(v) = settings.auto_clear_completed_days {
-            self.set_setting("auto_clear_completed_days", &v.to_string())?;
+            set("auto_clear_completed_days", &v.to_string())?;
         }
         if let Some(v) = settings.first_run_done {
-            self.set_setting("first_run_done", if v { "true" } else { "false" })?;
+            set("first_run_done", if v { "true" } else { "false" })?;
         }
         if let Some(v) = settings.start_minimized {
-            self.set_setting("start_minimized", if v { "true" } else { "false" })?;
+            set("start_minimized", if v { "true" } else { "false" })?;
         }
         if let Some(v) = settings.minimize_to_tray {
-            self.set_setting("minimize_to_tray", if v { "true" } else { "false" })?;
+            set("minimize_to_tray", if v { "true" } else { "false" })?;
         }
         if let Some(v) = settings.notify_on_complete {
-            self.set_setting("notify_on_complete", if v { "true" } else { "false" })?;
+            set("notify_on_complete", if v { "true" } else { "false" })?;
         }
         let rules_json = serde_json::to_string(&settings.download_dir_rules)
             .context("serialize download_dir_rules")?;
-        self.set_setting("download_dir_rules", &rules_json)?;
+        set("download_dir_rules", &rules_json)?;
         let category_rules_json =
             serde_json::to_string(&settings.category_rules).context("serialize category_rules")?;
-        self.set_setting("category_rules", &category_rules_json)?;
+        set("category_rules", &category_rules_json)?;
+        validate_runtime_settings_with_conn(
+            &tx,
+            &[
+                "download_dir",
+                "max_concurrent_downloads",
+                "max_connection_per_server",
+            ],
+        )?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -763,6 +770,212 @@ impl Database {
     }
 }
 
+fn validate_runtime_settings_with_conn(conn: &Connection, must_exist: &[&str]) -> Result<()> {
+    for key in must_exist {
+        require_non_empty_setting(conn, key)?;
+    }
+
+    parse_required_u32_setting(conn, "max_concurrent_downloads")?;
+    parse_required_u32_setting(conn, "max_connection_per_server")?;
+    parse_optional_u32_setting(conn, "split")?;
+    parse_optional_u32_setting(conn, "retry_max_attempts")?;
+    parse_optional_u32_setting(conn, "retry_backoff_secs")?;
+    parse_optional_u32_setting(conn, "metadata_timeout_secs")?;
+    parse_optional_u32_setting(conn, "auto_clear_completed_days")?;
+
+    for key in [
+        "enable_upnp",
+        "browser_bridge_enabled",
+        "media_merge_enabled",
+        "clipboard_watch_enabled",
+        "auto_delete_control_files",
+        "first_run_done",
+        "start_minimized",
+        "minimize_to_tray",
+        "notify_on_complete",
+    ] {
+        parse_optional_bool_setting(conn, key)?;
+    }
+
+    if let Some(port_text) = get_optional_setting_from_conn(conn, "browser_bridge_port")? {
+        let port = port_text.parse::<u16>().map_err(|_| {
+            anyhow!("invalid setting browser_bridge_port={port_text}, expected 1-65535")
+        })?;
+        if port == 0 {
+            return Err(anyhow!(
+                "invalid setting browser_bridge_port={port_text}, expected 1-65535"
+            ));
+        }
+    }
+
+    if let Some(theme) = get_optional_setting_from_conn(conn, "ui_theme")? {
+        match theme.trim() {
+            "system" | "light" | "dark" => {}
+            _ => {
+                return Err(anyhow!(
+                    "invalid setting ui_theme={theme}, expected system|light|dark"
+                ));
+            }
+        }
+    }
+
+    if let Some(action) = get_optional_setting_from_conn(conn, "post_complete_action")? {
+        match action.trim() {
+            "none" | "open_dir" | "open_file" => {}
+            _ => {
+                return Err(anyhow!(
+                    "invalid setting post_complete_action={action}, expected none|open_dir|open_file"
+                ));
+            }
+        }
+    }
+
+    parse_optional_json_setting::<Vec<DownloadDirRule>>(conn, "download_dir_rules")?;
+    parse_optional_json_setting::<Vec<CategoryRule>>(conn, "category_rules")?;
+    if let Some(rules) =
+        parse_optional_json_setting::<Vec<StoredSpeedPlanRule>>(conn, "speed_plan")?
+    {
+        for (index, rule) in rules.iter().enumerate() {
+            if rule.limit.trim().is_empty() {
+                return Err(anyhow!(
+                    "invalid speed_plan[{index}].limit, expected non-empty value"
+                ));
+            }
+            if let Some(days) = rule.days.as_deref() {
+                validate_speed_plan_days(days, index)?;
+            }
+            if let Some(start) = rule.start.as_deref() {
+                validate_speed_plan_time(start, "start", index)?;
+            }
+            if let Some(end) = rule.end.as_deref() {
+                validate_speed_plan_time(end, "end", index)?;
+            }
+        }
+    }
+    if let Some(presets) =
+        parse_optional_json_setting::<Vec<StoredTaskOptionPreset>>(conn, "task_option_presets")?
+    {
+        for (index, preset) in presets.iter().enumerate() {
+            if preset.name.trim().is_empty() {
+                return Err(anyhow!(
+                    "invalid task_option_presets[{index}].name, expected non-empty value"
+                ));
+            }
+            match preset.task_type.trim() {
+                "http" | "torrent" | "magnet" | "metalink" => {}
+                other => {
+                    return Err(anyhow!(
+                        "invalid task_option_presets[{index}].task_type={other}, expected http|torrent|magnet|metalink"
+                    ));
+                }
+            }
+            if !preset.options.is_object() {
+                return Err(anyhow!(
+                    "invalid task_option_presets[{index}].options, expected JSON object"
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn get_optional_setting_from_conn(conn: &Connection, key: &str) -> Result<Option<String>> {
+    conn.query_row(
+        "SELECT value FROM settings WHERE key = ?1",
+        params![key],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(Into::into)
+}
+
+fn require_non_empty_setting(conn: &Connection, key: &str) -> Result<String> {
+    let value = get_optional_setting_from_conn(conn, key)?
+        .ok_or_else(|| anyhow!("missing required setting: {key}"))?;
+    if value.trim().is_empty() {
+        return Err(anyhow!("required setting is empty: {key}"));
+    }
+    Ok(value)
+}
+
+fn parse_required_u32_setting(conn: &Connection, key: &str) -> Result<u32> {
+    let value = require_non_empty_setting(conn, key)?;
+    value
+        .parse::<u32>()
+        .map_err(|_| anyhow!("invalid setting {key}={value}, expected positive integer"))
+}
+
+fn parse_optional_u32_setting(conn: &Connection, key: &str) -> Result<Option<u32>> {
+    let Some(value) = get_optional_setting_from_conn(conn, key)? else {
+        return Ok(None);
+    };
+    value
+        .parse::<u32>()
+        .map(Some)
+        .map_err(|_| anyhow!("invalid setting {key}={value}, expected positive integer"))
+}
+
+fn parse_optional_bool_setting(conn: &Connection, key: &str) -> Result<Option<bool>> {
+    let Some(value) = get_optional_setting_from_conn(conn, key)? else {
+        return Ok(None);
+    };
+    match value.as_str() {
+        "true" => Ok(Some(true)),
+        "false" => Ok(Some(false)),
+        _ => Err(anyhow!(
+            "invalid setting {key}={value}, expected true|false"
+        )),
+    }
+}
+
+fn parse_optional_json_setting<T>(conn: &Connection, key: &str) -> Result<Option<T>>
+where
+    T: DeserializeOwned,
+{
+    let Some(value) = get_optional_setting_from_conn(conn, key)? else {
+        return Ok(None);
+    };
+    serde_json::from_str::<T>(&value)
+        .map(Some)
+        .map_err(|e| anyhow!("invalid setting {key}: {e}"))
+}
+
+fn validate_speed_plan_days(days: &str, index: usize) -> Result<()> {
+    for day in days.split(',').map(str::trim).filter(|v| !v.is_empty()) {
+        let parsed = day.parse::<u8>().map_err(|_| {
+            anyhow!("invalid speed_plan[{index}].days={days}, expected comma-separated 1-7")
+        })?;
+        if !(1..=7).contains(&parsed) {
+            return Err(anyhow!(
+                "invalid speed_plan[{index}].days={days}, expected comma-separated 1-7"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_speed_plan_time(value: &str, field: &str, index: usize) -> Result<()> {
+    let parts = value.split(':').collect::<Vec<_>>();
+    if parts.len() != 2 {
+        return Err(anyhow!(
+            "invalid speed_plan[{index}].{field}={value}, expected HH:MM"
+        ));
+    }
+    let hour = parts[0]
+        .parse::<u8>()
+        .map_err(|_| anyhow!("invalid speed_plan[{index}].{field}={value}, expected HH:MM"))?;
+    let minute = parts[1]
+        .parse::<u8>()
+        .map_err(|_| anyhow!("invalid speed_plan[{index}].{field}={value}, expected HH:MM"))?;
+    if hour > 23 || minute > 59 {
+        return Err(anyhow!(
+            "invalid speed_plan[{index}].{field}={value}, expected HH:MM"
+        ));
+    }
+    Ok(())
+}
+
 fn row_to_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
     let task_type_raw: String = row.get(2)?;
     let status_raw: String = row.get(4)?;
@@ -780,11 +993,101 @@ fn row_to_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         download_speed: row.get(10)?,
         upload_speed: row.get(11)?,
         connections: row.get(12)?,
-        error_code: row.get(13)?,
-        error_message: row.get(14)?,
-        created_at: row.get(15)?,
-        updated_at: row.get(16)?,
+        health: row.get(13)?,
+        error_code: row.get(14)?,
+        error_message: row.get(15)?,
+        remediation: row.get(16)?,
+        retry_count: row.get(17)?,
+        last_retry_at: row.get(18)?,
+        created_at: row.get(19)?,
+        updated_at: row.get(20)?,
     })
+}
+
+fn apply_snapshot_failure(task: &mut Task, snapshot: &Aria2TaskSnapshot) {
+    task.error_code = snapshot.error_code.clone();
+    task.error_message = snapshot.error_message.clone();
+    match task.status {
+        TaskStatus::Completed | TaskStatus::Active | TaskStatus::Paused | TaskStatus::Queued => {
+            task.health = Some(TaskHealth::Normal.as_str().to_string());
+            task.remediation = None;
+            if matches!(task.status, TaskStatus::Completed) {
+                task.error_code = None;
+                task.error_message = None;
+            }
+        }
+        TaskStatus::Metadata => {
+            task.health = Some(TaskHealth::MetadataPending.as_str().to_string());
+            task.remediation = Some(
+                "Wait for metadata, add trackers, or retry the magnet link if it times out."
+                    .to_string(),
+            );
+        }
+        TaskStatus::Error => {
+            let (health, remediation) = classify_aria2_failure(
+                snapshot.error_code.as_deref(),
+                snapshot.error_message.as_deref(),
+            );
+            task.health = Some(health.as_str().to_string());
+            task.remediation = Some(remediation.to_string());
+        }
+        TaskStatus::Removed => {}
+    }
+}
+
+fn classify_aria2_failure(code: Option<&str>, message: Option<&str>) -> (TaskHealth, &'static str) {
+    let haystack = format!(
+        "{} {}",
+        code.unwrap_or_default(),
+        message.unwrap_or_default()
+    )
+    .to_ascii_lowercase();
+    if haystack.contains("401") || haystack.contains("unauthorized") {
+        return (
+            TaskHealth::AuthRequired,
+            "Refresh the source page or add valid cookies/authorization headers.",
+        );
+    }
+    if haystack.contains("403") || haystack.contains("forbidden") {
+        return (
+            TaskHealth::AuthRequired,
+            "Add referer/cookies, use browser capture, or refresh the source URL.",
+        );
+    }
+    if haystack.contains("404")
+        || haystack.contains("not found")
+        || haystack.contains("expired")
+        || haystack.contains("gone")
+    {
+        return (
+            TaskHealth::UrlExpired,
+            "Refresh or replace the URL, then retry the task.",
+        );
+    }
+    if haystack.contains("disk")
+        || haystack.contains("no space")
+        || haystack.contains("quota")
+        || haystack.contains("permission denied")
+    {
+        return (
+            TaskHealth::DiskFull,
+            "Free disk space or choose a writable save directory before retrying.",
+        );
+    }
+    if haystack.contains("timeout")
+        || haystack.contains("connection")
+        || haystack.contains("network")
+        || haystack.contains("resolve")
+    {
+        return (
+            TaskHealth::NetworkUnstable,
+            "Check the network connection, proxy, DNS, or retry later.",
+        );
+    }
+    (
+        TaskHealth::UnknownError,
+        "Open task details or export a debug bundle for diagnosis.",
+    )
 }
 
 fn table_has_column(conn: &Connection, table: &str, column: &str) -> Result<bool> {
@@ -922,6 +1225,31 @@ fn apply_migration(conn: &Connection, version: i64) -> Result<()> {
                 "#,
             )?;
         }
+        7 => {
+            if !table_has_column(conn, "tasks", "health")? {
+                conn.execute("ALTER TABLE tasks ADD COLUMN health TEXT", [])?;
+            }
+            if !table_has_column(conn, "tasks", "remediation")? {
+                conn.execute("ALTER TABLE tasks ADD COLUMN remediation TEXT", [])?;
+            }
+            if !table_has_column(conn, "tasks", "retry_count")? {
+                conn.execute(
+                    "ALTER TABLE tasks ADD COLUMN retry_count INTEGER DEFAULT 0",
+                    [],
+                )?;
+            }
+            if !table_has_column(conn, "tasks", "last_retry_at")? {
+                conn.execute("ALTER TABLE tasks ADD COLUMN last_retry_at INTEGER", [])?;
+            }
+            conn.execute(
+                "UPDATE tasks SET health = CASE WHEN status = 'error' THEN 'unknown_error' WHEN status = 'metadata' THEN 'metadata_pending' ELSE 'normal' END WHERE health IS NULL",
+                [],
+            )?;
+            conn.execute(
+                "UPDATE tasks SET retry_count = 0 WHERE retry_count IS NULL",
+                [],
+            )?;
+        }
         _ => {}
     }
     Ok(())
@@ -988,6 +1316,18 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+
+    fn seed_runtime_settings(db: &Database) {
+        db.set_setting("download_dir", "/tmp/tarui")
+            .expect("set download_dir");
+        db.set_setting("max_concurrent_downloads", "5")
+            .expect("set max_concurrent_downloads");
+        db.set_setting("max_connection_per_server", "8")
+            .expect("set max_connection_per_server");
+        db.set_setting("speed_plan", "[]").expect("set speed_plan");
+        db.set_setting("task_option_presets", "[]")
+            .expect("set task_option_presets");
+    }
 
     #[test]
     fn global_settings_roundtrip() {
@@ -1133,12 +1473,7 @@ mod tests {
     fn validate_runtime_settings_passes_for_valid_values() {
         let db_path = std::env::temp_dir().join(format!("tarui-db-{}.sqlite", Uuid::new_v4()));
         let db = Database::new(&db_path).expect("create db");
-        db.set_setting("download_dir", "/tmp/tarui")
-            .expect("set download_dir");
-        db.set_setting("max_concurrent_downloads", "5")
-            .expect("set max_concurrent_downloads");
-        db.set_setting("max_connection_per_server", "8")
-            .expect("set max_connection_per_server");
+        seed_runtime_settings(&db);
         db.set_setting("split", "16").expect("set split");
         db.set_setting("enable_upnp", "true")
             .expect("set enable_upnp");
@@ -1151,12 +1486,9 @@ mod tests {
     fn validate_runtime_settings_fails_for_invalid_values() {
         let db_path = std::env::temp_dir().join(format!("tarui-db-{}.sqlite", Uuid::new_v4()));
         let db = Database::new(&db_path).expect("create db");
-        db.set_setting("download_dir", "/tmp/tarui")
-            .expect("set download_dir");
+        seed_runtime_settings(&db);
         db.set_setting("max_concurrent_downloads", "oops")
             .expect("set max_concurrent_downloads");
-        db.set_setting("max_connection_per_server", "8")
-            .expect("set max_connection_per_server");
         let err = db
             .validate_runtime_settings()
             .expect_err("runtime settings should be invalid");
@@ -1164,6 +1496,58 @@ mod tests {
             err.to_string()
                 .contains("invalid setting max_concurrent_downloads")
         );
+        let _ = std::fs::remove_file(db_path);
+    }
+
+    #[test]
+    fn save_global_settings_rejects_invalid_speed_plan_and_rolls_back() {
+        let db_path = std::env::temp_dir().join(format!("tarui-db-{}.sqlite", Uuid::new_v4()));
+        let db = Database::new(&db_path).expect("create db");
+        seed_runtime_settings(&db);
+
+        let mut patch = db.load_global_settings().expect("load settings");
+        patch.download_dir = Some("/tmp/should-not-stick".to_string());
+        patch.speed_plan =
+            Some(r#"[{"days":"1,8","start":"09:00","end":"18:00","limit":"2M"}]"#.to_string());
+
+        let err = db
+            .save_global_settings(&patch)
+            .expect_err("invalid speed plan should be rejected");
+        assert!(err.to_string().contains("speed_plan[0].days"));
+        assert_eq!(
+            db.get_setting("download_dir").expect("get download_dir"),
+            Some("/tmp/tarui".to_string())
+        );
+
+        let _ = std::fs::remove_file(db_path);
+    }
+
+    #[test]
+    fn save_global_settings_rejects_invalid_bridge_port_and_rolls_back() {
+        let db_path = std::env::temp_dir().join(format!("tarui-db-{}.sqlite", Uuid::new_v4()));
+        let db = Database::new(&db_path).expect("create db");
+        seed_runtime_settings(&db);
+        db.set_setting("browser_bridge_port", "16789")
+            .expect("set browser_bridge_port");
+
+        let mut patch = db.load_global_settings().expect("load settings");
+        patch.download_dir = Some("/tmp/also-should-not-stick".to_string());
+        patch.browser_bridge_port = Some(0);
+
+        let err = db
+            .save_global_settings(&patch)
+            .expect_err("invalid bridge port should be rejected");
+        assert!(err.to_string().contains("browser_bridge_port"));
+        assert_eq!(
+            db.get_setting("download_dir").expect("get download_dir"),
+            Some("/tmp/tarui".to_string())
+        );
+        assert_eq!(
+            db.get_setting("browser_bridge_port")
+                .expect("get browser_bridge_port"),
+            Some("16789".to_string())
+        );
+
         let _ = std::fs::remove_file(db_path);
     }
 
@@ -1180,5 +1564,19 @@ mod tests {
         assert_eq!(pruned, 1);
         assert!(!db.is_gid_deleted("gid-test").expect("check deleted gid"));
         let _ = std::fs::remove_file(db_path);
+    }
+
+    #[test]
+    fn classify_aria2_failure_maps_common_reasons() {
+        let (health, remediation) = classify_aria2_failure(
+            Some("3"),
+            Some("HTTP response header was bad or unexpected: 403 Forbidden"),
+        );
+        assert_eq!(health, TaskHealth::AuthRequired);
+        assert!(remediation.contains("referer"));
+
+        let (health, remediation) = classify_aria2_failure(None, Some("No space left on device"));
+        assert_eq!(health, TaskHealth::DiskFull);
+        assert!(remediation.contains("disk"));
     }
 }

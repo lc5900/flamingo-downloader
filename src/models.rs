@@ -51,6 +51,44 @@ impl TaskStatus {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskHealth {
+    Normal,
+    MetadataPending,
+    NetworkUnstable,
+    AuthRequired,
+    UrlExpired,
+    DiskFull,
+    EngineUnreachable,
+    MergeFailed,
+    UnknownError,
+}
+
+impl TaskHealth {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Normal => "normal",
+            Self::MetadataPending => "metadata_pending",
+            Self::NetworkUnstable => "network_unstable",
+            Self::AuthRequired => "auth_required",
+            Self::UrlExpired => "url_expired",
+            Self::DiskFull => "disk_full",
+            Self::EngineUnreachable => "engine_unreachable",
+            Self::MergeFailed => "merge_failed",
+            Self::UnknownError => "unknown_error",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskFailureReason {
+    pub health: TaskHealth,
+    pub code: String,
+    pub message: String,
+    pub remediation: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
     pub id: String,
@@ -66,8 +104,12 @@ pub struct Task {
     pub download_speed: i64,
     pub upload_speed: i64,
     pub connections: i64,
+    pub health: Option<String>,
     pub error_code: Option<String>,
     pub error_message: Option<String>,
+    pub remediation: Option<String>,
+    pub retry_count: i64,
+    pub last_retry_at: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
 }

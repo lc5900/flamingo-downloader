@@ -285,7 +285,7 @@ fn origin_allowed(origin: &str, allowlist_raw: &str) -> bool {
     if origin.is_empty() {
         return false;
     }
-    if rules.iter().any(|r| *r == "*") {
+    if rules.contains(&"*") {
         return true;
     }
     rules.iter().any(|rule| origin.starts_with(rule))

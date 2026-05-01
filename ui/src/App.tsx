@@ -46,9 +46,6 @@ import * as api from './api/client'
 import { ResizableTitle } from './components/ResizableTitle'
 import { Sidebar } from './components/layout/Sidebar'
 import { TopHeader } from './components/layout/TopHeader'
-import { AddDownloadDialog } from './components/dialogs/AddDownloadDialog'
-import { SettingsView } from './components/dialogs/SettingsView'
-import { ShortcutEditorDialog, ShortcutCheatsheetDialog } from './components/dialogs/ShortcutDialogs'
 import { defaultLayoutFor, useTableLayout } from './hooks/useTableLayout'
 import { detectLocale, I18N } from './i18n'
 import { DownloadedPage } from './pages/DownloadedPage'
@@ -86,6 +83,15 @@ import {
   statusColor,
 } from './utils/format'
 import {
+  buildSpeedPlanPreset,
+  inferSpeedPlanMode,
+  normalizeSpeedPlanRules,
+  normalizeThemeMode,
+  parseTaskOptionPresets,
+  type SpeedPlanMode,
+  validateSpeedPlanRules,
+} from './utils/settings'
+import {
   eventMatchesShortcut,
   formatShortcutForDisplayWithMode,
   normalizeShortcut,
@@ -99,11 +105,31 @@ import 'react-resizable/css/styles.css'
 const AddDownloadPage = lazy(() =>
   import('./pages/AddDownloadPage').then((module) => ({ default: module.AddDownloadPage })),
 )
+const AddDownloadDialog = lazy(() =>
+  import('./components/dialogs/AddDownloadDialog').then((module) => ({
+    default: module.AddDownloadDialog,
+  })),
+)
 const TaskDetailPage = lazy(() =>
   import('./pages/TaskDetailPage').then((module) => ({ default: module.TaskDetailPage })),
 )
+const SettingsView = lazy(() =>
+  import('./components/dialogs/SettingsView').then((module) => ({
+    default: module.SettingsView,
+  })),
+)
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })),
+)
+const ShortcutEditorDialog = lazy(() =>
+  import('./components/dialogs/ShortcutDialogs').then((module) => ({
+    default: module.ShortcutEditorDialog,
+  })),
+)
+const ShortcutCheatsheetDialog = lazy(() =>
+  import('./components/dialogs/ShortcutDialogs').then((module) => ({
+    default: module.ShortcutCheatsheetDialog,
+  })),
 )
 
 const LOCALE_KEY = 'flamingo.locale'
@@ -200,95 +226,6 @@ function saveProgressRowBackgroundEnabled(enabled: boolean) {
 function resolveTheme(mode: ThemeMode): 'light' | 'dark' {
   if (mode === 'light' || mode === 'dark') return mode
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-}
-
-function normalizeThemeMode(v: unknown): ThemeMode {
-  const x = String(v || '').toLowerCase()
-  if (x === 'light' || x === 'dark') return x
-  return 'system'
-}
-
-type SpeedPlanRuleInput = {
-  days?: string
-  start?: string
-  end?: string
-  limit?: string
-}
-type SpeedPlanMode = 'manual' | 'off' | 'workday_limited' | 'night_boost'
-
-function normalizeSpeedPlanRules(input: unknown): SpeedPlanRuleInput[] {
-  if (!Array.isArray(input)) return []
-  return input
-    .filter((item) => item && typeof item === 'object')
-    .map((item) => {
-      const row = item as SpeedPlanRuleInput
-      return {
-        days: String(row.days || '').trim(),
-        start: String(row.start || '').trim(),
-        end: String(row.end || '').trim(),
-        limit: String(row.limit || '').trim(),
-      }
-    })
-    .filter((row) => row.limit)
-}
-
-function buildSpeedPlanPreset(mode: SpeedPlanMode): SpeedPlanRuleInput[] {
-  if (mode === 'off') return [{ days: '', start: '', end: '', limit: '0' }]
-  if (mode === 'workday_limited') {
-    return [
-      { days: '1,2,3,4,5', start: '09:00', end: '18:00', limit: '2M' },
-      { days: '', start: '', end: '', limit: '0' },
-    ]
-  }
-  if (mode === 'night_boost') {
-    return [
-      { days: '1,2,3,4,5', start: '09:00', end: '23:00', limit: '1M' },
-      { days: '6,7', start: '10:00', end: '23:00', limit: '2M' },
-      { days: '', start: '', end: '', limit: '0' },
-    ]
-  }
-  return []
-}
-
-function inferSpeedPlanMode(rules: SpeedPlanRuleInput[]): SpeedPlanMode {
-  const normalized = JSON.stringify(normalizeSpeedPlanRules(rules))
-  if (normalized === JSON.stringify(normalizeSpeedPlanRules(buildSpeedPlanPreset('off')))) {
-    return 'off'
-  }
-  if (normalized === JSON.stringify(normalizeSpeedPlanRules(buildSpeedPlanPreset('workday_limited')))) {
-    return 'workday_limited'
-  }
-  if (normalized === JSON.stringify(normalizeSpeedPlanRules(buildSpeedPlanPreset('night_boost')))) {
-    return 'night_boost'
-  }
-  return 'manual'
-}
-
-function validateSpeedPlanRules(rules: SpeedPlanRuleInput[]): string | null {
-  const timeRe = /^\d{2}:\d{2}$/
-  const validDay = (value: string) => {
-    const parts = value
-      .split(',')
-      .map((v) => v.trim())
-      .filter(Boolean)
-    if (parts.length === 0) return true
-    return parts.every((p) => {
-      const n = Number(p)
-      return Number.isInteger(n) && n >= 1 && n <= 7
-    })
-  }
-  for (const row of rules) {
-    const start = String(row.start || '').trim()
-    const end = String(row.end || '').trim()
-    const days = String(row.days || '').trim()
-    const limit = String(row.limit || '').trim()
-    if (!limit) return 'limit'
-    if (start && !timeRe.test(start)) return 'start'
-    if (end && !timeRe.test(end)) return 'end'
-    if (start && end && start >= end) return 'range'
-    if (days && !validDay(days)) return 'days'
-  }
-  return null
 }
 
 function safeDecode(value: string): string {
@@ -568,28 +505,7 @@ export default function App() {
           : 'none',
       )
       setSpeedPlanMode(inferSpeedPlanMode(speedPlanRules))
-      const presets = (() => {
-        try {
-          const raw = String(s?.task_option_presets || '[]')
-          const parsed = JSON.parse(raw)
-          if (!Array.isArray(parsed)) return [] as TaskOptionPreset[]
-          return parsed
-            .filter((item) => item && typeof item === 'object')
-            .map((item) => ({
-              name: String((item as TaskOptionPreset).name || '').trim(),
-              task_type: String((item as TaskOptionPreset).task_type || '') as AddPresetTaskType,
-              options: (item as TaskOptionPreset).options || {},
-            }))
-            .filter(
-              (item) =>
-                item.name &&
-                (item.task_type === 'http' || item.task_type === 'magnet' || item.task_type === 'torrent'),
-            )
-        } catch {
-          return [] as TaskOptionPreset[]
-        }
-      })()
-      setTaskOptionPresets(presets)
+      setTaskOptionPresets(parseTaskOptionPresets(s?.task_option_presets || '[]'))
       setShortcutDraft(loadShortcutBindings())
     } catch (err) {
       msg.error(parseErr(err))
@@ -1170,27 +1086,7 @@ export default function App() {
   }, [t])
 
   const retrySingleTask = async (task: Task) => {
-    const options = {
-      saveDir: task.save_dir || null,
-      out: task.name || null,
-    }
-    if (task.task_type === 'http') {
-      await api.call('add_url', { url: task.source, options })
-      return
-    }
-    if (task.task_type === 'magnet') {
-      await api.call('add_magnet', { magnet: task.source, options })
-      return
-    }
-    if (task.task_type === 'torrent') {
-      await api.call('add_torrent', {
-        torrentFilePath: task.source,
-        torrentBase64: null,
-        options,
-      })
-      return
-    }
-    throw new Error(`unsupported retry task type: ${task.task_type}`)
+    await api.call('retry_task', { taskId: task.id })
   }
 
   const onGlobalPauseAll = useCallback(async () => {
@@ -1882,7 +1778,7 @@ export default function App() {
     settingsForm.setFieldValue('speed_plan_rules', buildSpeedPlanPreset(mode))
   }
 
-  const doRpcPing = async () => {
+  const doRpcPing = useCallback(async () => {
     try {
       const res = await api.call<string>('rpc_ping')
       msg.success(res)
@@ -1890,7 +1786,7 @@ export default function App() {
     } catch (err) {
       msg.error(parseErr(err))
     }
-  }
+  }, [loadDiagnostics, msg])
 
   const doRestart = async () => {
     try {
@@ -1902,7 +1798,7 @@ export default function App() {
     }
   }
 
-  const doStartupCheck = async () => {
+  const doStartupCheck = useCallback(async () => {
     try {
       const res = await api.call<string>('startup_check_aria2')
       msg.success(res)
@@ -1910,7 +1806,7 @@ export default function App() {
     } catch (err) {
       msg.error(parseErr(err))
     }
-  }
+  }, [loadDiagnostics, msg])
 
   const doSaveSession = async () => {
     try {
@@ -1941,7 +1837,7 @@ export default function App() {
     }
   }
 
-  const openImportExport = async () => {
+  const openImportExport = useCallback(async () => {
     setIoOpen(true)
     try {
       const payload = await api.call<string>('export_task_list_json')
@@ -1949,7 +1845,7 @@ export default function App() {
     } catch (err) {
       msg.error(parseErr(err))
     }
-  }
+  }, [msg])
 
   const copyExportJson = async () => {
     try {
@@ -2529,8 +2425,12 @@ export default function App() {
                       ? t('downloadResultFailed')
                       : t('downloadResultInProgress')
                   const tag = <Tag color={statusColor(String(v))}>{label}</Tag>
-                  if (isError && (row.error_message || row.error_code)) {
-                    const errText = `${row.error_code ? `[${row.error_code}] ` : ''}${row.error_message || ''}`.trim()
+                  if (isError && (row.error_message || row.error_code || row.remediation)) {
+                    const errText = [
+                      row.health ? `${t('taskHealth')}: ${row.health}` : '',
+                      `${row.error_code ? `[${row.error_code}] ` : ''}${row.error_message || ''}`.trim(),
+                      row.remediation ? `${t('remediation')}: ${row.remediation}` : '',
+                    ].filter(Boolean).join('\n')
                     return (
                       <Tooltip title={errText}>
                         {tag}
@@ -2808,7 +2708,11 @@ export default function App() {
                       return { className, style }
                     }}
                     expandable={{
-                      rowExpandable: (row) => !!row.error_message || !!row.error_code || !!row.source,
+                      rowExpandable: (row) =>
+                        !!row.error_message ||
+                        !!row.error_code ||
+                        !!row.remediation ||
+                        !!row.source,
                       expandedRowRender: (row) => (
                         <Space direction="vertical" size={4} style={{ width: '100%' }}>
                           <Typography.Text type="secondary">
@@ -2821,6 +2725,22 @@ export default function App() {
                             <Typography.Text type="danger" className="error-detail">
                               {t('errorDetails')}: {row.error_code ? `[${row.error_code}] ` : ''}
                               {row.error_message || '-'}
+                            </Typography.Text>
+                          )}
+                          {!!row.health && (
+                            <Typography.Text type="secondary">
+                              {t('taskHealth')}: {row.health}
+                            </Typography.Text>
+                          )}
+                          {!!row.remediation && (
+                            <Typography.Text type="secondary">
+                              {t('remediation')}: {row.remediation}
+                            </Typography.Text>
+                          )}
+                          {!!row.retry_count && (
+                            <Typography.Text type="secondary">
+                              {t('retryCount')}: {row.retry_count}
+                              {row.last_retry_at ? `, ${t('lastRetryAt')}: ${fmtDateTime(row.last_retry_at)}` : ''}
                             </Typography.Text>
                           )}
                         </Space>
@@ -2943,31 +2863,33 @@ export default function App() {
           </Layout>
         </Layout>
 
-        <ShortcutEditorDialog
-          t={t}
-          shortcutEditorOpen={shortcutEditorOpen}
-          setShortcutEditorOpen={setShortcutEditorOpen}
-          setShortcutEditingAction={(value) => setShortcutEditingAction(value as ShortcutAction | null)}
-          applyShortcutEditor={applyShortcutEditor}
-          shortcutEditingAction={shortcutEditingAction}
-          displayShortcut={displayShortcut}
-          shortcutDraft={shortcutDraft}
-          shortcutCaptured={shortcutCaptured}
-          shortcutConflictAction={shortcutConflictAction}
-          shortcutLabelMap={shortcutLabelMap}
-          i18nFormat={i18nFormat}
-        />
+        <Suspense fallback={null}>
+          <ShortcutEditorDialog
+            t={t}
+            shortcutEditorOpen={shortcutEditorOpen}
+            setShortcutEditorOpen={setShortcutEditorOpen}
+            setShortcutEditingAction={(value) => setShortcutEditingAction(value as ShortcutAction | null)}
+            applyShortcutEditor={applyShortcutEditor}
+            shortcutEditingAction={shortcutEditingAction}
+            displayShortcut={displayShortcut}
+            shortcutDraft={shortcutDraft}
+            shortcutCaptured={shortcutCaptured}
+            shortcutConflictAction={shortcutConflictAction}
+            shortcutLabelMap={shortcutLabelMap}
+            i18nFormat={i18nFormat}
+          />
 
-        <ShortcutCheatsheetDialog
-          t={t}
-          shortcutHelpOpen={shortcutHelpOpen}
-          setShortcutHelpOpen={setShortcutHelpOpen}
-          shortcutHelpQuery={shortcutHelpQuery}
-          setShortcutHelpQuery={setShortcutHelpQuery}
-          filteredShortcutItems={filteredShortcutItems}
-          displayShortcut={displayShortcut}
-          shortcutDraft={shortcutDraft}
-        />
+          <ShortcutCheatsheetDialog
+            t={t}
+            shortcutHelpOpen={shortcutHelpOpen}
+            setShortcutHelpOpen={setShortcutHelpOpen}
+            shortcutHelpQuery={shortcutHelpQuery}
+            setShortcutHelpQuery={setShortcutHelpQuery}
+            filteredShortcutItems={filteredShortcutItems}
+            displayShortcut={displayShortcut}
+            shortcutDraft={shortcutDraft}
+          />
+        </Suspense>
 
         {addOpen && (
           <Suspense fallback={null}>

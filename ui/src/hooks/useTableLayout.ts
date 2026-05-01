@@ -36,7 +36,7 @@ export function defaultLayoutFor(section: SectionKey): TableLayout {
   }
 }
 
-function sanitizeLayout(section: SectionKey, raw: unknown): TableLayout {
+export function sanitizeLayoutForSection(section: SectionKey, raw: unknown): TableLayout {
   const base = defaultLayoutFor(section)
   if (!raw || typeof raw !== 'object') return base
   const obj = raw as Partial<TableLayout>
@@ -89,8 +89,8 @@ function loadTableLayoutStore(): TableLayoutStore {
     }
     const parsed = JSON.parse(raw) as Partial<TableLayoutStore>
     return {
-      downloading: sanitizeLayout('downloading', parsed?.downloading),
-      downloaded: sanitizeLayout('downloaded', parsed?.downloaded),
+      downloading: sanitizeLayoutForSection('downloading', parsed?.downloading),
+      downloaded: sanitizeLayoutForSection('downloaded', parsed?.downloaded),
     }
   } catch {
     return {
