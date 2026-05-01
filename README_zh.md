@@ -115,6 +115,23 @@ cargo tauri build
 - Native Host 脚本：[`browser-extension/native-host/`](browser-extension/native-host)
 - DRM 说明：受 DRM 保护的流（Widevine/FairPlay/PlayReady）不支持下载
 
+## 失败诊断与限制
+
+Flamingo 会为失败任务记录可解释的健康原因。任务行和详情面板会展示：
+
+- `health`：归一化原因分类，例如 `network_unstable`、`auth_required`、`url_expired`、`disk_full`、`engine_unreachable`、`merge_failed`
+- `error_code` / `error_message`：底层 aria2、ffmpeg 或文件系统错误
+- `remediation`：下一步处理建议，例如刷新签名 URL、补充 referer/cookie、释放磁盘空间或导出调试包
+
+自动重试会保持保守策略。网络类失败可以按退避策略重试；通常需要用户介入的失败，例如 URL 过期、认证缺失、磁盘错误或 ffmpeg 合并失败，会保持失败状态，等待用户编辑或手动重试。
+
+已知限制：
+
+- 有时效或签名的媒体 URL 可能需要通过浏览器扩展重新捕获。
+- 绑定登录态的下载可能需要有效 cookie、Authorization header 或 referer。
+- 不支持受 DRM 保护的媒体流。
+- ffmpeg 合并失败取决于本机 ffmpeg 构建和源站行为。
+
 ## 项目结构
 
 ```text

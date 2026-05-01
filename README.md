@@ -115,6 +115,23 @@ Design principles:
 - Native host scripts: [`browser-extension/native-host/`](browser-extension/native-host)
 - DRM-protected streams (Widevine/FairPlay/PlayReady) are not supported
 
+## Failure Diagnostics and Limits
+
+Flamingo records a task health reason for failed downloads. The task row and detail panel can show:
+
+- `health`: normalized cause category, such as `network_unstable`, `auth_required`, `url_expired`, `disk_full`, `engine_unreachable`, or `merge_failed`
+- `error_code` / `error_message`: the underlying aria2, ffmpeg, or filesystem failure
+- `remediation`: the next action to try, such as refreshing a signed URL, adding referer/cookie headers, freeing disk space, or exporting a debug bundle
+
+Automatic retry is intentionally conservative. Network-like failures may be retried with backoff, while failures that usually need user action, such as expired URLs, missing authentication, disk errors, or ffmpeg merge failures, stay failed until the user edits or manually retries the task.
+
+Known limits:
+
+- Expiring or signed media URLs may need to be captured again from the browser extension.
+- Auth-bound downloads may require valid cookies, authorization headers, or referer values.
+- DRM-protected streams are not supported.
+- ffmpeg merge failures depend on the local ffmpeg build and the source server behavior.
+
 ## Project Layout
 
 ```text

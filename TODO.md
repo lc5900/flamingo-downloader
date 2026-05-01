@@ -99,7 +99,7 @@
 - [x] UI：失败任务行和详情页展示原因、下一步动作和复制诊断
 - [x] Service：按错误类型实现自动/手动重试策略，并写入 operation log
 - [x] Tests：覆盖错误映射、重试策略、DB 迁移、UI 格式化展示
-- [ ] Docs：在 README 增加“失败诊断与限制”小节
+- [x] Docs：在 README 增加“失败诊断与限制”小节
 
 ## 2026-03-19 Iteration
 
