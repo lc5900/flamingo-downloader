@@ -359,10 +359,12 @@ pub struct LinkParseInput {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LinkCandidate {
     pub url: String,
+    pub final_url: Option<String>,
     pub kind: String, // http | magnet | torrent
     pub source: String,
     pub filename_hint: Option<String>,
     pub content_type: Option<String>,
+    pub content_length: Option<i64>,
     pub score: u32,
     pub duplicate_count: u32,
 }

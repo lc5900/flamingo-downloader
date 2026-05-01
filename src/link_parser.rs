@@ -36,9 +36,11 @@ pub fn parse_link_candidates(input: LinkParseInput) -> LinkParseResult {
             LinkCandidate {
                 filename_hint: filename_hint(&url),
                 content_type: None,
+                content_length: None,
                 score: score_candidate(&url, &kind, false),
                 duplicate_count: 0,
                 url,
+                final_url: None,
                 kind,
                 source: source.clone(),
             },
@@ -51,6 +53,45 @@ pub fn parse_link_candidates(input: LinkParseInput) -> LinkParseResult {
         candidates,
         duplicate_count: duplicates,
     }
+}
+
+pub fn merge_duplicate_candidates(candidates: &mut Vec<LinkCandidate>) -> u32 {
+    let mut by_key = HashMap::<String, LinkCandidate>::new();
+    let mut duplicate_count = 0_u32;
+    for candidate in candidates.drain(..) {
+        let key = enriched_dedupe_key(&candidate);
+        if let Some(existing) = by_key.get_mut(&key) {
+            existing.duplicate_count += 1 + candidate.duplicate_count;
+            existing.score = existing.score.max(candidate.score);
+            if existing.content_type.is_none() {
+                existing.content_type = candidate.content_type;
+            }
+            if existing.content_length.is_none() {
+                existing.content_length = candidate.content_length;
+            }
+            if existing.final_url.is_none() {
+                existing.final_url = candidate.final_url;
+            }
+            duplicate_count += 1 + candidate.duplicate_count;
+        } else {
+            by_key.insert(key, candidate);
+        }
+    }
+    candidates.extend(by_key.into_values());
+    candidates.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.url.cmp(&b.url)));
+    duplicate_count
+}
+
+fn enriched_dedupe_key(candidate: &LinkCandidate) -> String {
+    if let (Some(name), Some(length)) = (&candidate.filename_hint, candidate.content_length)
+        && length > 0
+    {
+        return format!("file:{}:{length}", name.to_ascii_lowercase());
+    }
+    if let Some(final_url) = candidate.final_url.as_deref().filter(|v| !v.is_empty()) {
+        return format!("final:{}", dedupe_key(final_url));
+    }
+    dedupe_key(&candidate.url)
 }
 
 fn extract_raw_links(text: &str) -> Vec<String> {
@@ -204,5 +245,49 @@ mod tests {
                 .iter()
                 .any(|c| c.filename_hint.as_deref() == Some("file.zip"))
         );
+    }
+
+    #[test]
+    fn merges_enriched_duplicates_by_final_url_and_file_size() {
+        let mut candidates = vec![
+            LinkCandidate {
+                url: "https://a.example/download?id=1".to_string(),
+                final_url: Some("https://cdn.example/file.zip".to_string()),
+                kind: "http".to_string(),
+                source: "html".to_string(),
+                filename_hint: Some("file.zip".to_string()),
+                content_type: Some("application/zip".to_string()),
+                content_length: Some(42),
+                score: 90,
+                duplicate_count: 0,
+            },
+            LinkCandidate {
+                url: "https://b.example/redirect".to_string(),
+                final_url: Some("https://cdn.example/file.zip".to_string()),
+                kind: "http".to_string(),
+                source: "html".to_string(),
+                filename_hint: Some("file.zip".to_string()),
+                content_type: None,
+                content_length: Some(42),
+                score: 70,
+                duplicate_count: 0,
+            },
+            LinkCandidate {
+                url: "https://mirror.example/file.zip".to_string(),
+                final_url: None,
+                kind: "http".to_string(),
+                source: "html".to_string(),
+                filename_hint: Some("file.zip".to_string()),
+                content_type: None,
+                content_length: Some(42),
+                score: 60,
+                duplicate_count: 0,
+            },
+        ];
+
+        let duplicates = merge_duplicate_candidates(&mut candidates);
+        assert_eq!(duplicates, 2);
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].duplicate_count, 2);
     }
 }

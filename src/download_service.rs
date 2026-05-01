@@ -28,7 +28,7 @@ use crate::{
     db::Database,
     error::AppError,
     events::SharedEmitter,
-    link_parser::parse_link_candidates,
+    link_parser::{merge_duplicate_candidates, parse_link_candidates},
     models::{
         AddTaskOptions, AppUpdateStrategy, Aria2UpdateApplyResult, Aria2UpdateInfo,
         BrowserBridgeStatus, CategoryRule, Diagnostics, DownloadDirRule, GlobalSettings,
@@ -1124,9 +1124,7 @@ impl DownloadService {
             source_kind: Some("html".to_string()),
         });
         enrich_candidates_with_content_type(&client, &mut result.candidates).await;
-        result
-            .candidates
-            .sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.url.cmp(&b.url)));
+        result.duplicate_count += merge_duplicate_candidates(&mut result.candidates);
         self.push_log(
             "scan_page_resources",
             format!(
@@ -2991,6 +2989,10 @@ async fn enrich_candidates_with_content_type(
         if is_download_content_type(&content_type) {
             candidate.score += 15;
         }
+        candidate.final_url = Some(response.url().to_string()).filter(|v| v != &candidate.url);
+        candidate.content_length = response
+            .content_length()
+            .and_then(|v| i64::try_from(v).ok());
         candidate.content_type = Some(content_type);
     }
 }
