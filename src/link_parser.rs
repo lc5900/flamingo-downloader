@@ -35,6 +35,7 @@ pub fn parse_link_candidates(input: LinkParseInput) -> LinkParseResult {
             key,
             LinkCandidate {
                 filename_hint: filename_hint(&url),
+                content_type: None,
                 score: score_candidate(&url, &kind, false),
                 duplicate_count: 0,
                 url,

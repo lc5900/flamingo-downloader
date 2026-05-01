@@ -362,6 +362,7 @@ pub struct LinkCandidate {
     pub kind: String, // http | magnet | torrent
     pub source: String,
     pub filename_hint: Option<String>,
+    pub content_type: Option<String>,
     pub score: u32,
     pub duplicate_count: u32,
 }

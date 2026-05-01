@@ -597,6 +597,18 @@ fn parse_link_candidates(
 }
 
 #[tauri::command]
+async fn scan_page_resources(
+    state: State<'_, AppState>,
+    page_url: String,
+) -> Result<LinkParseResult, String> {
+    state
+        .service
+        .scan_page_resources(&page_url)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn pause_task(state: State<'_, AppState>, task_id: String) -> Result<(), String> {
     state
         .service
@@ -1370,6 +1382,7 @@ fn main() {
             add_magnet,
             add_torrent,
             parse_link_candidates,
+            scan_page_resources,
             pause_task,
             resume_task,
             retry_task,

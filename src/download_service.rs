@@ -1091,6 +1091,54 @@ impl DownloadService {
         Ok(result)
     }
 
+    pub async fn scan_page_resources(&self, page_url: &str) -> Result<LinkParseResult> {
+        let parsed = reqwest::Url::parse(page_url.trim())
+            .map_err(|_| AppError::InvalidInput("invalid page url".to_string()))?;
+        if parsed.scheme() != "http" && parsed.scheme() != "https" {
+            return Err(AppError::InvalidInput(
+                "page scan only supports http and https urls".to_string(),
+            )
+            .into());
+        }
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(15))
+            .redirect(reqwest::redirect::Policy::limited(10))
+            .build()?;
+        let response = client
+            .get(parsed.clone())
+            .header(
+                reqwest::header::USER_AGENT,
+                "FlamingoDownloader/0.1 resource-scanner",
+            )
+            .send()
+            .await?;
+        let final_url = response.url().to_string();
+        let status = response.status();
+        if !status.is_success() {
+            return Err(anyhow!("page scan failed: HTTP {status}"));
+        }
+        let body = response.text().await?;
+        let mut result = parse_link_candidates(LinkParseInput {
+            text: body,
+            source_url: Some(final_url.clone()),
+            source_kind: Some("html".to_string()),
+        });
+        enrich_candidates_with_content_type(&client, &mut result.candidates).await;
+        result
+            .candidates
+            .sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.url.cmp(&b.url)));
+        self.push_log(
+            "scan_page_resources",
+            format!(
+                "page={}, candidates={}, duplicates={}",
+                final_url,
+                result.candidates.len(),
+                result.duplicate_count
+            ),
+        );
+        Ok(result)
+    }
+
     pub fn set_task_category(&self, task_id: &str, category: Option<&str>) -> Result<()> {
         let clean = category
             .map(str::trim)
@@ -2916,6 +2964,52 @@ fn checksum_failure(message: &str) -> TaskFailureReason {
     }
 }
 
+async fn enrich_candidates_with_content_type(
+    client: &reqwest::Client,
+    candidates: &mut [crate::models::LinkCandidate],
+) {
+    for candidate in candidates
+        .iter_mut()
+        .filter(|candidate| candidate.kind == "http" || candidate.kind == "torrent")
+        .take(20)
+    {
+        let Ok(response) = client.head(&candidate.url).send().await else {
+            continue;
+        };
+        if !response.status().is_success() {
+            continue;
+        }
+        let Some(content_type) = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(|v| v.split(';').next().unwrap_or(v).trim().to_ascii_lowercase())
+            .filter(|v| !v.is_empty())
+        else {
+            continue;
+        };
+        if is_download_content_type(&content_type) {
+            candidate.score += 15;
+        }
+        candidate.content_type = Some(content_type);
+    }
+}
+
+fn is_download_content_type(content_type: &str) -> bool {
+    content_type.starts_with("application/")
+        || content_type.starts_with("audio/")
+        || content_type.starts_with("video/")
+        || matches!(
+            content_type,
+            "application/x-bittorrent"
+                | "application/octet-stream"
+                | "application/zip"
+                | "application/x-7z-compressed"
+                | "application/x-rar-compressed"
+                | "application/pdf"
+        )
+}
+
 fn should_auto_retry(task: &Task) -> bool {
     if task.error_code.as_deref() == Some("CHECKSUM_MISMATCH") {
         return false;
@@ -4435,8 +4529,9 @@ mod tests {
 
     use super::{
         DownloadService, SpeedPlanRule, absolute_path, checksum_metadata_from_raw,
-        compute_file_checksum, compute_next_retry_at, has_enough_disk_space, is_subpath,
-        normalize_ffmpeg_failure, rule_matches, select_speed_limit, should_auto_retry,
+        compute_file_checksum, compute_next_retry_at, has_enough_disk_space,
+        is_download_content_type, is_subpath, normalize_ffmpeg_failure, rule_matches,
+        select_speed_limit, should_auto_retry,
     };
 
     #[test]
@@ -4654,6 +4749,13 @@ mod tests {
             99 + super::LOW_DISK_BUFFER_BYTES,
             100
         ));
+    }
+
+    #[test]
+    fn download_content_type_detection_prefers_downloadable_media() {
+        assert!(is_download_content_type("application/octet-stream"));
+        assert!(is_download_content_type("video/mp4"));
+        assert!(!is_download_content_type("text/html"));
     }
 
     #[derive(Default)]
