@@ -668,6 +668,8 @@ export default function App() {
       user_agent: '',
       referer: '',
       cookie: '',
+      checksum_algorithm: undefined,
+      checksum_value: '',
       headers_text: '',
     })
     try {
@@ -1430,6 +1432,8 @@ export default function App() {
       split: values.split ?? null,
       user_agent: String(values.user_agent || '').trim() || null,
       referer: String(values.referer || '').trim() || null,
+      checksum_algorithm: String(values.checksum_algorithm || '').trim() || null,
+      checksum_value: String(values.checksum_value || '').trim() || null,
       headers: headerLines,
     }
   }
@@ -3022,6 +3026,23 @@ export default function App() {
                 <Descriptions.Item label={t('saveDir')}>
                   {detailTask?.save_dir || '-'}
                 </Descriptions.Item>
+                {(detailTask?.checksum_algorithm || detailTask?.checksum_status) && (
+                  <Descriptions.Item label={t('checksumStatus')}>
+                    <Space direction="vertical" size={2} style={{ width: '100%' }}>
+                      <Tag color={detailTask?.checksum_status === 'verified' ? 'green' : detailTask?.checksum_status === 'mismatch' ? 'red' : 'blue'}>
+                        {String(detailTask?.checksum_status || 'pending').toUpperCase()}
+                      </Tag>
+                      <Typography.Text type="secondary">
+                        {String(detailTask?.checksum_algorithm || '').toUpperCase()} {detailTask?.checksum_expected || '-'}
+                      </Typography.Text>
+                      {detailTask?.checksum_actual && (
+                        <Typography.Text copyable={{ text: detailTask.checksum_actual }}>
+                          {t('checksumActual')}: {detailTask.checksum_actual}
+                        </Typography.Text>
+                      )}
+                    </Space>
+                  </Descriptions.Item>
+                )}
                 <Descriptions.Item label={t('categoryFilter')}>
                   <Space.Compact style={{ width: '100%' }}>
                     <Input

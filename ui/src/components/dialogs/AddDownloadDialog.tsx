@@ -235,6 +235,19 @@ export const AddDownloadDialog: React.FC<AddDownloadDialogProps> = ({
                     <Form.Item name="cookie" label={t('cookie')}>
                       <Input placeholder="SESSION=xxx; token=yyy" />
                     </Form.Item>
+                    <Form.Item name="checksum_algorithm" label={t('checksumAlgorithm')}>
+                      <Select
+                        allowClear
+                        options={[
+                          { label: 'SHA-256', value: 'sha256' },
+                          { label: 'SHA-1', value: 'sha1' },
+                          { label: 'MD5', value: 'md5' },
+                        ]}
+                      />
+                    </Form.Item>
+                    <Form.Item name="checksum_value" label={t('checksumExpected')}>
+                      <Input placeholder="e3b0c44298fc..." />
+                    </Form.Item>
                   </div>
                   <Form.Item name="headers_text" label={t('extraHeaders')} style={{ marginBottom: 4 }}>
                     <Input.TextArea rows={3} placeholder={t('extraHeadersPlaceholder')} />

@@ -19,7 +19,7 @@ pub struct Database {
     db_path: PathBuf,
 }
 
-const SCHEMA_VERSION: i64 = 7;
+const SCHEMA_VERSION: i64 = 8;
 
 #[derive(Debug, serde::Deserialize)]
 struct StoredSpeedPlanRule {
@@ -73,6 +73,10 @@ impl Database {
               remediation TEXT,
               retry_count INTEGER DEFAULT 0,
               last_retry_at INTEGER,
+              checksum_algorithm TEXT,
+              checksum_expected TEXT,
+              checksum_actual TEXT,
+              checksum_status TEXT,
               created_at INTEGER NOT NULL,
               updated_at INTEGER NOT NULL
             );
@@ -118,8 +122,9 @@ impl Database {
                 category,
                 total_length, completed_length, download_speed, upload_speed,
                 connections, health, error_code, error_message, remediation,
-                retry_count, last_retry_at, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
+                retry_count, last_retry_at, checksum_algorithm, checksum_expected,
+                checksum_actual, checksum_status, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)
             ON CONFLICT(id) DO UPDATE SET
               aria2_gid=excluded.aria2_gid,
               type=excluded.type,
@@ -139,6 +144,10 @@ impl Database {
               remediation=excluded.remediation,
               retry_count=excluded.retry_count,
               last_retry_at=excluded.last_retry_at,
+              checksum_algorithm=excluded.checksum_algorithm,
+              checksum_expected=excluded.checksum_expected,
+              checksum_actual=excluded.checksum_actual,
+              checksum_status=excluded.checksum_status,
               updated_at=excluded.updated_at
             "#,
             params![
@@ -161,6 +170,10 @@ impl Database {
                 task.remediation,
                 task.retry_count,
                 task.last_retry_at,
+                task.checksum_algorithm,
+                task.checksum_expected,
+                task.checksum_actual,
+                task.checksum_status,
                 task.created_at,
                 task.updated_at,
             ],
@@ -179,7 +192,8 @@ impl Database {
             let mut stmt = conn.prepare(
                 r#"SELECT id, aria2_gid, type, source, status, name, save_dir, category, total_length,
                    completed_length, download_speed, upload_speed, connections, health, error_code,
-                   error_message, remediation, retry_count, last_retry_at, created_at, updated_at
+                   error_message, remediation, retry_count, last_retry_at, checksum_algorithm,
+                   checksum_expected, checksum_actual, checksum_status, created_at, updated_at
                    FROM tasks WHERE status = ?1 ORDER BY created_at DESC LIMIT ?2 OFFSET ?3"#,
             )?;
             stmt.query_map(params![status.as_str(), limit, offset], row_to_task)?
@@ -188,7 +202,8 @@ impl Database {
             let mut stmt = conn.prepare(
                 r#"SELECT id, aria2_gid, type, source, status, name, save_dir, category, total_length,
                    completed_length, download_speed, upload_speed, connections, health, error_code,
-                   error_message, remediation, retry_count, last_retry_at, created_at, updated_at
+                   error_message, remediation, retry_count, last_retry_at, checksum_algorithm,
+                   checksum_expected, checksum_actual, checksum_status, created_at, updated_at
                    FROM tasks ORDER BY created_at DESC LIMIT ?1 OFFSET ?2"#,
             )?;
             stmt.query_map(params![limit, offset], row_to_task)?
@@ -203,7 +218,8 @@ impl Database {
         conn.query_row(
             r#"SELECT id, aria2_gid, type, source, status, name, save_dir, category, total_length,
                completed_length, download_speed, upload_speed, connections, health, error_code,
-               error_message, remediation, retry_count, last_retry_at, created_at, updated_at
+               error_message, remediation, retry_count, last_retry_at, checksum_algorithm,
+               checksum_expected, checksum_actual, checksum_status, created_at, updated_at
                FROM tasks WHERE id = ?1"#,
             params![task_id],
             row_to_task,
@@ -217,7 +233,8 @@ impl Database {
         conn.query_row(
             r#"SELECT id, aria2_gid, type, source, status, name, save_dir, category, total_length,
                completed_length, download_speed, upload_speed, connections, health, error_code,
-               error_message, remediation, retry_count, last_retry_at, created_at, updated_at
+               error_message, remediation, retry_count, last_retry_at, checksum_algorithm,
+               checksum_expected, checksum_actual, checksum_status, created_at, updated_at
                FROM tasks WHERE aria2_gid = ?1"#,
             params![gid],
             row_to_task,
@@ -239,6 +256,9 @@ impl Database {
                     snapshot.has_metadata,
                     snapshot.total_length,
                 );
+                if task.checksum_status.as_deref() == Some("mismatch") {
+                    task.status = TaskStatus::Error;
+                }
                 task.total_length = snapshot.total_length;
                 task.completed_length = snapshot.completed_length;
                 task.download_speed = snapshot.download_speed;
@@ -999,12 +1019,25 @@ fn row_to_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         remediation: row.get(16)?,
         retry_count: row.get(17)?,
         last_retry_at: row.get(18)?,
-        created_at: row.get(19)?,
-        updated_at: row.get(20)?,
+        checksum_algorithm: row.get(19)?,
+        checksum_expected: row.get(20)?,
+        checksum_actual: row.get(21)?,
+        checksum_status: row.get(22)?,
+        created_at: row.get(23)?,
+        updated_at: row.get(24)?,
     })
 }
 
 fn apply_snapshot_failure(task: &mut Task, snapshot: &Aria2TaskSnapshot) {
+    if task.checksum_status.as_deref() == Some("mismatch") {
+        task.health = Some(TaskHealth::UnknownError.as_str().to_string());
+        task.error_code = Some("CHECKSUM_MISMATCH".to_string());
+        task.error_message = Some("downloaded file failed checksum verification".to_string());
+        task.remediation = Some(
+            "Delete the file, refresh the source, or retry from a trusted mirror.".to_string(),
+        );
+        return;
+    }
     task.error_code = snapshot.error_code.clone();
     task.error_message = snapshot.error_message.clone();
     match task.status {
@@ -1249,6 +1282,20 @@ fn apply_migration(conn: &Connection, version: i64) -> Result<()> {
                 "UPDATE tasks SET retry_count = 0 WHERE retry_count IS NULL",
                 [],
             )?;
+        }
+        8 => {
+            if !table_has_column(conn, "tasks", "checksum_algorithm")? {
+                conn.execute("ALTER TABLE tasks ADD COLUMN checksum_algorithm TEXT", [])?;
+            }
+            if !table_has_column(conn, "tasks", "checksum_expected")? {
+                conn.execute("ALTER TABLE tasks ADD COLUMN checksum_expected TEXT", [])?;
+            }
+            if !table_has_column(conn, "tasks", "checksum_actual")? {
+                conn.execute("ALTER TABLE tasks ADD COLUMN checksum_actual TEXT", [])?;
+            }
+            if !table_has_column(conn, "tasks", "checksum_status")? {
+                conn.execute("ALTER TABLE tasks ADD COLUMN checksum_status TEXT", [])?;
+            }
         }
         _ => {}
     }

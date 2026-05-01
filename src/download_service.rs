@@ -14,7 +14,10 @@ use std::{
 use anyhow::{Result, anyhow};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::{Datelike, Local, Timelike};
+use md5::Md5;
 use serde_json::{Value, json};
+use sha1::Sha1;
+use sha2::{Digest, Sha256};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::{sync::Mutex as AsyncMutex, time};
 use uuid::Uuid;
@@ -70,6 +73,8 @@ struct FfmpegMergeRequest {
     headers: Vec<String>,
     output_name: Option<String>,
     output_format: Option<String>,
+    checksum_algorithm: Option<String>,
+    checksum_value: Option<String>,
 }
 
 impl From<AddTaskOptions> for FfmpegMergeRequest {
@@ -81,6 +86,8 @@ impl From<AddTaskOptions> for FfmpegMergeRequest {
             headers: options.headers,
             output_name: options.out,
             output_format: options.merge_format,
+            checksum_algorithm: options.checksum_algorithm,
+            checksum_value: options.checksum_value,
         }
     }
 }
@@ -124,6 +131,7 @@ impl DownloadService {
         )?;
         let category =
             self.resolve_category_for_new_task(TaskType::Http, url, http_type.as_deref())?;
+        let checksum = checksum_metadata_from_options(&options)?;
         let options = with_resolved_save_dir(options, save_dir.clone());
         let task_id = Uuid::new_v4().to_string();
         let gid = self
@@ -152,6 +160,10 @@ impl DownloadService {
             remediation: None,
             retry_count: 0,
             last_retry_at: None,
+            checksum_algorithm: checksum.algorithm,
+            checksum_expected: checksum.expected,
+            checksum_actual: None,
+            checksum_status: checksum.status,
             created_at: now,
             updated_at: now,
         })?;
@@ -228,6 +240,8 @@ impl DownloadService {
             headers,
             output_name,
             output_format,
+            checksum_algorithm,
+            checksum_value,
         } = request;
         let ffmpeg_bin = self
             .db
@@ -312,6 +326,8 @@ impl DownloadService {
         ffmpeg_args.push("-c".to_string());
         ffmpeg_args.push("copy".to_string());
         ffmpeg_args.push(output_path_text.clone());
+        let checksum =
+            checksum_metadata_from_raw(checksum_algorithm.as_deref(), checksum_value.as_deref())?;
         let task = Task {
             id: task_id.clone(),
             aria2_gid: None,
@@ -334,6 +350,10 @@ impl DownloadService {
             remediation: None,
             retry_count: 0,
             last_retry_at: None,
+            checksum_algorithm: checksum.algorithm,
+            checksum_expected: checksum.expected,
+            checksum_actual: None,
+            checksum_status: checksum.status,
             created_at: now,
             updated_at: now,
         };
@@ -559,6 +579,7 @@ impl DownloadService {
         let save_dir =
             self.resolve_save_dir_for_new_task(TaskType::Magnet, magnet, &options, None)?;
         let category = self.resolve_category_for_new_task(TaskType::Magnet, magnet, None)?;
+        let checksum = checksum_metadata_from_options(&options)?;
         let options = with_resolved_save_dir(options, save_dir.clone());
         let task_id = Uuid::new_v4().to_string();
         let gid = self
@@ -590,6 +611,10 @@ impl DownloadService {
             ),
             retry_count: 0,
             last_retry_at: None,
+            checksum_algorithm: checksum.algorithm,
+            checksum_expected: checksum.expected,
+            checksum_actual: None,
+            checksum_status: checksum.status,
             created_at: now,
             updated_at: now,
         })?;
@@ -627,6 +652,7 @@ impl DownloadService {
         let save_dir =
             self.resolve_save_dir_for_new_task(TaskType::Torrent, &source, &options, None)?;
         let category = self.resolve_category_for_new_task(TaskType::Torrent, &source, None)?;
+        let checksum = checksum_metadata_from_options(&options)?;
         let options = with_resolved_save_dir(options, save_dir.clone());
 
         let task_id = Uuid::new_v4().to_string();
@@ -657,6 +683,10 @@ impl DownloadService {
             remediation: None,
             retry_count: 0,
             last_retry_at: None,
+            checksum_algorithm: checksum.algorithm,
+            checksum_expected: checksum.expected,
+            checksum_actual: None,
+            checksum_status: checksum.status,
             created_at: now,
             updated_at: now,
         })?;
@@ -965,6 +995,77 @@ impl DownloadService {
             );
             save_dir.join(name)
         })
+    }
+
+    fn verify_task_checksum(&self, task: &mut Task) -> Result<bool> {
+        if task.status != TaskStatus::Completed
+            || task.checksum_status.as_deref() != Some("pending")
+            || task.checksum_algorithm.is_none()
+            || task.checksum_expected.is_none()
+        {
+            return Ok(false);
+        }
+
+        let files = self.db.list_task_files(&task.id)?;
+        let Some(path) = self.resolve_primary_task_path(task, &files) else {
+            task.checksum_status = Some("error".to_string());
+            task.updated_at = now_ts();
+            apply_task_failure(task, checksum_failure("cannot resolve completed file path"));
+            self.db.upsert_task(task)?;
+            return Ok(true);
+        };
+        if !path.is_file() {
+            task.checksum_status = Some("error".to_string());
+            task.updated_at = now_ts();
+            apply_task_failure(
+                task,
+                checksum_failure(&format!("completed file is missing: {}", path.display())),
+            );
+            self.db.upsert_task(task)?;
+            return Ok(true);
+        }
+
+        let algorithm = task.checksum_algorithm.clone().unwrap_or_default();
+        let actual = compute_file_checksum(&path, &algorithm)?;
+        task.checksum_actual = Some(actual.clone());
+        let expected = task.checksum_expected.as_deref().unwrap_or_default();
+        if actual.eq_ignore_ascii_case(expected) {
+            task.checksum_status = Some("verified".to_string());
+            task.health = Some(TaskHealth::Normal.as_str().to_string());
+            task.error_code = None;
+            task.error_message = None;
+            task.remediation = None;
+            task.updated_at = now_ts();
+            self.db.upsert_task(task)?;
+            self.push_log(
+                "checksum_verified",
+                format!("task {} verified with {}", task.id, algorithm),
+            );
+        } else {
+            task.status = TaskStatus::Error;
+            task.checksum_status = Some("mismatch".to_string());
+            task.updated_at = now_ts();
+            apply_task_failure(
+                task,
+                TaskFailureReason {
+                    health: TaskHealth::UnknownError,
+                    code: "CHECKSUM_MISMATCH".to_string(),
+                    message: format!(
+                        "{} checksum mismatch: expected {}, got {}",
+                        algorithm, expected, actual
+                    ),
+                    remediation:
+                        "Delete the file, refresh the source, or retry from a trusted mirror."
+                            .to_string(),
+                },
+            );
+            self.db.upsert_task(task)?;
+            self.push_log(
+                "checksum_mismatch",
+                format!("task {} failed {} verification", task.id, algorithm),
+            );
+        }
+        Ok(true)
     }
 
     pub fn list_tasks(
@@ -1800,6 +1901,10 @@ impl DownloadService {
                 },
                 retry_count: 0,
                 last_retry_at: None,
+                checksum_algorithm: None,
+                checksum_expected: None,
+                checksum_actual: None,
+                checksum_status: None,
                 created_at: now,
                 updated_at: now,
             })?;
@@ -2210,6 +2315,10 @@ impl DownloadService {
                         task.error_message = None;
                         task.health = Some(TaskHealth::Normal.as_str().to_string());
                         task.remediation = None;
+                        if task.checksum_expected.is_some() {
+                            task.checksum_actual = None;
+                            task.checksum_status = Some("pending".to_string());
+                        }
                         task.updated_at = now;
                         self.db.upsert_task(&task)?;
                         let mut lock = self.retry_state.lock().expect("retry_state mutex poisoned");
@@ -2256,6 +2365,13 @@ impl DownloadService {
                         );
                     }
                 }
+                TaskStatus::Completed => {
+                    let _ = self.verify_task_checksum(&mut task);
+                    self.retry_state
+                        .lock()
+                        .expect("retry_state mutex poisoned")
+                        .remove(&task.id);
+                }
                 _ => {
                     self.retry_state
                         .lock()
@@ -2292,6 +2408,10 @@ impl DownloadService {
         task.error_code = None;
         task.error_message = None;
         task.remediation = None;
+        if task.checksum_expected.is_some() {
+            task.checksum_actual = None;
+            task.checksum_status = Some("pending".to_string());
+        }
         task.retry_count += 1;
         task.last_retry_at = Some(now);
         task.updated_at = now;
@@ -2666,7 +2786,126 @@ fn apply_task_failure(task: &mut Task, failure: TaskFailureReason) {
     task.remediation = Some(failure.remediation);
 }
 
+#[derive(Debug, Clone)]
+struct ChecksumMetadata {
+    algorithm: Option<String>,
+    expected: Option<String>,
+    status: Option<String>,
+}
+
+fn checksum_metadata_from_options(options: &AddTaskOptions) -> Result<ChecksumMetadata> {
+    checksum_metadata_from_raw(
+        options.checksum_algorithm.as_deref(),
+        options.checksum_value.as_deref(),
+    )
+}
+
+fn checksum_metadata_from_raw(
+    algorithm: Option<&str>,
+    expected: Option<&str>,
+) -> Result<ChecksumMetadata> {
+    let algorithm = normalize_checksum_algorithm(algorithm)?;
+    let expected = normalize_checksum_expected(expected);
+    if algorithm.is_some() ^ expected.is_some() {
+        return Err(AppError::InvalidInput(
+            "checksum algorithm and value must be provided together".to_string(),
+        )
+        .into());
+    }
+    let status = if algorithm.is_some() {
+        Some("pending".to_string())
+    } else {
+        None
+    };
+    Ok(ChecksumMetadata {
+        algorithm,
+        expected,
+        status,
+    })
+}
+
+fn normalize_checksum_algorithm(value: Option<&str>) -> Result<Option<String>> {
+    let Some(value) = value.map(str::trim).filter(|v| !v.is_empty()) else {
+        return Ok(None);
+    };
+    let normalized = value.to_ascii_lowercase().replace('-', "");
+    match normalized.as_str() {
+        "sha256" => Ok(Some("sha256".to_string())),
+        "sha1" => Ok(Some("sha1".to_string())),
+        "md5" => Ok(Some("md5".to_string())),
+        _ => Err(AppError::InvalidInput(format!("unsupported checksum algorithm: {value}")).into()),
+    }
+}
+
+fn normalize_checksum_expected(value: Option<&str>) -> Option<String> {
+    value
+        .map(|v| {
+            v.chars()
+                .filter(|ch| !ch.is_whitespace())
+                .collect::<String>()
+                .to_ascii_lowercase()
+        })
+        .filter(|v| !v.is_empty())
+}
+
+fn compute_file_checksum(path: &Path, algorithm: &str) -> Result<String> {
+    let mut file = File::open(path).map_err(|e| anyhow!("open file for checksum failed: {e}"))?;
+    let mut buffer = [0_u8; 64 * 1024];
+    match algorithm {
+        "sha256" => {
+            let mut hasher = Sha256::new();
+            loop {
+                let read = file.read(&mut buffer)?;
+                if read == 0 {
+                    break;
+                }
+                hasher.update(&buffer[..read]);
+            }
+            Ok(hex::encode(hasher.finalize()))
+        }
+        "sha1" => {
+            let mut hasher = Sha1::new();
+            loop {
+                let read = file.read(&mut buffer)?;
+                if read == 0 {
+                    break;
+                }
+                hasher.update(&buffer[..read]);
+            }
+            Ok(hex::encode(hasher.finalize()))
+        }
+        "md5" => {
+            let mut hasher = Md5::new();
+            loop {
+                let read = file.read(&mut buffer)?;
+                if read == 0 {
+                    break;
+                }
+                hasher.update(&buffer[..read]);
+            }
+            Ok(hex::encode(hasher.finalize()))
+        }
+        _ => Err(
+            AppError::InvalidInput(format!("unsupported checksum algorithm: {algorithm}")).into(),
+        ),
+    }
+}
+
+fn checksum_failure(message: &str) -> TaskFailureReason {
+    TaskFailureReason {
+        health: TaskHealth::UnknownError,
+        code: "CHECKSUM_VERIFY_FAILED".to_string(),
+        message: message.to_string(),
+        remediation:
+            "Check whether the file still exists and retry verification by refreshing task details."
+                .to_string(),
+    }
+}
+
 fn should_auto_retry(task: &Task) -> bool {
+    if task.error_code.as_deref() == Some("CHECKSUM_MISMATCH") {
+        return false;
+    }
     let health = task.health.as_deref().unwrap_or_default();
     !matches!(
         health,
@@ -3378,6 +3617,10 @@ fn redact_tasks(tasks: &[Task]) -> Vec<Task> {
             remediation: task.remediation.as_deref().map(redact_sensitive_text),
             retry_count: task.retry_count,
             last_retry_at: task.last_retry_at,
+            checksum_algorithm: task.checksum_algorithm.clone(),
+            checksum_expected: task.checksum_expected.as_deref().map(redact_sensitive_text),
+            checksum_actual: task.checksum_actual.clone(),
+            checksum_status: task.checksum_status.clone(),
             created_at: task.created_at,
             updated_at: task.updated_at,
         })
@@ -4177,9 +4420,9 @@ mod tests {
     };
 
     use super::{
-        DownloadService, SpeedPlanRule, absolute_path, compute_next_retry_at,
-        has_enough_disk_space, is_subpath, normalize_ffmpeg_failure, rule_matches,
-        select_speed_limit, should_auto_retry,
+        DownloadService, SpeedPlanRule, absolute_path, checksum_metadata_from_raw,
+        compute_file_checksum, compute_next_retry_at, has_enough_disk_space, is_subpath,
+        normalize_ffmpeg_failure, rule_matches, select_speed_limit, should_auto_retry,
     };
 
     #[test]
@@ -4337,6 +4580,10 @@ mod tests {
             remediation: Some("refresh headers".to_string()),
             retry_count: 0,
             last_retry_at: None,
+            checksum_algorithm: None,
+            checksum_expected: None,
+            checksum_actual: None,
+            checksum_status: None,
             created_at: now,
             updated_at: now,
         };
@@ -4347,6 +4594,40 @@ mod tests {
             ..task
         };
         assert!(should_auto_retry(&retryable));
+    }
+
+    #[test]
+    fn checksum_metadata_requires_supported_algorithm_and_value() {
+        let metadata = checksum_metadata_from_raw(Some("SHA-256"), Some(" AB CD "))
+            .expect("valid checksum metadata");
+        assert_eq!(metadata.algorithm.as_deref(), Some("sha256"));
+        assert_eq!(metadata.expected.as_deref(), Some("abcd"));
+        assert_eq!(metadata.status.as_deref(), Some("pending"));
+
+        assert!(checksum_metadata_from_raw(Some("crc32"), Some("abcd")).is_err());
+        assert!(checksum_metadata_from_raw(Some("sha1"), None).is_err());
+        assert!(checksum_metadata_from_raw(None, Some("abcd")).is_err());
+    }
+
+    #[test]
+    fn compute_file_checksum_supports_sha_and_md5() {
+        let path = std::env::temp_dir().join(format!("flamingo-checksum-{}.bin", Uuid::new_v4()));
+        std::fs::write(&path, b"abc").expect("write fixture");
+
+        assert_eq!(
+            compute_file_checksum(&path, "sha256").expect("sha256"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert_eq!(
+            compute_file_checksum(&path, "sha1").expect("sha1"),
+            "a9993e364706816aba3e25717850c26c9cd0d89d"
+        );
+        assert_eq!(
+            compute_file_checksum(&path, "md5").expect("md5"),
+            "900150983cd24fb0d6963f7d28e17f72"
+        );
+
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]
@@ -4663,6 +4944,10 @@ mod tests {
             remediation: None,
             retry_count: 0,
             last_retry_at: None,
+            checksum_algorithm: None,
+            checksum_expected: None,
+            checksum_actual: None,
+            checksum_status: None,
             created_at: now,
             updated_at: now,
         })

@@ -110,6 +110,14 @@ pub struct Task {
     pub remediation: Option<String>,
     pub retry_count: i64,
     pub last_retry_at: Option<i64>,
+    #[serde(default)]
+    pub checksum_algorithm: Option<String>,
+    #[serde(default)]
+    pub checksum_expected: Option<String>,
+    #[serde(default)]
+    pub checksum_actual: Option<String>,
+    #[serde(default)]
+    pub checksum_status: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -136,6 +144,8 @@ pub struct AddTaskOptions {
     pub seed_time: Option<u32>,
     pub user_agent: Option<String>,
     pub referer: Option<String>,
+    pub checksum_algorithm: Option<String>,
+    pub checksum_value: Option<String>,
     #[serde(default)]
     pub headers: Vec<String>,
 }

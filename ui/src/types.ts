@@ -21,6 +21,10 @@ export type Task = {
   remediation?: string | null
   retry_count?: number | null
   last_retry_at?: number | null
+  checksum_algorithm?: string | null
+  checksum_expected?: string | null
+  checksum_actual?: string | null
+  checksum_status?: string | null
   created_at?: number
   updated_at?: number
 }
@@ -95,6 +99,8 @@ export type AddFormValues = {
   user_agent?: string
   referer?: string
   cookie?: string
+  checksum_algorithm?: string
+  checksum_value?: string
   headers_text?: string
   preset_name?: string
   preset_selected?: string
