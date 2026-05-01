@@ -34,6 +34,8 @@ use crate::{
     },
 };
 
+const LOW_DISK_BUFFER_BYTES: i64 = 32 * 1024 * 1024;
+
 pub struct DownloadService {
     db: Arc<Database>,
     aria2: Arc<dyn Aria2Api>,
@@ -2239,6 +2241,21 @@ impl DownloadService {
                         self.db.upsert_task(&task)?;
                     }
                 }
+                TaskStatus::Active | TaskStatus::Queued => {
+                    if let Some(failure) = task_disk_space_failure(&task) {
+                        if let Some(gid) = task.aria2_gid.as_deref() {
+                            let _ = self.aria2.pause(gid).await;
+                        }
+                        task.status = TaskStatus::Paused;
+                        apply_task_failure(&mut task, failure);
+                        task.updated_at = now;
+                        self.db.upsert_task(&task)?;
+                        self.push_log(
+                            "disk_space_guard",
+                            format!("paused task {} because save dir is low on space", task.id),
+                        );
+                    }
+                }
                 _ => {
                     self.retry_state
                         .lock()
@@ -2655,6 +2672,35 @@ fn should_auto_retry(task: &Task) -> bool {
         health,
         "auth_required" | "url_expired" | "disk_full" | "merge_failed"
     )
+}
+
+fn task_disk_space_failure(task: &Task) -> Option<TaskFailureReason> {
+    let total = task.total_length;
+    if total <= 0 {
+        return None;
+    }
+    let remaining = total.saturating_sub(task.completed_length).max(0);
+    if remaining <= 0 {
+        return None;
+    }
+    let available = fs2::available_space(Path::new(&task.save_dir)).ok()? as i64;
+    if has_enough_disk_space(available, remaining) {
+        return None;
+    }
+    Some(TaskFailureReason {
+        health: TaskHealth::DiskFull,
+        code: "INSUFFICIENT_DISK_SPACE".to_string(),
+        message: format!(
+            "save directory has {} bytes available, but task needs about {} bytes",
+            available, remaining
+        ),
+        remediation: "Free disk space or choose another save directory before resuming."
+            .to_string(),
+    })
+}
+
+fn has_enough_disk_space(available_bytes: i64, remaining_bytes: i64) -> bool {
+    available_bytes >= remaining_bytes.saturating_add(LOW_DISK_BUFFER_BYTES)
 }
 
 fn is_dir_writable(path: &Path) -> bool {
@@ -4131,8 +4177,9 @@ mod tests {
     };
 
     use super::{
-        DownloadService, SpeedPlanRule, absolute_path, compute_next_retry_at, is_subpath,
-        normalize_ffmpeg_failure, rule_matches, select_speed_limit, should_auto_retry,
+        DownloadService, SpeedPlanRule, absolute_path, compute_next_retry_at,
+        has_enough_disk_space, is_subpath, normalize_ffmpeg_failure, rule_matches,
+        select_speed_limit, should_auto_retry,
     };
 
     #[test]
@@ -4300,6 +4347,18 @@ mod tests {
             ..task
         };
         assert!(should_auto_retry(&retryable));
+    }
+
+    #[test]
+    fn disk_space_guard_requires_remaining_bytes_plus_buffer() {
+        assert!(has_enough_disk_space(
+            100 + super::LOW_DISK_BUFFER_BYTES,
+            100
+        ));
+        assert!(!has_enough_disk_space(
+            99 + super::LOW_DISK_BUFFER_BYTES,
+            100
+        ));
     }
 
     #[derive(Default)]
