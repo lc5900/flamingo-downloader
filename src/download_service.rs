@@ -28,12 +28,13 @@ use crate::{
     db::Database,
     error::AppError,
     events::SharedEmitter,
+    link_parser::parse_link_candidates,
     models::{
         AddTaskOptions, AppUpdateStrategy, Aria2UpdateApplyResult, Aria2UpdateInfo,
         BrowserBridgeStatus, CategoryRule, Diagnostics, DownloadDirRule, GlobalSettings,
-        ImportTaskListResult, MediaMergeJob, OperationLog, SaveDirSuggestion, StartupSelfCheck,
-        StorageSummary, Task, TaskFailureReason, TaskFile, TaskHealth, TaskListSnapshot,
-        TaskStatus, TaskType,
+        ImportTaskListResult, LinkParseInput, LinkParseResult, MediaMergeJob, OperationLog,
+        SaveDirSuggestion, StartupSelfCheck, StorageSummary, Task, TaskFailureReason, TaskFile,
+        TaskHealth, TaskListSnapshot, TaskStatus, TaskType,
     },
 };
 
@@ -1075,6 +1076,19 @@ impl DownloadService {
         offset: u32,
     ) -> Result<Vec<Task>> {
         self.db.list_tasks(status, limit, offset)
+    }
+
+    pub fn parse_link_candidates(&self, input: LinkParseInput) -> Result<LinkParseResult> {
+        let result = parse_link_candidates(input);
+        self.push_log(
+            "parse_link_candidates",
+            format!(
+                "candidates={}, duplicates={}",
+                result.candidates.len(),
+                result.duplicate_count
+            ),
+        );
+        Ok(result)
     }
 
     pub fn set_task_category(&self, task_id: &str, category: Option<&str>) -> Result<()> {

@@ -5,6 +5,7 @@ pub mod db;
 pub mod download_service;
 pub mod error;
 pub mod events;
+pub mod link_parser;
 pub mod models;
 
 use std::{

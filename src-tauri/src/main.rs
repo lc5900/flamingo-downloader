@@ -13,7 +13,8 @@ use flamingo_downloader::{
     init_backend,
     models::{
         AddTaskOptions, AppUpdateStrategy, Aria2UpdateApplyResult, Aria2UpdateInfo, GlobalSettings,
-        ImportTaskListResult, OperationLog, StartupNotice, Task, TaskFile, TaskStatus, TaskType,
+        ImportTaskListResult, LinkParseInput, LinkParseResult, OperationLog, StartupNotice, Task,
+        TaskFile, TaskStatus, TaskType,
     },
 };
 use serde::Serialize;
@@ -582,6 +583,17 @@ async fn add_torrent(
             .map_err(|e| e.to_string());
     }
     Err("missing torrent input".to_string())
+}
+
+#[tauri::command]
+fn parse_link_candidates(
+    state: State<'_, AppState>,
+    input: LinkParseInput,
+) -> Result<LinkParseResult, String> {
+    state
+        .service
+        .parse_link_candidates(input)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1357,6 +1369,7 @@ fn main() {
             add_url,
             add_magnet,
             add_torrent,
+            parse_link_candidates,
             pause_task,
             resume_task,
             retry_task,

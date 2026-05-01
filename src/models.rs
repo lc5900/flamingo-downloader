@@ -348,3 +348,26 @@ pub struct StorageSummary {
     pub download_dir: String,
     pub free_bytes: u64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LinkParseInput {
+    pub text: String,
+    pub source_url: Option<String>,
+    pub source_kind: Option<String>, // text | html | clipboard | browser
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LinkCandidate {
+    pub url: String,
+    pub kind: String, // http | magnet | torrent
+    pub source: String,
+    pub filename_hint: Option<String>,
+    pub score: u32,
+    pub duplicate_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LinkParseResult {
+    pub candidates: Vec<LinkCandidate>,
+    pub duplicate_count: u32,
+}
