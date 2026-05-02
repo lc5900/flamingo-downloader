@@ -113,7 +113,14 @@ Design principles:
 - Extension source: [`browser-extension/`](browser-extension)
 - Extension docs: [`browser-extension/README.md`](browser-extension/README.md)
 - Native host scripts: [`browser-extension/native-host/`](browser-extension/native-host)
+- Local API docs: [`docs/local-api.md`](docs/local-api.md)
 - DRM-protected streams (Widevine/FairPlay/PlayReady) are not supported
+
+## Automation
+
+- Localhost control API: `GET /api/health`, `GET /api/stats`, `GET /api/tasks`, `POST /api/tasks`, `POST /api/tasks/:id/actions`
+- CLI wrapper: [`scripts/flamingo-cli.ps1`](scripts/flamingo-cli.ps1)
+- Completion hooks: webhook URL and local command placeholders (`{event}`, `{task_id}`, `{task_name}`, `{task_status}`, `{task_source}`, `{save_dir}`)
 
 ## Failure Diagnostics and Limits
 
@@ -131,6 +138,12 @@ Known limits:
 - Auth-bound downloads may require valid cookies, authorization headers, or referer values.
 - DRM-protected streams are not supported.
 - ffmpeg merge failures depend on the local ffmpeg build and the source server behavior.
+
+Additional notes:
+
+- Privacy notes: [`docs/privacy-notes.md`](docs/privacy-notes.md)
+- Browser extension verification checklist: [`docs/browser-extension-checklist.md`](docs/browser-extension-checklist.md)
+- Download sample set: [`docs/download-sample-set.md`](docs/download-sample-set.md)
 
 ## Project Layout
 

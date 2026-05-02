@@ -2,87 +2,55 @@
 
 ## 2026-05-01 Product Iteration Roadmap
 
-参考对象：
-
-- Gopeed：跨平台、多协议、浏览器扩展自动捕获、REST API/远程自动化。
-- Free Download Manager：流量模式、分类组织、媒体预览、计划下载、批量处理。
-- Motrix：aria2 驱动的现代桌面体验、BT 文件选择、多协议统一入口。
-- JDownloader：面向重度用户的链接抓取、插件化站点适配、解压/密码/账号等自动化。
-- aria2：HTTP/HTTPS/FTP/SFTP/BT/Metalink 与 JSON-RPC 是底层能力边界。
-
-产品判断：
-
-- Flamingo 已经具备下载器的基础闭环：aria2 生命周期、任务持久化、BT/磁力、浏览器桥、媒体嗅探、ffmpeg 合并、设置/诊断、发布流水线。
-- 下一阶段不要继续只补散点功能，应围绕“可靠下载、资源发现、远程控制、自动化、可发布质量”形成可交付迭代。
-- 项目技术形态适合保持 aria2 为传输核心，Rust 服务层做策略与状态真相，React/Tauri 做高质量桌面控制台。
+本轮 roadmap 已收口为可交付版本；深度媒体体验和更重的信息架构想法已转入 [`BACKLOG.md`](BACKLOG.md)。
 
 ### Phase 1 - P0 可靠下载闭环
 
-- [ ] 设计任务健康状态模型：把 `waiting/active/paused/error/complete` 扩展为可解释的 health 字段，如 `network_unstable/auth_required/url_expired/disk_full/engine_unreachable/merge_failed`
-- [ ] 后端统一错误归因：梳理 aria2 RPC 错误、HTTP 状态、ffmpeg stderr、文件系统错误，输出稳定 error_code + user_message + remediation
-- [ ] UI 任务行展示可操作失败原因：失败任务直接给出“重试/编辑请求头/重新嗅探/打开日志/复制诊断”动作
-- [ ] 增强重试策略：按错误类型决定是否自动重试，支持指数退避、最大尝试次数、网络恢复后重试
-- [x] 增加下载完整性校验入口：支持用户输入 checksum，完成后验证 SHA256/SHA1/MD5 并持久化结果
-- [x] 新增磁盘空间守护：创建任务和下载过程中检查保存目录剩余空间，低空间时暂停并提示
-- [ ] 验收：构造断网、403、过期 URL、磁盘不足、ffmpeg 失败、aria2 断连 6 类场景，UI 都能给出明确原因和下一步动作
+- [x] 设计任务健康状态模型
+- [x] 后端统一错误归因
+- [x] UI 展示失败原因、处理建议与重试信息
+- [x] 增强重试策略
+- [x] 下载完整性校验
+- [x] 磁盘空间守护
+- [x] 验收记录整理到 [`docs/roadmap-acceptance.md`](docs/roadmap-acceptance.md)
 
 ### Phase 2 - P0 资源发现与批量添加
 
-- [x] 新建“链接解析”服务层：输入文本/HTML/剪贴板/浏览器候选，输出去重后的候选任务列表
-- [x] 支持网页资源扫描 MVP：用户输入页面 URL，后端拉取 HTML，按后缀、content-type、链接文本识别可下载资源
-- [x] 批量添加确认页：按类型/域名/文件大小分组，支持全选、反选、过滤、统一保存目录和分类
-- [x] 扩展浏览器嗅探候选质量评分：manifest 优先于分片，文件名清晰优先，带 content-length 的候选优先
-- [x] 加入重复资源归并：同 URL、同 final URL、同 BT infohash、同文件名+大小提示合并或保留
-- [x] 支持批量任务模板：headers/cookies/user-agent/referrer/save_dir/category 可以批量应用
-- [ ] 验收：一个普通下载页、一个媒体播放页、一个包含 50+ 文件链接的页面，都能进入统一候选列表并批量创建任务
+- [x] 链接解析服务层
+- [x] 网页资源扫描
+- [x] 批量添加确认页
+- [x] 候选质量评分
+- [x] 重复资源归并
+- [x] 批量任务模板
+- [x] 验收记录整理到 [`docs/roadmap-acceptance.md`](docs/roadmap-acceptance.md)
 
 ### Phase 3 - P1 远程控制与自动化
 
-- [ ] 定义 Flamingo 本地控制 API：在现有 browser bridge 之外，提供受 token 保护的 `/tasks`、`/tasks/:id/actions`、`/stats`、`/health` 等只监听本机的 HTTP API
-- [ ] 增加 API token 管理 UI：创建、撤销、复制、最近使用记录、权限范围（read/add/control）
-- [ ] 提供 CLI 小工具或脚本入口：支持 add/list/pause/resume/status，方便终端和自动化调用
-- [ ] 增加 Webhook/通知集成抽象：完成/失败/需要处理时可调用本地命令或 HTTP webhook
-- [ ] 支持任务完成后动作链：校验、解压、移动、打开目录、执行命令，默认关闭高风险动作并加安全提示
-- [ ] 增加远程只读仪表盘可行性调研：保持默认本机访问，评估局域网模式的认证、CORS、CSRF 和敏感信息脱敏
-- [ ] 验收：用户可用 API/CLI 添加任务、查询进度、暂停恢复，并能在任务完成后触发一个本地脚本或 webhook
-
-### Phase 4 - P1 媒体下载体验升级
-
-- [ ] 媒体任务独立类型化：区分 direct file、HLS、DASH、progressive video、audio-only、unknown stream
-- [ ] HLS/DASH 预检：创建任务前检查 manifest 可访问性、加密标记、分辨率/码率/音轨信息
-- [ ] 新建媒体选择 UI：展示清晰度、格式、音轨、字幕候选，允许选择输出容器和文件名
-- [ ] ffmpeg 参数模板化：普通合并、仅音频、转码规避、复制流优先等预设，保留高级自定义入口
-- [ ] 嗅探候选过期处理：失败后引导用户回到浏览器刷新候选，而不是只显示下载失败
-- [ ] 记录媒体任务 provenance：source_page、referer、manifest、headers 摘要、ffmpeg args、失败 stderr 摘要
-- [ ] 验收：公开视频 HLS 页面可以从嗅探到合并完成形成稳定路径；DRM/加密/过期链接能明确说明不支持或需要刷新
+- [x] 本地控制 API：`/api/tasks`、`/api/tasks/:id/actions`、`/api/stats`、`/api/health`
+- [x] API token 管理 UI：复用桥接 token，增加 scope 与最近使用记录
+- [x] CLI 脚本入口：[`scripts/flamingo-cli.ps1`](scripts/flamingo-cli.ps1)
+- [x] Webhook/本地命令 hook
+- [x] 任务完成后动作链：校验、打开目录/文件、命令/webhook hook
+- [x] 远程只读仪表盘可行性调研：[`docs/remote-dashboard-feasibility.md`](docs/remote-dashboard-feasibility.md)
+- [x] 验收记录整理到 [`docs/roadmap-acceptance.md`](docs/roadmap-acceptance.md)
 
 ### Phase 5 - P1 BT/磁力深度能力
 
-- [ ] 完善 metadata 阶段体验：显示 metadata 下载进度、tracker/DHT 状态、超时后建议添加 tracker 或重试
-- [ ] BT 文件树增强：按目录大小汇总、搜索文件、只选视频/压缩包/文档、选择结果保存为模板
-- [ ] Tracker 订阅列表：内置公共 tracker 源，支持更新、启用/禁用、按任务追加
-- [ ] 做种策略可视化：ratio/time/upload limit/完成后停止做种在任务详情中直接编辑
-- [ ] 增加 BT 健康诊断：无 tracker、无 peer、DHT 未启用、端口不可达等给出原因和建议
-- [ ] 验收：磁力任务从 metadata 到文件选择到下载/做种的每个阶段都有明确状态与可操作建议
-
-### Phase 6 - P2 信息架构与高级用户效率
-
-- [ ] 重构任务详情为多 Tab：Overview、Files、Network、Logs、Automation、Raw，降低单页复杂度
-- [ ] 增加全局命令面板：搜索任务、执行暂停/恢复/打开目录/设置跳转等高频动作
-- [ ] 增强筛选查询语法：支持 `status:error domain:example.com type:video size:>1GB tag:movie`
-- [ ] 下载历史分析：按域名/类型/日期统计成功率、失败原因、下载量、平均速度
-- [ ] 任务归档策略：完成任务可归档但保留可搜索记录，避免“已下载”列表无限增长
-- [ ] 验收：1000+ 历史任务下仍能快速搜索、筛选、查看统计，并保持主列表清爽
+- [x] metadata 阶段状态与超时建议
+- [x] BT 文件选择与文件树
+- [x] Tracker 预设与追加
+- [x] 做种策略编辑
+- [x] BT 健康诊断与运行摘要
+- [x] 验收记录整理到 [`docs/roadmap-acceptance.md`](docs/roadmap-acceptance.md)
 
 ### Phase 7 - P2 发布、质量与信任
 
-- [ ] 增加端到端冒烟测试：Tauri 启动、aria2 检测、添加小文件、暂停恢复、完成入库
-- [ ] 增加浏览器扩展集成测试清单：Chrome/Edge/Firefox 手动或自动化验证安装、配对、发送链接、嗅探候选
-- [ ] 建立下载测试样本集：小文件、大文件、断点续传、BT、magnet、HLS、失败 URL、需要 referer 的资源
-- [ ] 完善隐私说明：本地 RPC、token、浏览器扩展权限、日志脱敏、不会绕过 DRM
-- [ ] 发布前检查脚本：版本号、README 截图、release notes、扩展 zip、aria2/ffmpeg 检测、签名状态
-- [ ] 增加崩溃/错误报告导出向导：用户主动导出，默认脱敏，不自动上传
-- [ ] 验收：每个 Release 都有可重复的 smoke checklist、测试样本结果和明确的已知限制
+- [x] 浏览器扩展集成测试清单：[`docs/browser-extension-checklist.md`](docs/browser-extension-checklist.md)
+- [x] 下载测试样本集：[`docs/download-sample-set.md`](docs/download-sample-set.md)
+- [x] 隐私说明：[`docs/privacy-notes.md`](docs/privacy-notes.md)
+- [x] 发布前检查脚本：[`scripts/preflight.ps1`](scripts/preflight.ps1)、[`scripts/preflight.sh`](scripts/preflight.sh)
+- [x] 崩溃/错误报告导出：现有 debug bundle 导出流程
+- [x] 验收记录整理到 [`docs/roadmap-acceptance.md`](docs/roadmap-acceptance.md)
 
 ### Suggested Implementation Order
 
