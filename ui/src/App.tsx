@@ -165,7 +165,9 @@ function safeLocalStorageGet(key: string): string | null {
 function safeLocalStorageSet(key: string, value: string) {
   try {
     localStorage.setItem(key, value)
-  } catch {}
+  } catch {
+    // ignore storage write failures
+  }
 }
 
 function safeMatchMediaDark(): boolean {
