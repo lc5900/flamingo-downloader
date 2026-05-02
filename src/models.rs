@@ -190,7 +190,7 @@ pub struct GlobalSettings {
     pub browser_bridge_port: Option<u16>,
     pub browser_bridge_token: Option<String>,
     pub browser_bridge_allowed_origins: Option<String>, // comma/newline separated, supports prefix match
-    pub local_api_scopes: Option<String>, // comma/newline separated: read,add,control
+    pub local_api_scopes: Option<String>,               // comma/newline separated: read,add,control
     pub ffmpeg_bin_path: Option<String>,
     pub media_merge_enabled: Option<bool>,
     pub clipboard_watch_enabled: Option<bool>,

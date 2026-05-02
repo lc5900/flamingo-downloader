@@ -364,12 +364,7 @@ async fn handle_local_api(
             "local_api_activity",
             format!("unauthorized method={method} path={path} origin={origin} ua={user_agent}"),
         );
-        return write_json(
-            stream,
-            401,
-            &json!({"ok": false, "error": "unauthorized"}),
-        )
-        .await;
+        return write_json(stream, 401, &json!({"ok": false, "error": "unauthorized"})).await;
     }
 
     let settings = service.get_global_settings()?;
@@ -388,7 +383,12 @@ async fn handle_local_api(
                 "forbidden_scope method={method} path={path} required={required_scope} origin={origin} ua={user_agent}"
             ),
         );
-        return write_json(stream, 401, &json!({"ok": false, "error": "forbidden_scope"})).await;
+        return write_json(
+            stream,
+            401,
+            &json!({"ok": false, "error": "forbidden_scope"}),
+        )
+        .await;
     }
 
     match (method, path) {
@@ -449,7 +449,12 @@ async fn handle_local_api(
                 .filter(|v| !v.is_empty())
             {
                 service.add_magnet(magnet, options).await?
-            } else if let Some(url) = payload.url.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+            } else if let Some(url) = payload
+                .url
+                .as_deref()
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+            {
                 service.add_url(url, options).await?
             } else {
                 return write_json(
@@ -478,7 +483,12 @@ async fn handle_local_api(
             "local_api_activity",
             format!("get_task_ok task_id={task_id}"),
         );
-        return write_json(stream, 200, &json!({"ok": true, "task": task, "files": files})).await;
+        return write_json(
+            stream,
+            200,
+            &json!({"ok": true, "task": task, "files": files}),
+        )
+        .await;
     }
 
     if method == "POST" && path.starts_with("/api/tasks/") && path.ends_with("/actions") {
@@ -495,9 +505,11 @@ async fn handle_local_api(
             "pause" => service.pause_task(task_id).await?,
             "resume" => service.resume_task(task_id).await?,
             "retry" => service.retry_task(task_id).await?,
-            "remove" => service
-                .remove_task(task_id, payload.delete_files.unwrap_or(false))
-                .await?,
+            "remove" => {
+                service
+                    .remove_task(task_id, payload.delete_files.unwrap_or(false))
+                    .await?
+            }
             "open_dir" => service.open_task_dir(task_id).await?,
             "open_file" => service.open_task_file(task_id).await?,
             "set_category" => service.set_task_category(task_id, payload.category.as_deref())?,

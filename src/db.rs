@@ -560,13 +560,13 @@ impl Database {
             post_complete_action: self.get_setting("post_complete_action")?,
             completion_webhook_url: self.get_setting("completion_webhook_url")?,
             completion_command: self.get_setting("completion_command")?,
-            completion_hook_on_error: self.get_setting("completion_hook_on_error")?.and_then(
-                |v| match v.as_str() {
+            completion_hook_on_error: self.get_setting("completion_hook_on_error")?.and_then(|v| {
+                match v.as_str() {
                     "true" => Some(true),
                     "false" => Some(false),
                     _ => None,
-                },
-            ),
+                }
+            }),
             auto_delete_control_files: self.get_setting("auto_delete_control_files")?.and_then(
                 |v| match v.as_str() {
                     "true" => Some(true),

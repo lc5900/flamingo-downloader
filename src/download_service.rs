@@ -1026,7 +1026,10 @@ impl DownloadService {
                     ),
                     Ok(resp) => (
                         "completion_webhook_failed",
-                        format!("task={task_id} event={event_for_log} url={url} status={}", resp.status()),
+                        format!(
+                            "task={task_id} event={event_for_log} url={url} status={}",
+                            resp.status()
+                        ),
                     ),
                     Err(e) => (
                         "completion_webhook_failed",
@@ -1066,7 +1069,9 @@ impl DownloadService {
                     ),
                     Err(e) => (
                         "completion_command_failed",
-                        format!("task={task_id} event={event_for_log} command={rendered_for_log} error={e}"),
+                        format!(
+                            "task={task_id} event={event_for_log} command={rendered_for_log} error={e}"
+                        ),
                     ),
                 };
                 let _ = db.append_operation_logs(&[OperationLog {
