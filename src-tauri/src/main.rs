@@ -34,6 +34,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{Emitter, LogicalSize, Manager, Size, State};
 #[cfg(target_os = "macos")]
 use tauri_plugin_liquid_glass::{GlassMaterialVariant, LiquidGlassConfig, LiquidGlassExt};
+use tauri_plugin_window_state::StateFlags;
 
 static APP_LOCALE_OVERRIDE: OnceLock<RwLock<Option<String>>> = OnceLock::new();
 
@@ -255,6 +256,25 @@ fn ensure_main_window_bounds(win: &tauri::WebviewWindow) {
             let _ = win.center();
         }
     }
+}
+
+fn persisted_window_state_flags() -> StateFlags {
+    #[cfg(target_os = "windows")]
+    {
+        StateFlags::all() & !StateFlags::VISIBLE
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        StateFlags::all()
+    }
+}
+
+fn ensure_main_window_visible(win: &tauri::WebviewWindow) {
+    let _ = win.set_skip_taskbar(false);
+    let _ = win.show();
+    let _ = win.unminimize();
+    let _ = win.set_focus();
 }
 
 #[allow(dead_code)]
@@ -1083,7 +1103,11 @@ fn main() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build());
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(persisted_window_state_flags())
+                .build(),
+        );
     #[cfg(target_os = "macos")]
     let builder = builder.enable_macos_default_menu(false);
     let builder = builder
@@ -1271,6 +1295,8 @@ fn main() {
                         ),
                     }
                 }
+                #[cfg(target_os = "windows")]
+                ensure_main_window_visible(&main_win);
             }
 
             #[cfg(not(target_os = "macos"))]
