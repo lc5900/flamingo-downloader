@@ -187,11 +187,17 @@ fn filename_hint(url: &str) -> Option<String> {
 }
 
 fn score_candidate(url: &str, kind: &str, duplicate: bool) -> u32 {
-    let mut score = match kind {
+    let mut score: u32 = match kind {
         "magnet" | "torrent" => 90,
         _ => 50,
     };
     let lower = url.to_ascii_lowercase();
+    if is_manifest_url(&lower) {
+        score += 35;
+    }
+    if is_stream_segment_url(&lower) {
+        score = score.saturating_sub(20);
+    }
     if [
         ".zip", ".7z", ".rar", ".exe", ".dmg", ".pkg", ".mp4", ".mkv", ".pdf",
     ]
@@ -203,8 +209,46 @@ fn score_candidate(url: &str, kind: &str, duplicate: bool) -> u32 {
     if lower.contains(".m3u8") || lower.contains(".mpd") {
         score += 20;
     }
+    if let Some(name) = filename_hint(url) {
+        score += filename_clarity_score(&name);
+    }
     if duplicate {
         score += 5;
+    }
+    score
+}
+
+fn is_manifest_url(lower_url: &str) -> bool {
+    lower_url.contains(".m3u8") || lower_url.contains(".mpd")
+}
+
+fn is_stream_segment_url(lower_url: &str) -> bool {
+    [".ts", ".m4s", ".m4a", ".aac", ".webm?"]
+        .iter()
+        .any(|ext| lower_url.contains(ext))
+}
+
+fn filename_clarity_score(name: &str) -> u32 {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return 0;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    let mut score: u32 = 0;
+    if lower
+        .chars()
+        .any(|ch| ch.is_ascii_alphabetic() || ch.is_ascii_digit())
+    {
+        score += 6;
+    }
+    if lower.contains(' ') || lower.contains('-') || lower.contains('_') {
+        score += 4;
+    }
+    if lower.len() >= 8 {
+        score += 4;
+    }
+    if lower.starts_with("index.") || lower.starts_with("seg-") || lower.starts_with("chunk") {
+        score = score.saturating_sub(6);
     }
     score
 }
@@ -289,5 +333,13 @@ mod tests {
         assert_eq!(duplicates, 2);
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].duplicate_count, 2);
+    }
+
+    #[test]
+    fn score_prefers_manifest_and_clear_name_over_segments() {
+        let manifest =
+            score_candidate("https://cdn.example.com/My Movie 1080p.m3u8", "http", false);
+        let segment = score_candidate("https://cdn.example.com/seg-00001.ts", "http", false);
+        assert!(manifest > segment);
     }
 }

@@ -2993,6 +2993,9 @@ async fn enrich_candidates_with_content_type(
         candidate.content_length = response
             .content_length()
             .and_then(|v| i64::try_from(v).ok());
+        if candidate.content_length.unwrap_or_default() > 0 {
+            candidate.score += 10;
+        }
         candidate.content_type = Some(content_type);
     }
 }
