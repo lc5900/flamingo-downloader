@@ -52,7 +52,7 @@ describe('parseTaskOptionPresets', () => {
   it('parses, trims, and filters supported preset entries', () => {
     expect(
       parseTaskOptionPresets(`[
-        {"name":" Video ","task_type":"http","options":{"out":"a.mp4"}},
+        {"name":" Video ","task_type":"http","options":{"out":"a.mp4","category":" media "}},
         {"name":"bad","task_type":"other","options":{}},
         {"name":"","task_type":"torrent","options":{}}
       ]`),
@@ -60,7 +60,7 @@ describe('parseTaskOptionPresets', () => {
       {
         name: 'Video',
         task_type: 'http',
-        options: { out: 'a.mp4' },
+        options: { out: 'a.mp4', category: 'media' },
       },
     ])
   })

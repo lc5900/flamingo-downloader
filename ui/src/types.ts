@@ -88,6 +88,7 @@ export type AddFormValues = {
   url: string
   magnet: string
   save_dir?: string
+  category?: string
   out?: string
   merge_format?: string
   max_download_limit?: string
@@ -112,6 +113,7 @@ export type TaskOptionPreset = {
   name: string
   task_type: AddPresetTaskType
   options: {
+    category?: string | null
     out?: string | null
     max_download_limit?: string | null
     max_upload_limit?: string | null

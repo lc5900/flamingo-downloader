@@ -189,6 +189,9 @@ export const AddDownloadDialog: React.FC<AddDownloadDialogProps> = ({
                     </Button>
                   </Space>
                   <div className="grid-2">
+                    <Form.Item name="category" label={t('categoryFilter')}>
+                      <Input placeholder={t('setCategory')} />
+                    </Form.Item>
                     <Form.Item name="out" label={t('outName')}>
                       <Input placeholder="example.zip" />
                     </Form.Item>

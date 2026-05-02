@@ -69,6 +69,7 @@ struct SpeedPlanRule {
 #[derive(Debug, Clone)]
 struct FfmpegMergeRequest {
     save_dir: Option<String>,
+    category: Option<String>,
     referer: Option<String>,
     user_agent: Option<String>,
     headers: Vec<String>,
@@ -82,6 +83,7 @@ impl From<AddTaskOptions> for FfmpegMergeRequest {
     fn from(options: AddTaskOptions) -> Self {
         Self {
             save_dir: options.save_dir,
+            category: options.category,
             referer: options.referer,
             user_agent: options.user_agent,
             headers: options.headers,
@@ -130,8 +132,9 @@ impl DownloadService {
             &options,
             http_type.as_deref(),
         )?;
-        let category =
-            self.resolve_category_for_new_task(TaskType::Http, url, http_type.as_deref())?;
+        let category = self
+            .resolve_requested_category(options.category.as_deref())
+            .or(self.resolve_category_for_new_task(TaskType::Http, url, http_type.as_deref())?);
         let checksum = checksum_metadata_from_options(&options)?;
         let options = with_resolved_save_dir(options, save_dir.clone());
         let task_id = Uuid::new_v4().to_string();
@@ -236,6 +239,7 @@ impl DownloadService {
     ) -> Result<(String, String)> {
         let FfmpegMergeRequest {
             save_dir,
+            category,
             referer,
             user_agent,
             headers,
@@ -338,7 +342,9 @@ impl DownloadService {
             name: output_path
                 .file_name()
                 .map(|v| v.to_string_lossy().to_string()),
-            category: self.resolve_category_for_new_task(TaskType::Http, url, None)?,
+            category: self
+                .resolve_requested_category(category.as_deref())
+                .or(self.resolve_category_for_new_task(TaskType::Http, url, None)?),
             save_dir: target_dir.clone(),
             total_length: duration_ms,
             completed_length: 0,
@@ -579,7 +585,9 @@ impl DownloadService {
 
         let save_dir =
             self.resolve_save_dir_for_new_task(TaskType::Magnet, magnet, &options, None)?;
-        let category = self.resolve_category_for_new_task(TaskType::Magnet, magnet, None)?;
+        let category = self
+            .resolve_requested_category(options.category.as_deref())
+            .or(self.resolve_category_for_new_task(TaskType::Magnet, magnet, None)?);
         let checksum = checksum_metadata_from_options(&options)?;
         let options = with_resolved_save_dir(options, save_dir.clone());
         let task_id = Uuid::new_v4().to_string();
@@ -652,7 +660,9 @@ impl DownloadService {
             .unwrap_or_else(|| "torrent:base64".to_string());
         let save_dir =
             self.resolve_save_dir_for_new_task(TaskType::Torrent, &source, &options, None)?;
-        let category = self.resolve_category_for_new_task(TaskType::Torrent, &source, None)?;
+        let category = self
+            .resolve_requested_category(options.category.as_deref())
+            .or(self.resolve_category_for_new_task(TaskType::Torrent, &source, None)?);
         let checksum = checksum_metadata_from_options(&options)?;
         let options = with_resolved_save_dir(options, save_dir.clone());
 
@@ -3449,6 +3459,13 @@ impl DownloadService {
         Ok(None)
     }
 
+    fn resolve_requested_category(&self, category: Option<&str>) -> Option<String> {
+        category
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string)
+    }
+
     fn resolve_save_dir_for_new_task_detail(
         &self,
         task_type: TaskType,
@@ -4761,6 +4778,19 @@ mod tests {
         assert!(is_download_content_type("application/octet-stream"));
         assert!(is_download_content_type("video/mp4"));
         assert!(!is_download_content_type("text/html"));
+    }
+
+    #[test]
+    fn requested_category_trims_and_skips_empty_values() {
+        let mock = Arc::new(MockAria2::default());
+        let (service, _db, _mock) = build_service(mock);
+
+        assert_eq!(
+            service.resolve_requested_category(Some("  video  ")),
+            Some("video".to_string())
+        );
+        assert_eq!(service.resolve_requested_category(Some("   ")), None);
+        assert_eq!(service.resolve_requested_category(None), None);
     }
 
     #[derive(Default)]

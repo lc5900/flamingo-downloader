@@ -103,11 +103,15 @@ export function parseTaskOptionPresets(raw: unknown): TaskOptionPreset[] {
       .map((item) => {
         const preset = item as TaskOptionPreset
         const taskType = String(preset.task_type || '') as AddPresetTaskType
+        const options =
+          preset.options && typeof preset.options === 'object' ? preset.options : {}
         return {
           name: String(preset.name || '').trim(),
           task_type: taskType,
-          options:
-            preset.options && typeof preset.options === 'object' ? preset.options : {},
+          options: {
+            ...options,
+            category: String(options.category || '').trim() || null,
+          },
         }
       })
       .filter(

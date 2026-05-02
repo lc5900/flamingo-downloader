@@ -655,6 +655,7 @@ export default function App() {
       url: '',
       magnet: '',
       save_dir: '',
+      category: '',
       preset_name: '',
       preset_selected: undefined,
       out: '',
@@ -1422,6 +1423,7 @@ export default function App() {
     if (cookie) headerLines.push(`Cookie: ${cookie}`)
     return {
       save_dir: values.save_dir || null,
+      category: String(values.category || '').trim() || null,
       out: String(values.out || '').trim() || null,
       merge_format: String(values.merge_format || '').trim() || null,
       max_download_limit: String(values.max_download_limit || '').trim() || null,
@@ -1453,6 +1455,7 @@ export default function App() {
       name: presetName,
       task_type: currentAddTaskType,
       options: {
+        category: optionPayload.category,
         out: optionPayload.out,
         max_download_limit: optionPayload.max_download_limit,
         max_upload_limit: optionPayload.max_upload_limit,
@@ -1484,6 +1487,7 @@ export default function App() {
     const cookie = cookieHeader ? String(cookieHeader).replace(/^cookie:\s*/i, '') : ''
     const remainingHeaders = headers.filter((line) => !/^cookie:/i.test(String(line || '')))
     addForm.setFieldsValue({
+      category: preset.options.category || '',
       out: preset.options.out || '',
       max_download_limit: preset.options.max_download_limit || '',
       max_upload_limit: preset.options.max_upload_limit || '',

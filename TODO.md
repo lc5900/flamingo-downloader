@@ -33,7 +33,7 @@
 - [ ] 批量添加确认页：按类型/域名/文件大小分组，支持全选、反选、过滤、统一保存目录和分类
 - [x] 扩展浏览器嗅探候选质量评分：manifest 优先于分片，文件名清晰优先，带 content-length 的候选优先
 - [x] 加入重复资源归并：同 URL、同 final URL、同 BT infohash、同文件名+大小提示合并或保留
-- [ ] 支持批量任务模板：headers/cookies/user-agent/referrer/save_dir/category 可以批量应用
+- [x] 支持批量任务模板：headers/cookies/user-agent/referrer/save_dir/category 可以批量应用
 - [ ] 验收：一个普通下载页、一个媒体播放页、一个包含 50+ 文件链接的页面，都能进入统一候选列表并批量创建任务
 
 ### Phase 3 - P1 远程控制与自动化
