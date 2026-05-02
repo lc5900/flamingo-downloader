@@ -20,17 +20,8 @@
         "minHeight": 700,
         "resizable": true,
         "devtools": false,
-        "backgroundColor": "#00000000",
-        "transparent": true,
-        "windowEffects": {
-          "effects": [
-            "mica",
-            "acrylic",
-            "blur",
-            "hudWindow"
-          ],
-          "radius": 12
-        }
+        "backgroundColor": "#F5F7FA",
+        "transparent": false
       }
     ],
     "security": {

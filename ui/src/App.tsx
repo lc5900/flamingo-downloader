@@ -144,6 +144,52 @@ const SHORTCUT_STORAGE_KEY = 'flamingo.shortcuts.v1'
 const SHORTCUT_DISPLAY_MODE_KEY = 'flamingo.shortcuts.display_mode.v1'
 const PROGRESS_ROW_BG_KEY = 'flamingo.progress_row_bg_enabled.v1'
 
+type TauriInternalsWindow = Window & {
+  __TAURI_INTERNALS__?: {
+    metadata?: {
+      currentWindow?: {
+        label?: string
+      }
+    }
+  }
+}
+
+function safeLocalStorageGet(key: string): string | null {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function safeLocalStorageSet(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {}
+}
+
+function safeMatchMediaDark(): boolean {
+  try {
+    return typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-color-scheme: dark)').matches
+      : false
+  } catch {
+    return false
+  }
+}
+
+function getSafeCurrentWindow(): ReturnType<typeof getCurrentWindow> | null {
+  try {
+    const tauriWindow = window as TauriInternalsWindow
+    if (!tauriWindow.__TAURI_INTERNALS__?.metadata?.currentWindow?.label) {
+      return null
+    }
+    return getCurrentWindow()
+  } catch {
+    return null
+  }
+}
+
 const DEFAULT_SHORTCUT_BINDINGS: ShortcutBindings = {
   new_download: 'CmdOrCtrl+N',
   focus_search: '/',
@@ -160,7 +206,7 @@ const DEFAULT_SHORTCUT_BINDINGS: ShortcutBindings = {
 
 function loadShortcutBindings(): ShortcutBindings {
   try {
-    const raw = localStorage.getItem(SHORTCUT_STORAGE_KEY)
+    const raw = safeLocalStorageGet(SHORTCUT_STORAGE_KEY)
     if (!raw) return { ...DEFAULT_SHORTCUT_BINDINGS }
     const parsed = JSON.parse(raw) as Partial<Record<ShortcutAction, string>>
     const merged: ShortcutBindings = { ...DEFAULT_SHORTCUT_BINDINGS }
@@ -175,7 +221,7 @@ function loadShortcutBindings(): ShortcutBindings {
 }
 
 function saveShortcutBindings(bindings: ShortcutBindings) {
-  localStorage.setItem(SHORTCUT_STORAGE_KEY, JSON.stringify(bindings))
+  safeLocalStorageSet(SHORTCUT_STORAGE_KEY, JSON.stringify(bindings))
 }
 
 function findDuplicateShortcut(bindings: ShortcutBindings): string | null {
@@ -205,7 +251,7 @@ function findShortcutConflictAction(
 
 function loadShortcutDisplayMode(): ShortcutDisplayMode {
   try {
-    const raw = String(localStorage.getItem(SHORTCUT_DISPLAY_MODE_KEY) || '').trim()
+    const raw = String(safeLocalStorageGet(SHORTCUT_DISPLAY_MODE_KEY) || '').trim()
     return raw === 'symbol' ? 'symbol' : 'text'
   } catch {
     return 'text'
@@ -213,12 +259,12 @@ function loadShortcutDisplayMode(): ShortcutDisplayMode {
 }
 
 function saveShortcutDisplayMode(mode: ShortcutDisplayMode) {
-  localStorage.setItem(SHORTCUT_DISPLAY_MODE_KEY, mode)
+  safeLocalStorageSet(SHORTCUT_DISPLAY_MODE_KEY, mode)
 }
 
 function loadProgressRowBackgroundEnabled(): boolean {
   try {
-    const raw = String(localStorage.getItem(PROGRESS_ROW_BG_KEY) || '').trim().toLowerCase()
+    const raw = String(safeLocalStorageGet(PROGRESS_ROW_BG_KEY) || '').trim().toLowerCase()
     if (raw === 'false' || raw === '0' || raw === 'off') return false
     return true
   } catch {
@@ -227,12 +273,12 @@ function loadProgressRowBackgroundEnabled(): boolean {
 }
 
 function saveProgressRowBackgroundEnabled(enabled: boolean) {
-  localStorage.setItem(PROGRESS_ROW_BG_KEY, enabled ? 'true' : 'false')
+  safeLocalStorageSet(PROGRESS_ROW_BG_KEY, enabled ? 'true' : 'false')
 }
 
 function resolveTheme(mode: ThemeMode): 'light' | 'dark' {
   if (mode === 'light' || mode === 'dark') return mode
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  return safeMatchMediaDark() ? 'dark' : 'light'
 }
 
 function safeDecode(value: string): string {
@@ -302,7 +348,7 @@ export default function App() {
     maxCount: 2,
   })
   const [locale, setLocale] = useState<Locale>(() => {
-    const saved = localStorage.getItem(LOCALE_KEY)
+    const saved = safeLocalStorageGet(LOCALE_KEY)
     return saved === 'zh-CN' || saved === 'en-US' ? saved : detectLocale()
   })
 
@@ -316,7 +362,7 @@ export default function App() {
   )
 
   useEffect(() => {
-    localStorage.setItem(LOCALE_KEY, locale)
+    safeLocalStorageSet(LOCALE_KEY, locale)
     document.documentElement.lang = locale
     void api.call('set_app_locale', { locale }).catch(() => {})
   }, [locale])
@@ -764,6 +810,7 @@ export default function App() {
   }, [clipboardWatchEnabled, openAddFromDetected, t])
 
   useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     const onChange = () => {
       if (themeMode === 'system') setThemeMode('system')
@@ -831,10 +878,11 @@ export default function App() {
     const completed = tasks.filter((task) => String(task.status || '').toLowerCase() === 'completed').length
     const error = tasks.filter((task) => String(task.status || '').toLowerCase() === 'error').length
     const badge = active + error
-    const win = getCurrentWindow()
+    document.title = `Flamingo Downloader (${active}/${completed}/${error})`
+    const win = getSafeCurrentWindow()
+    if (!win) return
     void win.setBadgeCount(badge > 0 ? badge : undefined).catch(() => {})
     void win.setBadgeLabel(error > 0 ? `E${error}` : undefined).catch(() => {})
-    document.title = `Flamingo Downloader (${active}/${completed}/${error})`
   }, [tasks])
 
   useEffect(() => {
@@ -875,7 +923,8 @@ export default function App() {
   }, [windowMoving])
 
   useEffect(() => {
-    const win = getCurrentWindow()
+    const win = getSafeCurrentWindow()
+    if (!win) return
     const pulseMoving = () => {
       setWindowMoving(true)
       if (movingTimerRef.current) window.clearTimeout(movingTimerRef.current)
