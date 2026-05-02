@@ -189,3 +189,20 @@ export type TableLayout = {
   density: TableDensity
 }
 export type TableLayoutStore = Record<SectionKey, TableLayout>
+
+export type LinkCandidate = {
+  url: string
+  final_url?: string | null
+  kind: string
+  source: string
+  filename_hint?: string | null
+  content_type?: string | null
+  content_length?: number | null
+  score: number
+  duplicate_count: number
+}
+
+export type LinkParseResult = {
+  candidates: LinkCandidate[]
+  duplicate_count: number
+}

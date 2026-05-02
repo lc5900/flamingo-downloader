@@ -59,6 +59,8 @@ import type {
   DownloadRule,
   GlobalSettings,
   ImportTaskListResult,
+  LinkCandidate,
+  LinkParseResult,
   Locale,
   OperationLog,
   SaveDirSuggestion,
@@ -108,6 +110,11 @@ const AddDownloadPage = lazy(() =>
 const AddDownloadDialog = lazy(() =>
   import('./components/dialogs/AddDownloadDialog').then((module) => ({
     default: module.AddDownloadDialog,
+  })),
+)
+const LinkCandidateReviewDialog = lazy(() =>
+  import('./components/dialogs/LinkCandidateReviewDialog').then((module) => ({
+    default: module.LinkCandidateReviewDialog,
   })),
 )
 const TaskDetailPage = lazy(() =>
@@ -364,6 +371,20 @@ export default function App() {
   const [addMatchedRule, setAddMatchedRule] = useState<DownloadRule | null>(null)
   const [addSubmitting, setAddSubmitting] = useState(false)
   const [taskOptionPresets, setTaskOptionPresets] = useState<TaskOptionPreset[]>([])
+  const [candidateReviewOpen, setCandidateReviewOpen] = useState(false)
+  const [candidateReviewLoading, setCandidateReviewLoading] = useState(false)
+  const [candidateReviewCreating, setCandidateReviewCreating] = useState(false)
+  const [candidateReviewMode, setCandidateReviewMode] = useState<'text' | 'page'>('text')
+  const [candidateReviewItems, setCandidateReviewItems] = useState<LinkCandidate[]>([])
+  const [candidateReviewSelectedUrls, setCandidateReviewSelectedUrls] = useState<string[]>([])
+  const [candidateReviewQuery, setCandidateReviewQuery] = useState('')
+  const [candidateReviewKindFilter, setCandidateReviewKindFilter] = useState('all')
+  const [candidateReviewDomainFilter, setCandidateReviewDomainFilter] = useState('all')
+  const [candidateReviewSizeFilter, setCandidateReviewSizeFilter] = useState<
+    'all' | 'unknown' | 'lt100m' | '100m-1g' | 'ge1g'
+  >('all')
+  const [candidateReviewSaveDir, setCandidateReviewSaveDir] = useState('')
+  const [candidateReviewCategory, setCandidateReviewCategory] = useState('')
   const [presetJsonOpen, setPresetJsonOpen] = useState(false)
   const [presetJsonText, setPresetJsonText] = useState('')
   const [diagnosticsText, setDiagnosticsText] = useState('')
@@ -1541,6 +1562,115 @@ export default function App() {
       msg.error(t('presetInvalid'))
     }
   }
+
+  const openCandidateReview = useCallback(
+    async (mode: 'text' | 'page') => {
+      const rawUrlValue = String(addForm.getFieldValue('url') || '').trim()
+      if (!rawUrlValue) {
+        msg.warning(t('urlRequired'))
+        return
+      }
+      const lines = rawUrlValue
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+      if (mode === 'page' && lines.length !== 1) {
+        msg.warning(t('pageScanSingleUrlRequired'))
+        return
+      }
+
+      setCandidateReviewLoading(true)
+      try {
+        const result =
+          mode === 'page'
+            ? await api.call<LinkParseResult>('scan_page_resources', { pageUrl: lines[0] })
+            : await api.call<LinkParseResult>('parse_link_candidates', {
+                input: { text: rawUrlValue, source_kind: 'text' },
+              })
+        const candidates = Array.isArray(result?.candidates) ? result.candidates : []
+        setCandidateReviewMode(mode)
+        setCandidateReviewItems(candidates)
+        setCandidateReviewSelectedUrls(candidates.map((item) => item.url))
+        setCandidateReviewQuery('')
+        setCandidateReviewKindFilter('all')
+        setCandidateReviewDomainFilter('all')
+        setCandidateReviewSizeFilter('all')
+        setCandidateReviewSaveDir(String(addForm.getFieldValue('save_dir') || '').trim())
+        setCandidateReviewCategory(String(addForm.getFieldValue('category') || '').trim())
+        setCandidateReviewOpen(true)
+      } catch (err) {
+        msg.error(parseErr(err))
+      } finally {
+        setCandidateReviewLoading(false)
+      }
+    },
+    [addForm, msg, t],
+  )
+
+  const onCreateCandidateTasks = useCallback(async () => {
+    const selectedCandidates = candidateReviewItems.filter((item) =>
+      candidateReviewSelectedUrls.includes(item.url),
+    )
+    if (selectedCandidates.length === 0) {
+      msg.warning(t('candidateNoSelection'))
+      return
+    }
+
+    const duplicates = selectedCandidates.filter((item) =>
+      existingSourceSet.has(String(item.url || '').trim().toLowerCase()),
+    )
+    if (duplicates.length > 0) {
+      const allowContinue = await confirmDuplicateAdd(duplicates.length)
+      if (!allowContinue) return
+    }
+
+    setCandidateReviewCreating(true)
+    try {
+      const values = await addForm.validateFields()
+      const optionPayload = buildAddOptionPayload(values)
+      const saveDir = candidateReviewSaveDir.trim()
+      const category = candidateReviewCategory.trim()
+      const mergedOptions = {
+        ...optionPayload,
+        save_dir: saveDir || optionPayload.save_dir,
+        category: category || optionPayload.category,
+      }
+      for (const candidate of selectedCandidates) {
+        if (candidate.kind === 'magnet') {
+          await api.call('add_magnet', {
+            magnet: candidate.url,
+            options: mergedOptions,
+          })
+        } else {
+          await api.call('add_url', {
+            url: candidate.url,
+            options: mergedOptions,
+          })
+        }
+      }
+      msg.success(i18nFormat(t('taskAddedCount'), { count: selectedCandidates.length }))
+      setCandidateReviewOpen(false)
+      setAddOpen(false)
+      await refresh()
+    } catch (err) {
+      const e = err as { errorFields?: unknown[] }
+      if (Array.isArray(e?.errorFields) && e.errorFields.length > 0) return
+      msg.error(`${t('addFailedPrefix')}: ${parseErr(err)}`)
+    } finally {
+      setCandidateReviewCreating(false)
+    }
+  }, [
+    addForm,
+    candidateReviewCategory,
+    candidateReviewItems,
+    candidateReviewSaveDir,
+    candidateReviewSelectedUrls,
+    confirmDuplicateAdd,
+    existingSourceSet,
+    msg,
+    refresh,
+    t,
+  ])
 
   const onAddUrl = async () => {
     try {
@@ -2922,8 +3052,40 @@ export default function App() {
             onApplySelectedPreset={onApplySelectedPreset}
             onExportPresets={onExportPresets}
             onImportPresets={onImportPresets}
+            onOpenCandidateReview={() => void openCandidateReview('text')}
+            onOpenPageScanReview={() => void openCandidateReview('page')}
+            candidateReviewLoading={candidateReviewLoading}
           />
         </AddDownloadPage>
+          </Suspense>
+        )}
+
+        {candidateReviewOpen && (
+          <Suspense fallback={null}>
+            <LinkCandidateReviewDialog
+              t={t}
+              open={candidateReviewOpen}
+              loading={candidateReviewLoading}
+              creating={candidateReviewCreating}
+              mode={candidateReviewMode}
+              candidates={candidateReviewItems}
+              selectedUrls={candidateReviewSelectedUrls}
+              query={candidateReviewQuery}
+              kindFilter={candidateReviewKindFilter}
+              domainFilter={candidateReviewDomainFilter}
+              sizeFilter={candidateReviewSizeFilter}
+              saveDir={candidateReviewSaveDir}
+              category={candidateReviewCategory}
+              setQuery={setCandidateReviewQuery}
+              setKindFilter={setCandidateReviewKindFilter}
+              setDomainFilter={setCandidateReviewDomainFilter}
+              setSizeFilter={setCandidateReviewSizeFilter}
+              setSaveDir={setCandidateReviewSaveDir}
+              setCategory={setCandidateReviewCategory}
+              onSelectionChange={setCandidateReviewSelectedUrls}
+              onConfirm={() => void onCreateCandidateTasks()}
+              onCancel={() => setCandidateReviewOpen(false)}
+            />
           </Suspense>
         )}
 

@@ -35,6 +35,9 @@ export interface AddDownloadDialogProps {
   onApplySelectedPreset: () => void
   onExportPresets: () => void
   onImportPresets: () => void
+  onOpenCandidateReview: () => void
+  onOpenPageScanReview: () => void
+  candidateReviewLoading: boolean
 }
 
 export const AddDownloadDialog: React.FC<AddDownloadDialogProps> = ({
@@ -57,6 +60,9 @@ export const AddDownloadDialog: React.FC<AddDownloadDialogProps> = ({
   onApplySelectedPreset,
   onExportPresets,
   onImportPresets,
+  onOpenCandidateReview,
+  onOpenPageScanReview,
+  candidateReviewLoading,
 }) => {
   return (
     <Modal
@@ -149,6 +155,16 @@ export const AddDownloadDialog: React.FC<AddDownloadDialogProps> = ({
             ? `${addMatchedRule.matcher}=${addMatchedRule.pattern} -> ${addMatchedRule.save_dir}`
             : t('noMatchedRule')}
         </Typography.Text>
+        {addType === 'url' && (
+          <Space wrap style={{ marginBottom: 12 }}>
+            <Button onClick={onOpenCandidateReview} loading={candidateReviewLoading}>
+              {t('parseCandidates')}
+            </Button>
+            <Button onClick={onOpenPageScanReview} loading={candidateReviewLoading}>
+              {t('scanPageResources')}
+            </Button>
+          </Space>
+        )}
         <Collapse
           size="small"
           items={[
