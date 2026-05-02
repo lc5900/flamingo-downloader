@@ -946,6 +946,16 @@ impl DownloadService {
     fn apply_completion_rules(&self, changed_tasks: &[Task], tick: u64) -> Result<()> {
         let settings = self.db.load_global_settings()?;
 
+        for task in changed_tasks {
+            if task.status == TaskStatus::Completed {
+                self.trigger_completion_hooks(task, "completed", &settings);
+            } else if task.status == TaskStatus::Error
+                && settings.completion_hook_on_error.unwrap_or(false)
+            {
+                self.trigger_completion_hooks(task, "error", &settings);
+            }
+        }
+
         if settings.auto_delete_control_files.unwrap_or(true) {
             for task in changed_tasks {
                 if task.status != TaskStatus::Completed {
@@ -968,6 +978,104 @@ impl DownloadService {
         }
 
         Ok(())
+    }
+
+    fn trigger_completion_hooks(&self, task: &Task, event: &str, settings: &GlobalSettings) {
+        let event_name = event.to_string();
+        let webhook_url = settings
+            .completion_webhook_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(ToString::to_string);
+        let command = settings
+            .completion_command
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(ToString::to_string);
+
+        if let Some(url) = webhook_url {
+            let payload = json!({
+                "event": event_name,
+                "task": task,
+            });
+            let task_id = task.id.clone();
+            let logs = self.db.clone();
+            let event_for_log = event_name.clone();
+            tokio::spawn(async move {
+                let client = match reqwest::Client::builder()
+                    .timeout(Duration::from_secs(10))
+                    .build()
+                {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let _ = logs.append_operation_logs(&[OperationLog {
+                            ts: now_ts(),
+                            action: "completion_webhook_failed".to_string(),
+                            message: format!("task={task_id} build client failed: {e}"),
+                        }]);
+                        return;
+                    }
+                };
+                let result = client.post(&url).json(&payload).send().await;
+                let (action, message) = match result {
+                    Ok(resp) if resp.status().is_success() => (
+                        "completion_webhook_sent",
+                        format!("task={task_id} event={event_for_log} url={url}"),
+                    ),
+                    Ok(resp) => (
+                        "completion_webhook_failed",
+                        format!("task={task_id} event={event_for_log} url={url} status={}", resp.status()),
+                    ),
+                    Err(e) => (
+                        "completion_webhook_failed",
+                        format!("task={task_id} event={event_for_log} url={url} error={e}"),
+                    ),
+                };
+                let _ = logs.append_operation_logs(&[OperationLog {
+                    ts: now_ts(),
+                    action: action.to_string(),
+                    message,
+                }]);
+            });
+        }
+
+        if let Some(command) = command {
+            let rendered = command
+                .replace("{event}", &event_name)
+                .replace("{task_id}", &task.id)
+                .replace("{task_name}", task.name.as_deref().unwrap_or(""))
+                .replace("{task_status}", task.status.as_str())
+                .replace("{task_source}", &task.source)
+                .replace("{save_dir}", &task.save_dir);
+            let rendered_for_log = rendered.clone();
+            let task_id = task.id.clone();
+            let db = self.db.clone();
+            let event_for_log = event_name;
+            std::thread::spawn(move || {
+                let result = if cfg!(target_os = "windows") {
+                    Command::new("cmd").args(["/C", &rendered]).spawn()
+                } else {
+                    Command::new("sh").args(["-lc", &rendered]).spawn()
+                };
+                let (action, message) = match result {
+                    Ok(_) => (
+                        "completion_command_spawned",
+                        format!("task={task_id} event={event_for_log} command={rendered_for_log}"),
+                    ),
+                    Err(e) => (
+                        "completion_command_failed",
+                        format!("task={task_id} event={event_for_log} command={rendered_for_log} error={e}"),
+                    ),
+                };
+                let _ = db.append_operation_logs(&[OperationLog {
+                    ts: now_ts(),
+                    action: action.to_string(),
+                    message,
+                }]);
+            });
+        }
     }
 
     fn remove_task_control_file(&self, task: &Task) -> Result<()> {
@@ -1086,6 +1194,40 @@ impl DownloadService {
         offset: u32,
     ) -> Result<Vec<Task>> {
         self.db.list_tasks(status, limit, offset)
+    }
+
+    pub fn get_task_snapshot(&self, task_id: &str) -> Result<Task> {
+        self.db
+            .get_task(task_id)?
+            .ok_or_else(|| AppError::TaskNotFound(task_id.to_string()).into())
+    }
+
+    pub fn get_task_stats(&self) -> Result<Value> {
+        let tasks = self.db.list_tasks(None, 5000, 0)?;
+        let mut by_status: HashMap<String, i64> = HashMap::new();
+        let mut by_health: HashMap<String, i64> = HashMap::new();
+        let mut active_download_speed = 0_i64;
+        let mut active_upload_speed = 0_i64;
+        for task in &tasks {
+            let status = task.status.as_str().to_string();
+            let health = task
+                .health
+                .clone()
+                .unwrap_or_else(|| TaskHealth::Normal.as_str().to_string());
+            *by_status.entry(status).or_insert(0) += 1;
+            *by_health.entry(health).or_insert(0) += 1;
+            if matches!(task.status, TaskStatus::Active) {
+                active_download_speed += task.download_speed.max(0);
+                active_upload_speed += task.upload_speed.max(0);
+            }
+        }
+        Ok(json!({
+            "tasks_total": tasks.len(),
+            "by_status": by_status,
+            "by_health": by_health,
+            "active_download_speed": active_download_speed,
+            "active_upload_speed": active_upload_speed,
+        }))
     }
 
     pub fn parse_link_candidates(&self, input: LinkParseInput) -> Result<LinkParseResult> {
@@ -1512,6 +1654,7 @@ impl DownloadService {
             browser_bridge_allowed_origins: Some(
                 "chrome-extension://,moz-extension://".to_string(),
             ),
+            local_api_scopes: Some("read,add,control".to_string()),
             ffmpeg_bin_path: Some(
                 current
                     .ffmpeg_bin_path
@@ -1527,6 +1670,9 @@ impl DownloadService {
             speed_plan: Some("[]".to_string()),
             task_option_presets: Some("[]".to_string()),
             post_complete_action: Some("none".to_string()),
+            completion_webhook_url: Some(String::new()),
+            completion_command: Some(String::new()),
+            completion_hook_on_error: Some(false),
             auto_delete_control_files: Some(true),
             auto_clear_completed_days: Some(0),
             first_run_done: Some(true),

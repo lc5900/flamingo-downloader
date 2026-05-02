@@ -16,7 +16,7 @@ import {
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import type { FormInstance } from 'antd'
 import type { Dispatch, SetStateAction } from 'react'
-import type { BrowserBridgeStatus, GlobalSettings, StartupSelfCheck } from '../../types'
+import type { BrowserBridgeStatus, GlobalSettings, OperationLog, StartupSelfCheck } from '../../types'
 import type { ShortcutAction, ShortcutBindings, ShortcutItem } from '../../types/shortcuts'
 import type { ShortcutDisplayMode } from '../../utils/shortcuts'
 
@@ -53,6 +53,7 @@ export interface SettingsViewProps {
   checkBridgeStatus: () => Promise<void>
   setBridgeWizardOpen: (v: boolean) => void
   bridgeStatus: BrowserBridgeStatus | null
+  localApiRecentActivity: OperationLog[]
   rotateBrowserBridgeToken: () => void
   speedPlanMode: SpeedPlanMode
   onSpeedPlanModeChange: (v: SpeedPlanMode) => void
@@ -103,6 +104,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   checkBridgeStatus,
   setBridgeWizardOpen,
   bridgeStatus,
+  localApiRecentActivity,
   rotateBrowserBridgeToken,
   speedPlanMode,
   onSpeedPlanModeChange,
@@ -299,6 +301,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <Form.Item name="browser_bridge_allowed_origins" label={t('bridgeAllowedOrigins')}>
                       <Input placeholder="chrome-extension://,moz-extension://" />
                     </Form.Item>
+                    <Form.Item name="local_api_scopes" label={t('localApiScopes')}>
+                      <Select
+                        mode="multiple"
+                        options={[
+                          { label: t('localApiScopeRead'), value: 'read' },
+                          { label: t('localApiScopeAdd'), value: 'add' },
+                          { label: t('localApiScopeControl'), value: 'control' },
+                        ]}
+                      />
+                    </Form.Item>
                     <Space wrap style={{ marginBottom: 8 }}>
                       <Button loading={bridgeChecking} onClick={checkBridgeStatus}>
                         {t('bridgeCheck')}
@@ -323,6 +335,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <Typography.Text type="secondary" style={{ display: 'block', marginTop: -4, marginBottom: 8 }}>
                       {bridgeStatus?.endpoint ? `${bridgeStatus.endpoint} - ${bridgeStatus.message}` : bridgeStatus?.message || '-'}
                     </Typography.Text>
+                    <Typography.Text strong style={{ display: 'block', marginBottom: 6 }}>
+                      {t('localApiRecentUsage')}
+                    </Typography.Text>
+                    <Space direction="vertical" style={{ width: '100%', marginBottom: 8 }}>
+                      {localApiRecentActivity.length === 0 ? (
+                        <Typography.Text type="secondary">-</Typography.Text>
+                      ) : (
+                        localApiRecentActivity.map((log, idx) => (
+                          <Typography.Text key={`${log.ts}-${idx}`} type="secondary">
+                            [{new Date((log.ts || 0) * 1000).toLocaleString()}] {log.action}: {log.message}
+                          </Typography.Text>
+                        ))
+                      )}
+                    </Space>
                     <Form.Item name="clipboard_watch_enabled" label={t('clipboardWatchEnabled')} valuePropName="checked">
                       <Switch />
                     </Form.Item>
@@ -412,6 +438,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </Form.Item>
                     <Form.Item name="auto_clear_completed_days" label={t('autoClearCompletedDays')}>
                       <InputNumber min={0} max={3650} style={{ width: '100%' }} />
+                    </Form.Item>
+                    <Form.Item name="completion_webhook_url" label={t('completionWebhookUrl')}>
+                      <Input placeholder="http://127.0.0.1:9000/hooks/flamingo" />
+                    </Form.Item>
+                    <Form.Item name="completion_command" label={t('completionCommand')}>
+                      <Input placeholder="python script.py --event {event} --task {task_id}" />
+                    </Form.Item>
+                    <Form.Item
+                      name="completion_hook_on_error"
+                      label={t('completionHookOnError')}
+                      valuePropName="checked"
+                    >
+                      <Switch />
                     </Form.Item>
 
                     <Divider />

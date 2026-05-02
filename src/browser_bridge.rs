@@ -38,6 +38,24 @@ struct BridgeAddRequest {
     headers: Option<Vec<String>>,
 }
 
+#[derive(Debug, Deserialize, Default)]
+struct LocalApiAddRequest {
+    url: Option<String>,
+    magnet: Option<String>,
+    save_dir: Option<String>,
+    category: Option<String>,
+    referer: Option<String>,
+    user_agent: Option<String>,
+    headers: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct LocalApiTaskActionRequest {
+    action: String,
+    delete_files: Option<bool>,
+    category: Option<String>,
+}
+
 pub fn start_browser_bridge(service: Arc<DownloadService>, cfg: BrowserBridgeConfig) {
     if !cfg.enabled {
         return;
@@ -103,7 +121,8 @@ async fn handle_connection(
     let request_line = lines.next().unwrap_or_default().trim().to_string();
     let mut parts = request_line.split_whitespace();
     let method = parts.next().unwrap_or_default();
-    let path = parts.next().unwrap_or_default();
+    let raw_path = parts.next().unwrap_or_default();
+    let (path, query) = split_path_query(raw_path);
 
     let mut req_token = String::new();
     let mut origin = String::new();
@@ -210,6 +229,22 @@ async fn handle_connection(
         return write_json(&mut stream, 200, &json!({"ok": true})).await;
     }
 
+    if path.starts_with("/api/") {
+        return handle_local_api(
+            &mut stream,
+            service,
+            method,
+            path,
+            query,
+            body_raw.trim(),
+            &origin,
+            &user_agent,
+            req_token,
+            effective_token,
+        )
+        .await;
+    }
+
     if method == "POST" && path == "/add" {
         let payload: BridgeAddRequest = serde_json::from_str(body_raw.trim())?;
         let url = payload.url.trim();
@@ -312,8 +347,215 @@ fn classify_bridge_error(detail: &str) -> &'static str {
     "bridge_add_failed"
 }
 
+async fn handle_local_api(
+    stream: &mut TcpStream,
+    service: Arc<DownloadService>,
+    method: &str,
+    path: &str,
+    query: &str,
+    body_raw: &str,
+    origin: &str,
+    user_agent: &str,
+    req_token: String,
+    effective_token: String,
+) -> Result<()> {
+    if req_token != effective_token {
+        service.append_operation_log(
+            "local_api_activity",
+            format!("unauthorized method={method} path={path} origin={origin} ua={user_agent}"),
+        );
+        return write_json(
+            stream,
+            401,
+            &json!({"ok": false, "error": "unauthorized"}),
+        )
+        .await;
+    }
+
+    let settings = service.get_global_settings()?;
+    let scopes = parse_scopes(settings.local_api_scopes.as_deref());
+    let required_scope = match (method, path) {
+        ("GET", "/api/health") | ("GET", "/api/stats") => "read",
+        ("GET", p) if p == "/api/tasks" || p.starts_with("/api/tasks/") => "read",
+        ("POST", "/api/tasks") => "add",
+        ("POST", p) if p.starts_with("/api/tasks/") && p.ends_with("/actions") => "control",
+        _ => "",
+    };
+    if !required_scope.is_empty() && !scopes.iter().any(|scope| scope == required_scope) {
+        service.append_operation_log(
+            "local_api_activity",
+            format!(
+                "forbidden_scope method={method} path={path} required={required_scope} origin={origin} ua={user_agent}"
+            ),
+        );
+        return write_json(stream, 401, &json!({"ok": false, "error": "forbidden_scope"})).await;
+    }
+
+    match (method, path) {
+        ("GET", "/api/health") => {
+            let stats = service.get_task_stats()?;
+            service.append_operation_log(
+                "local_api_activity",
+                format!("health_ok method={method} path={path}"),
+            );
+            return write_json(stream, 200, &json!({"ok": true, "stats": stats})).await;
+        }
+        ("GET", "/api/stats") => {
+            let stats = service.get_task_stats()?;
+            service.append_operation_log("local_api_activity", "stats_ok".to_string());
+            return write_json(stream, 200, &json!({"ok": true, "data": stats})).await;
+        }
+        ("GET", "/api/tasks") => {
+            let params = parse_query_params(query);
+            let status = params.get("status").and_then(|value| match value.as_str() {
+                "queued" => Some(crate::models::TaskStatus::Queued),
+                "active" => Some(crate::models::TaskStatus::Active),
+                "paused" => Some(crate::models::TaskStatus::Paused),
+                "completed" => Some(crate::models::TaskStatus::Completed),
+                "error" => Some(crate::models::TaskStatus::Error),
+                "removed" => Some(crate::models::TaskStatus::Removed),
+                "metadata" => Some(crate::models::TaskStatus::Metadata),
+                _ => None,
+            });
+            let limit = params
+                .get("limit")
+                .and_then(|v| v.parse::<u32>().ok())
+                .unwrap_or(200);
+            let offset = params
+                .get("offset")
+                .and_then(|v| v.parse::<u32>().ok())
+                .unwrap_or(0);
+            let tasks = service.list_tasks(status, limit, offset)?;
+            service.append_operation_log(
+                "local_api_activity",
+                format!("list_tasks_ok limit={limit} offset={offset}"),
+            );
+            return write_json(stream, 200, &json!({"ok": true, "data": tasks})).await;
+        }
+        ("POST", "/api/tasks") => {
+            let payload: LocalApiAddRequest = serde_json::from_str(body_raw)?;
+            let options = crate::models::AddTaskOptions {
+                save_dir: payload.save_dir,
+                category: payload.category,
+                referer: payload.referer,
+                user_agent: payload.user_agent,
+                headers: payload.headers.unwrap_or_default(),
+                ..Default::default()
+            };
+            let task_id = if let Some(magnet) = payload
+                .magnet
+                .as_deref()
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+            {
+                service.add_magnet(magnet, options).await?
+            } else if let Some(url) = payload.url.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+                service.add_url(url, options).await?
+            } else {
+                return write_json(
+                    stream,
+                    400,
+                    &json!({"ok": false, "error": "missing url or magnet"}),
+                )
+                .await;
+            };
+            service.append_operation_log(
+                "local_api_activity",
+                format!("add_task_ok task_id={task_id}"),
+            );
+            return write_json(stream, 200, &json!({"ok": true, "task_id": task_id})).await;
+        }
+        _ => {}
+    }
+
+    if method == "GET" && path.starts_with("/api/tasks/") {
+        let task_id = path.trim_start_matches("/api/tasks/");
+        if task_id.is_empty() {
+            return write_json(stream, 404, &json!({"ok": false, "error": "not found"})).await;
+        }
+        let (task, files) = service.get_task_detail(task_id).await?;
+        service.append_operation_log(
+            "local_api_activity",
+            format!("get_task_ok task_id={task_id}"),
+        );
+        return write_json(stream, 200, &json!({"ok": true, "task": task, "files": files})).await;
+    }
+
+    if method == "POST" && path.starts_with("/api/tasks/") && path.ends_with("/actions") {
+        let task_id = path
+            .trim_start_matches("/api/tasks/")
+            .trim_end_matches("/actions")
+            .trim_end_matches('/');
+        if task_id.is_empty() {
+            return write_json(stream, 404, &json!({"ok": false, "error": "not found"})).await;
+        }
+        let payload: LocalApiTaskActionRequest = serde_json::from_str(body_raw)?;
+        let action = payload.action.trim().to_ascii_lowercase();
+        match action.as_str() {
+            "pause" => service.pause_task(task_id).await?,
+            "resume" => service.resume_task(task_id).await?,
+            "retry" => service.retry_task(task_id).await?,
+            "remove" => service
+                .remove_task(task_id, payload.delete_files.unwrap_or(false))
+                .await?,
+            "open_dir" => service.open_task_dir(task_id).await?,
+            "open_file" => service.open_task_file(task_id).await?,
+            "set_category" => service.set_task_category(task_id, payload.category.as_deref())?,
+            _ => {
+                return write_json(
+                    stream,
+                    400,
+                    &json!({"ok": false, "error": "unsupported action"}),
+                )
+                .await;
+            }
+        }
+        service.append_operation_log(
+            "local_api_activity",
+            format!("task_action_ok task_id={task_id} action={action}"),
+        );
+        return write_json(stream, 200, &json!({"ok": true})).await;
+    }
+
+    service.append_operation_log(
+        "local_api_activity",
+        format!("not_found method={method} path={path} origin={origin} ua={user_agent}"),
+    );
+    write_json(stream, 404, &json!({"ok": false, "error": "not found"})).await
+}
+
 fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack.windows(needle.len()).position(|w| w == needle)
+}
+
+fn split_path_query(raw_path: &str) -> (&str, &str) {
+    match raw_path.split_once('?') {
+        Some((path, query)) => (path, query),
+        None => (raw_path, ""),
+    }
+}
+
+fn parse_query_params(query: &str) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    for pair in query.split('&').filter(|v| !v.trim().is_empty()) {
+        let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+        out.insert(key.trim().to_string(), value.trim().replace("%20", " "));
+    }
+    out
+}
+
+fn parse_scopes(raw: Option<&str>) -> Vec<String> {
+    let scopes = raw
+        .unwrap_or("read,add,control")
+        .split([',', '\n'])
+        .map(|v| v.trim().to_ascii_lowercase())
+        .filter(|v| !v.is_empty())
+        .collect::<Vec<_>>();
+    if scopes.is_empty() {
+        vec!["read".to_string(), "add".to_string(), "control".to_string()]
+    } else {
+        scopes
+    }
 }
 
 fn allow_request_for_path(path: &str) -> bool {

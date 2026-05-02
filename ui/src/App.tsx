@@ -440,6 +440,7 @@ export default function App() {
   const [bridgeStatus, setBridgeStatus] = useState<BrowserBridgeStatus | null>(null)
   const [storageSummary, setStorageSummary] = useState<StorageSummary | null>(null)
   const [bridgeChecking, setBridgeChecking] = useState(false)
+  const [localApiRecentActivity, setLocalApiRecentActivity] = useState<OperationLog[]>([])
   const [bridgeWizardOpen, setBridgeWizardOpen] = useState(false)
   const [ioOpen, setIoOpen] = useState(false)
   const [exportJsonText, setExportJsonText] = useState('')
@@ -544,6 +545,10 @@ export default function App() {
         browser_bridge_port: s?.browser_bridge_port ?? undefined,
         browser_bridge_token: s?.browser_bridge_token || undefined,
         browser_bridge_allowed_origins: s?.browser_bridge_allowed_origins || undefined,
+        local_api_scopes: String(s?.local_api_scopes || '')
+          .split(/[,\n]/)
+          .map((v) => v.trim())
+          .filter(Boolean),
         clipboard_watch_enabled: s?.clipboard_watch_enabled ?? undefined,
         download_dir_rules: Array.isArray(s?.download_dir_rules) ? s.download_dir_rules : [],
         category_rules: Array.isArray(s?.category_rules) ? (s.category_rules as CategoryRule[]) : [],
@@ -554,6 +559,9 @@ export default function App() {
         speed_plan: s?.speed_plan || undefined,
         speed_plan_rules: speedPlanRules,
         post_complete_action: s?.post_complete_action || 'none',
+        completion_webhook_url: s?.completion_webhook_url || undefined,
+        completion_command: s?.completion_command || undefined,
+        completion_hook_on_error: s?.completion_hook_on_error ?? undefined,
         auto_delete_control_files: s?.auto_delete_control_files ?? undefined,
         auto_clear_completed_days: s?.auto_clear_completed_days ?? undefined,
         first_run_done: s?.first_run_done ?? undefined,
@@ -578,6 +586,17 @@ export default function App() {
       msg.error(parseErr(err))
     }
   }, [msg, settingsForm])
+
+  const loadLocalApiRecentActivity = useCallback(async () => {
+    try {
+      const logs = await api.call<OperationLog[]>('list_operation_logs', { limit: 200 })
+      setLocalApiRecentActivity(
+        (Array.isArray(logs) ? logs : []).filter((log) => String(log.action || '').startsWith('local_api_')).slice(0, 5),
+      )
+    } catch {
+      setLocalApiRecentActivity([])
+    }
+  }, [])
 
   const currentAddTaskType = useMemo<AddPresetTaskType>(
     () => (addType === 'url' ? 'http' : addType),
@@ -666,6 +685,7 @@ export default function App() {
     void Promise.resolve().then(() => {
       void refresh()
       void loadSettings()
+      void loadLocalApiRecentActivity()
       void loadStorageSummary()
       void bindTaskUpdate()
     })
@@ -681,7 +701,7 @@ export default function App() {
       clearInterval(timer)
       if (unlistenTaskUpdate) unlistenTaskUpdate()
     }
-  }, [refresh, loadSettings, loadStorageSummary])
+  }, [refresh, loadLocalApiRecentActivity, loadSettings, loadStorageSummary])
 
   useEffect(() => {
     const checkStartupNotice = async () => {
@@ -1841,6 +1861,9 @@ export default function App() {
         browser_bridge_port: values.browser_bridge_port ?? null,
         browser_bridge_token: values.browser_bridge_token || null,
         browser_bridge_allowed_origins: values.browser_bridge_allowed_origins || null,
+        local_api_scopes: Array.isArray(values.local_api_scopes)
+          ? values.local_api_scopes.join(',')
+          : values.local_api_scopes || null,
         clipboard_watch_enabled: values.clipboard_watch_enabled ?? null,
         retry_max_attempts: values.retry_max_attempts ?? null,
         retry_backoff_secs: values.retry_backoff_secs ?? null,
@@ -1849,6 +1872,9 @@ export default function App() {
         speed_plan: speedPlanJson,
         task_option_presets: JSON.stringify(taskOptionPresets),
         post_complete_action: values.post_complete_action || 'none',
+        completion_webhook_url: values.completion_webhook_url || null,
+        completion_command: values.completion_command || null,
+        completion_hook_on_error: values.completion_hook_on_error ?? false,
         auto_delete_control_files: values.auto_delete_control_files ?? true,
         auto_clear_completed_days: values.auto_clear_completed_days ?? 0,
         first_run_done: values.first_run_done ?? null,
@@ -1873,7 +1899,7 @@ export default function App() {
       setShortcutDraft(normalizedShortcuts)
       setThemeMode(normalizeThemeMode(payload.ui_theme))
       msg.success(t('settingsSaved'))
-      await Promise.all([loadSettings(), loadDiagnostics(), loadUpdateInfo()])
+      await Promise.all([loadSettings(), loadDiagnostics(), loadUpdateInfo(), loadLocalApiRecentActivity()])
     } catch (err) {
       msg.error(parseErr(err))
     } finally {
@@ -2066,8 +2092,14 @@ export default function App() {
 
   const openSettings = useCallback(async () => {
     setSettingsOpen(true)
-    await Promise.all([loadSettings(), loadDiagnostics(), loadUpdateInfo(), checkBridgeStatus()])
-  }, [checkBridgeStatus, loadDiagnostics, loadSettings, loadUpdateInfo])
+    await Promise.all([
+      loadSettings(),
+      loadDiagnostics(),
+      loadUpdateInfo(),
+      checkBridgeStatus(),
+      loadLocalApiRecentActivity(),
+    ])
+  }, [checkBridgeStatus, loadDiagnostics, loadLocalApiRecentActivity, loadSettings, loadUpdateInfo])
 
   const openLogsWindow = useCallback(async () => {
     try {
@@ -3016,6 +3048,7 @@ export default function App() {
               checkBridgeStatus={checkBridgeStatus}
               setBridgeWizardOpen={setBridgeWizardOpen}
               bridgeStatus={bridgeStatus}
+              localApiRecentActivity={localApiRecentActivity}
               rotateBrowserBridgeToken={async () => {
                 try {
                   const token = await api.call<string>('rotate_browser_bridge_token')

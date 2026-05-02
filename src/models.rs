@@ -190,6 +190,7 @@ pub struct GlobalSettings {
     pub browser_bridge_port: Option<u16>,
     pub browser_bridge_token: Option<String>,
     pub browser_bridge_allowed_origins: Option<String>, // comma/newline separated, supports prefix match
+    pub local_api_scopes: Option<String>, // comma/newline separated: read,add,control
     pub ffmpeg_bin_path: Option<String>,
     pub media_merge_enabled: Option<bool>,
     pub clipboard_watch_enabled: Option<bool>,
@@ -201,6 +202,9 @@ pub struct GlobalSettings {
     pub speed_plan: Option<String>, // JSON array: [{"days":"1,2,3","start":"09:00","end":"18:00","limit":"2M"}]
     pub task_option_presets: Option<String>, // JSON array: [{name, task_type, options}]
     pub post_complete_action: Option<String>, // none | open_dir | open_file
+    pub completion_webhook_url: Option<String>,
+    pub completion_command: Option<String>,
+    pub completion_hook_on_error: Option<bool>,
     pub auto_delete_control_files: Option<bool>,
     pub auto_clear_completed_days: Option<u32>,
     pub first_run_done: Option<bool>,

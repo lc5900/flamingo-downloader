@@ -60,6 +60,7 @@ export type GlobalSettings = {
   browser_bridge_port?: number | null
   browser_bridge_token?: string | null
   browser_bridge_allowed_origins?: string | null
+  local_api_scopes?: string[] | string | null
   clipboard_watch_enabled?: boolean | null
   download_dir_rules?: DownloadRule[]
   category_rules?: CategoryRule[]
@@ -76,6 +77,9 @@ export type GlobalSettings = {
   }> | null
   task_option_presets?: string | null
   post_complete_action?: string | null
+  completion_webhook_url?: string | null
+  completion_command?: string | null
+  completion_hook_on_error?: boolean | null
   auto_delete_control_files?: boolean | null
   auto_clear_completed_days?: number | null
   first_run_done?: boolean | null

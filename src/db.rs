@@ -401,6 +401,9 @@ impl Database {
         if let Some(v) = &settings.browser_bridge_allowed_origins {
             set("browser_bridge_allowed_origins", v)?;
         }
+        if let Some(v) = &settings.local_api_scopes {
+            set("local_api_scopes", v)?;
+        }
         if let Some(v) = &settings.ffmpeg_bin_path {
             set("ffmpeg_bin_path", v)?;
         }
@@ -433,6 +436,15 @@ impl Database {
         }
         if let Some(v) = &settings.post_complete_action {
             set("post_complete_action", v)?;
+        }
+        if let Some(v) = &settings.completion_webhook_url {
+            set("completion_webhook_url", v)?;
+        }
+        if let Some(v) = &settings.completion_command {
+            set("completion_command", v)?;
+        }
+        if let Some(v) = settings.completion_hook_on_error {
+            set("completion_hook_on_error", if v { "true" } else { "false" })?;
         }
         if let Some(v) = settings.auto_delete_control_files {
             set(
@@ -516,6 +528,7 @@ impl Database {
                 .and_then(|v| v.parse::<u16>().ok()),
             browser_bridge_token: self.get_setting("browser_bridge_token")?,
             browser_bridge_allowed_origins: self.get_setting("browser_bridge_allowed_origins")?,
+            local_api_scopes: self.get_setting("local_api_scopes")?,
             ffmpeg_bin_path: self.get_setting("ffmpeg_bin_path")?,
             media_merge_enabled: self.get_setting("media_merge_enabled")?.and_then(|v| {
                 match v.as_str() {
@@ -545,6 +558,15 @@ impl Database {
             speed_plan: self.get_setting("speed_plan")?,
             task_option_presets: self.get_setting("task_option_presets")?,
             post_complete_action: self.get_setting("post_complete_action")?,
+            completion_webhook_url: self.get_setting("completion_webhook_url")?,
+            completion_command: self.get_setting("completion_command")?,
+            completion_hook_on_error: self.get_setting("completion_hook_on_error")?.and_then(
+                |v| match v.as_str() {
+                    "true" => Some(true),
+                    "false" => Some(false),
+                    _ => None,
+                },
+            ),
             auto_delete_control_files: self.get_setting("auto_delete_control_files")?.and_then(
                 |v| match v.as_str() {
                     "true" => Some(true),
@@ -808,6 +830,7 @@ fn validate_runtime_settings_with_conn(conn: &Connection, must_exist: &[&str]) -
         "browser_bridge_enabled",
         "media_merge_enabled",
         "clipboard_watch_enabled",
+        "completion_hook_on_error",
         "auto_delete_control_files",
         "first_run_done",
         "start_minimized",
@@ -846,6 +869,22 @@ fn validate_runtime_settings_with_conn(conn: &Connection, must_exist: &[&str]) -
                 return Err(anyhow!(
                     "invalid setting post_complete_action={action}, expected none|open_dir|open_file"
                 ));
+            }
+        }
+    }
+    if let Some(scopes) = get_optional_setting_from_conn(conn, "local_api_scopes")? {
+        for scope in scopes
+            .split([',', '\n'])
+            .map(|v| v.trim())
+            .filter(|v| !v.is_empty())
+        {
+            match scope {
+                "read" | "add" | "control" => {}
+                _ => {
+                    return Err(anyhow!(
+                        "invalid local_api_scopes entry={scope}, expected read|add|control"
+                    ));
+                }
             }
         }
     }
@@ -1410,6 +1449,7 @@ mod tests {
             browser_bridge_allowed_origins: Some(
                 "chrome-extension://,moz-extension://".to_string(),
             ),
+            local_api_scopes: Some("read,add,control".to_string()),
             ffmpeg_bin_path: Some("ffmpeg".to_string()),
             media_merge_enabled: Some(true),
             clipboard_watch_enabled: Some(false),
@@ -1424,6 +1464,9 @@ mod tests {
                     .to_string(),
             ),
             post_complete_action: Some("open_dir".to_string()),
+            completion_webhook_url: Some("http://127.0.0.1:9000/flamingo".to_string()),
+            completion_command: Some("echo {task_id}".to_string()),
+            completion_hook_on_error: Some(true),
             auto_delete_control_files: Some(true),
             auto_clear_completed_days: Some(14),
             first_run_done: None,

@@ -83,6 +83,7 @@ pub async fn init_backend(
         "browser_bridge_allowed_origins",
         "chrome-extension://,moz-extension://",
     )?;
+    db.set_setting_if_absent("local_api_scopes", "read,add,control")?;
     db.set_setting_if_absent("ffmpeg_bin_path", &detect_default_ffmpeg_bin())?;
     db.set_setting_if_absent("media_merge_enabled", "false")?;
     db.set_setting_if_absent("clipboard_watch_enabled", "false")?;
@@ -94,6 +95,9 @@ pub async fn init_backend(
     db.set_setting_if_absent("speed_plan", "[]")?;
     db.set_setting_if_absent("task_option_presets", "[]")?;
     db.set_setting_if_absent("post_complete_action", "none")?;
+    db.set_setting_if_absent("completion_webhook_url", "")?;
+    db.set_setting_if_absent("completion_command", "")?;
+    db.set_setting_if_absent("completion_hook_on_error", "false")?;
     db.set_setting_if_absent("auto_delete_control_files", "true")?;
     db.set_setting_if_absent("auto_clear_completed_days", "0")?;
     db.set_setting_if_absent("first_run_done", "false")?;
