@@ -7,9 +7,6 @@ updates:
       day: monday
       time: "04:00"
     open-pull-requests-limit: 8
-    labels:
-      - dependencies
-      - rust
 
   - package-ecosystem: cargo
     directory: "/src-tauri"
@@ -18,9 +15,6 @@ updates:
       day: monday
       time: "04:10"
     open-pull-requests-limit: 8
-    labels:
-      - dependencies
-      - rust
 
   - package-ecosystem: npm
     directory: "/ui"
@@ -50,6 +44,3 @@ updates:
       - dependency-name: "@eslint/js"
         update-types:
           - "version-update:semver-major"
-    labels:
-      - dependencies
-      - ui
