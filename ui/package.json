@@ -18,7 +18,7 @@
     "gen:i18n-keys": "node scripts/gen-i18n-keys.mjs"
   },
   "dependencies": {
-    "@ant-design/icons": "^6.1.0",
+    "@ant-design/icons": "^6.2.2",
     "@fontsource/outfit": "^5.2.8",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-clipboard-manager": "^2.3.0",
