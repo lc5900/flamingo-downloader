@@ -1,5 +1,6 @@
 import {
   App as AntApp,
+  Alert,
   Button,
   Card,
   ConfigProvider,
@@ -312,6 +313,14 @@ function extractFfmpegArg(args: string | undefined, key: string): string {
 
 function ffmpegHeaderSummary(args: string | undefined): string {
   return String(args || '').includes('-headers') ? '<custom headers>' : '-'
+}
+
+function isExpiredMediaTask(task: Task | null): boolean {
+  const source = String(task?.source || '').toLowerCase()
+  const health = String(task?.health || '').toLowerCase()
+  const error = `${task?.error_code || ''} ${task?.error_message || ''}`.toLowerCase()
+  const looksLikeMedia = source.includes('.m3u8') || source.includes('.mpd')
+  return health === 'url_expired' || (looksLikeMedia && /expired|403|401|forbidden|unauthorized/.test(error))
 }
 
 function inferNameFromUrl(raw: string): string {
@@ -1695,6 +1704,36 @@ export default function App() {
       }
     },
     [addForm, msg, t],
+  )
+
+  const openPageScanReviewForUrl = useCallback(
+    async (pageUrl: string, saveDir?: string | null, category?: string | null) => {
+      const url = String(pageUrl || '').trim()
+      if (!url) {
+        msg.warning(t('urlRequired'))
+        return
+      }
+      setCandidateReviewLoading(true)
+      try {
+        const result = await api.call<LinkParseResult>('scan_page_resources', { pageUrl: url })
+        const candidates = Array.isArray(result?.candidates) ? result.candidates : []
+        setCandidateReviewMode('page')
+        setCandidateReviewItems(candidates)
+        setCandidateReviewSelectedUrls(candidates.map((item) => item.url))
+        setCandidateReviewQuery('')
+        setCandidateReviewKindFilter('all')
+        setCandidateReviewDomainFilter('all')
+        setCandidateReviewSizeFilter('all')
+        setCandidateReviewSaveDir(String(saveDir || '').trim())
+        setCandidateReviewCategory(String(category || '').trim())
+        setCandidateReviewOpen(true)
+      } catch (err) {
+        msg.error(parseErr(err))
+      } finally {
+        setCandidateReviewLoading(false)
+      }
+    },
+    [msg, t],
   )
 
   const onCreateCandidateTasks = useCallback(async () => {
@@ -3460,6 +3499,29 @@ export default function App() {
               </Descriptions>
             </Card>
             <Card size="small" title={t('sourceProvenance')} loading={detailLoading}>
+              {isExpiredMediaTask(detailTask) && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  style={{ marginBottom: 12 }}
+                  message={t('expiredMediaRefreshTitle')}
+                  description={t('expiredMediaRefreshDescription')}
+                  action={
+                    <Button
+                      size="small"
+                      onClick={() =>
+                        void openPageScanReviewForUrl(
+                          detailTask?.source || '',
+                          detailTask?.save_dir,
+                          detailTask?.category,
+                        )
+                      }
+                    >
+                      {t('rescanSource')}
+                    </Button>
+                  }
+                />
+              )}
               <Descriptions size="small" column={1}>
                 <Descriptions.Item label={t('sourceLabel')}>
                   <Typography.Text copyable={{ text: detailTask?.source || '' }}>
