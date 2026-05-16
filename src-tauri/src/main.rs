@@ -13,8 +13,8 @@ use flamingo_downloader::{
     init_backend,
     models::{
         AddTaskOptions, AppUpdateStrategy, Aria2UpdateApplyResult, Aria2UpdateInfo, GlobalSettings,
-        ImportTaskListResult, LinkParseInput, LinkParseResult, OperationLog, StartupNotice, Task,
-        TaskFile, TaskStatus, TaskType,
+        ImportTaskListResult, LinkParseInput, LinkParseResult, MediaMergeJob, OperationLog,
+        StartupNotice, Task, TaskFile, TaskStatus, TaskType,
     },
 };
 use serde::Serialize;
@@ -88,6 +88,7 @@ struct TrayState {
 struct TaskDetailResponse {
     task: Task,
     files: Vec<TaskFile>,
+    media_merge_job: Option<MediaMergeJob>,
 }
 
 enum ExternalOpenTarget {
@@ -764,7 +765,15 @@ async fn get_task_detail(
         .get_task_detail(&task_id)
         .await
         .map_err(|e| e.to_string())?;
-    Ok(TaskDetailResponse { task, files })
+    let media_merge_job = state
+        .service
+        .get_media_merge_job(&task_id)
+        .map_err(|e| e.to_string())?;
+    Ok(TaskDetailResponse {
+        task,
+        files,
+        media_merge_job,
+    })
 }
 
 #[tauri::command]

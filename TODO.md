@@ -11,7 +11,7 @@
 
 ### P1 - Media Provenance and Refresh
 
-- [ ] 在任务详情中展示媒体来源追溯：来源页面、最终 URL、Referer、headers 摘要、ffmpeg 参数
+- [x] 在任务详情中展示媒体来源追溯：来源页面、最终 URL、Referer、headers 摘要、ffmpeg 参数
 - [ ] 对过期媒体候选增加刷新提示与重新扫描入口
 
 ### P1 - History and Analytics

@@ -1333,6 +1333,10 @@ impl DownloadService {
         Ok((task, files))
     }
 
+    pub fn get_media_merge_job(&self, task_id: &str) -> Result<Option<MediaMergeJob>> {
+        self.db.get_media_merge_job(task_id)
+    }
+
     pub async fn get_task_runtime_status(&self, task_id: &str) -> Result<Value> {
         let task = self
             .db

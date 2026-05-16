@@ -66,6 +66,7 @@ import type {
   LinkCandidate,
   LinkParseResult,
   Locale,
+  MediaMergeJob,
   OperationLog,
   SaveDirSuggestion,
   StartupNotice,
@@ -302,6 +303,17 @@ function shortenText(value: string, max = 56): string {
   return `${s.slice(0, max - 1)}…`
 }
 
+function extractFfmpegArg(args: string | undefined, key: string): string {
+  const parts: string[] = String(args || '').match(/"[^"]*"|'[^']*'|\S+/g) || []
+  const idx = parts.indexOf(key)
+  const raw = idx >= 0 ? parts[idx + 1] || '' : ''
+  return raw.replace(/^['"]|['"]$/g, '')
+}
+
+function ffmpegHeaderSummary(args: string | undefined): string {
+  return String(args || '').includes('-headers') ? '<custom headers>' : '-'
+}
+
 function inferNameFromUrl(raw: string): string {
   try {
     const u = new URL(raw)
@@ -460,6 +472,7 @@ export default function App() {
   const [detailTask, setDetailTask] = useState<Task | null>(null)
   const [detailCategoryInput, setDetailCategoryInput] = useState('')
   const [detailFiles, setDetailFiles] = useState<TaskFile[]>([])
+  const [detailMediaMergeJob, setDetailMediaMergeJob] = useState<MediaMergeJob | null>(null)
   const [detailRuntimeText, setDetailRuntimeText] = useState('')
   const [detailTrackers, setDetailTrackers] = useState<string[]>([])
   const [detailRuntimeOptions, setDetailRuntimeOptions] = useState({
@@ -1278,7 +1291,7 @@ export default function App() {
   const onOpenFileSelection = useCallback(async (task: Task) => {
     try {
       setFileSelectLoading(true)
-      const detail = await api.call<{ task: Task; files: TaskFile[] }>('get_task_detail', {
+      const detail = await api.call<{ task: Task; files: TaskFile[]; media_merge_job?: MediaMergeJob | null }>('get_task_detail', {
         taskId: task.id,
       })
       const files = Array.isArray(detail?.files) ? detail.files : []
@@ -1303,6 +1316,7 @@ export default function App() {
     setDetailTask(task)
     setDetailCategoryInput(String(task.category || ''))
     setDetailFiles([])
+    setDetailMediaMergeJob(null)
     setDetailRuntimeText('')
     setDetailTrackers([])
     setDetailRuntimeOptions({
@@ -1316,12 +1330,13 @@ export default function App() {
     setDetailBtSummary('')
     setDetailRetryLogs([])
     try {
-      const detail = await api.call<{ task: Task; files: TaskFile[] }>('get_task_detail', {
+      const detail = await api.call<{ task: Task; files: TaskFile[]; media_merge_job?: MediaMergeJob | null }>('get_task_detail', {
         taskId: task.id,
       })
       setDetailTask(detail?.task || task)
       setDetailCategoryInput(String((detail?.task || task)?.category || ''))
       setDetailFiles(Array.isArray(detail?.files) ? detail.files : [])
+      setDetailMediaMergeJob(detail?.media_merge_job || null)
       try {
         const runtime = await api.call<unknown>('get_task_runtime_status', { taskId: task.id })
         setDetailRuntimeText(JSON.stringify(runtime ?? {}, null, 2))
@@ -3440,6 +3455,43 @@ export default function App() {
                 <Descriptions.Item label={t('sourceLabel')}>
                   <Typography.Text copyable={{ text: detailTask?.source || '' }}>
                     {detailTask?.source || '-'}
+                  </Typography.Text>
+                </Descriptions.Item>
+              </Descriptions>
+            </Card>
+            <Card size="small" title={t('sourceProvenance')} loading={detailLoading}>
+              <Descriptions size="small" column={1}>
+                <Descriptions.Item label={t('sourceLabel')}>
+                  <Typography.Text copyable={{ text: detailTask?.source || '' }}>
+                    {detailTask?.source || '-'}
+                  </Typography.Text>
+                </Descriptions.Item>
+                <Descriptions.Item label={t('mediaInputUrl')}>
+                  <Typography.Text copyable={{ text: detailMediaMergeJob?.input_url || detailTask?.source || '' }}>
+                    {detailMediaMergeJob?.input_url || detailTask?.source || '-'}
+                  </Typography.Text>
+                </Descriptions.Item>
+                <Descriptions.Item label={t('finalOutputPath')}>
+                  <Typography.Text copyable={{ text: detailMediaMergeJob?.output_path || '' }}>
+                    {detailMediaMergeJob?.output_path || '-'}
+                  </Typography.Text>
+                </Descriptions.Item>
+                <Descriptions.Item label="Referer">
+                  <Typography.Text copyable={{ text: extractFfmpegArg(detailMediaMergeJob?.ffmpeg_args, '-referer') }}>
+                    {extractFfmpegArg(detailMediaMergeJob?.ffmpeg_args, '-referer') || '-'}
+                  </Typography.Text>
+                </Descriptions.Item>
+                <Descriptions.Item label={t('headersSummary')}>
+                  {ffmpegHeaderSummary(detailMediaMergeJob?.ffmpeg_args)}
+                </Descriptions.Item>
+                <Descriptions.Item label="ffmpeg">
+                  <Typography.Text copyable={{ text: detailMediaMergeJob?.ffmpeg_bin || '' }}>
+                    {detailMediaMergeJob?.ffmpeg_bin || '-'}
+                  </Typography.Text>
+                </Descriptions.Item>
+                <Descriptions.Item label={t('ffmpegArgs')}>
+                  <Typography.Text copyable={{ text: detailMediaMergeJob?.ffmpeg_args || '' }}>
+                    {detailMediaMergeJob?.ffmpeg_args || '-'}
                   </Typography.Text>
                 </Descriptions.Item>
               </Descriptions>
