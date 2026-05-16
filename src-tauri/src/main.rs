@@ -1081,27 +1081,11 @@ fn open_logs_window(app: tauri::AppHandle) -> Result<(), String> {
             .resizable(true)
             .center()
             .build()
+            .map(|_| ())
             .map_err(|e| e.to_string());
 
     LOGS_WINDOW_CREATING.store(false, std::sync::atomic::Ordering::SeqCst);
-
-    match result {
-        Ok(win) => {
-            // Ensure the logs window is properly destroyed when the user clicks the
-            // close button.  Without this, the window-state plugin's CloseRequested
-            // handler can cause the window to hang on Windows, which in turn blocks
-            // the app exit sequence.
-            let win_clone = win.clone();
-            win.on_window_event(move |event| {
-                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    let _ = win_clone.destroy();
-                }
-            });
-            Ok(())
-        }
-        Err(e) => Err(e),
-    }
+    result
 }
 
 #[tauri::command]
