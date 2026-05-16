@@ -363,6 +363,8 @@
   "totalSize": "Total size",
   "sizeLarge": ">= 1 GB",
   "domain": "Domain",
+  "recentDownloads": "Recent",
+  "archiveView": "Archive",
   "taskIdLabel": "Task ID",
   "emptyDownloading": "No active downloads",
   "emptyDownloaded": "No completed downloads yet",

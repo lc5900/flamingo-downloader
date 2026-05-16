@@ -411,6 +411,8 @@ export default function App() {
     sortBy,
     setSortBy,
   } = useUiViewStore()
+  const [downloadedView, setDownloadedView] = useState<'recent' | 'archive'>('recent')
+  const [archiveCutoffTs] = useState(() => Math.floor(Date.now() / 1000) - 30 * 24 * 3600)
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([])
   const { tableLayouts, setTableLayouts } = useTableLayout()
   const [layoutOpen, setLayoutOpen] = useState(false)
@@ -1014,12 +1016,28 @@ export default function App() {
   const historyAnalytics = useMemo(() => buildTaskAnalytics(tasks), [tasks])
   const topCategories = useMemo(() => topEntries(historyAnalytics.categoryCounts), [historyAnalytics])
   const topDomains = useMemo(() => topEntries(historyAnalytics.domainCounts), [historyAnalytics])
+  const downloadedArchiveCounts = useMemo(() => {
+    let recent = 0
+    let archive = 0
+    for (const task of tasks) {
+      if (String(task.status || '').toLowerCase() !== 'completed') continue
+      const updatedAt = Number(task.updated_at || 0)
+      if (updatedAt > 0 && updatedAt < archiveCutoffTs) archive += 1
+      else recent += 1
+    }
+    return { recent, archive }
+  }, [archiveCutoffTs, tasks])
 
   const list = useMemo(
     () => {
-      const bySection = tasks.filter((task) =>
-        section === 'downloaded' ? task.status === 'completed' : task.status !== 'completed',
-      )
+      const bySection = tasks.filter((task) => {
+        const status = String(task.status || '').toLowerCase()
+        if (section !== 'downloaded') return status !== 'completed'
+        if (status !== 'completed') return false
+        const updatedAt = Number(task.updated_at || 0)
+        const archived = updatedAt > 0 && updatedAt < archiveCutoffTs
+        return downloadedView === 'archive' ? archived : !archived
+      })
       const filtered = bySection.filter((task) => {
         const status = String(task.status || '').toLowerCase()
         if (statusFilter !== 'all' && status !== statusFilter) return false
@@ -1045,7 +1063,7 @@ export default function App() {
       })
       return filtered
     },
-    [categoryFilter, searchText, section, sortBy, statusFilter, tasks],
+    [archiveCutoffTs, categoryFilter, downloadedView, searchText, section, sortBy, statusFilter, tasks],
   )
   const useVirtualTable = list.length > 150
   const tableScroll = useMemo(
@@ -3030,6 +3048,23 @@ export default function App() {
                         { value: 'name_asc', label: `${t('sortBy')}: ${t('sortName')}` },
                       ]}
                     />
+                    {section === 'downloaded' && (
+                      <Select
+                        style={{ width: 190 }}
+                        value={downloadedView}
+                        onChange={(value) => setDownloadedView(value as 'recent' | 'archive')}
+                        options={[
+                          {
+                            value: 'recent',
+                            label: `${t('recentDownloads')} (${downloadedArchiveCounts.recent})`,
+                          },
+                          {
+                            value: 'archive',
+                            label: `${t('archiveView')} (${downloadedArchiveCounts.archive})`,
+                          },
+                        ]}
+                      />
+                    )}
                     <Button icon={<SlidersOutlined />} onClick={() => setLayoutOpen(true)}>
                       {t('layoutSettings')}
                     </Button>

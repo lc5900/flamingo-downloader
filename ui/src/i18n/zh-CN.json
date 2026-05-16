@@ -363,6 +363,8 @@
   "totalSize": "总大小",
   "sizeLarge": ">= 1 GB",
   "domain": "域名",
+  "recentDownloads": "最近",
+  "archiveView": "归档",
   "taskIdLabel": "任务ID",
   "emptyDownloading": "当前没有下载任务",
   "emptyDownloaded": "还没有已完成任务",
