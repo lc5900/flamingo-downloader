@@ -21,7 +21,7 @@
 
 ### P2 - Performance Guardrails
 
-- [ ] 增加千级任务列表的性能基准脚本，覆盖筛选、排序、选择和虚拟表格渲染
+- [x] 增加千级任务列表的性能基准脚本，覆盖筛选、排序、选择和虚拟表格渲染
 
 ## 2026-05-01 Product Iteration Roadmap
 
