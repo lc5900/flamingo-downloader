@@ -40,7 +40,7 @@
   "trackers": "Trackers",
   "dropHint": "Drop URL or .torrent file here",
   "search": "Search",
-  "searchPlaceholder": "Search by name / source / task id",
+  "searchPlaceholder": "Search or use status:error type:video domain:example.com",
   "statusFilter": "Status",
   "categoryFilter": "Category",
   "uncategorized": "Uncategorized",

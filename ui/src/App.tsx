@@ -100,6 +100,7 @@ import {
   shortcutFromKeyboardEvent,
   type ShortcutDisplayMode,
 } from './utils/shortcuts'
+import { matchesTaskQuery } from './utils/taskQuery'
 import type { ShortcutAction, ShortcutBindings, ShortcutItem } from './types/shortcuts'
 import './App.css'
 import 'react-resizable/css/styles.css'
@@ -994,10 +995,7 @@ export default function App() {
         if (categoryFilter === '__uncategorized__' && category) return false
         if (categoryFilter !== 'all' && categoryFilter !== '__uncategorized__' && category !== categoryFilter)
           return false
-        const query = searchText.trim().toLowerCase()
-        if (!query) return true
-        const text = `${task.name || ''} ${task.source || ''} ${task.id || ''}`.toLowerCase()
-        return text.includes(query)
+        return matchesTaskQuery(task, searchText)
       })
       const progressValue = (task: Task) =>
         task.total_length > 0 ? task.completed_length / Math.max(task.total_length, 1) : 0
