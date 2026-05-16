@@ -1115,7 +1115,6 @@ fn main() {
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_state_flags(persisted_window_state_flags())
-                .with_denylist(&["logswindow"])
                 .build(),
         );
     #[cfg(target_os = "macos")]
