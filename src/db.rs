@@ -785,6 +785,33 @@ impl Database {
         Ok(rows)
     }
 
+    pub fn get_media_merge_job(&self, task_id: &str) -> Result<Option<MediaMergeJob>> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        conn.query_row(
+            r#"
+            SELECT task_id, input_url, output_path, ffmpeg_bin, ffmpeg_args, status, error_message, created_at, updated_at
+            FROM media_merge_jobs
+            WHERE task_id = ?1
+            "#,
+            params![task_id],
+            |row| {
+                Ok(MediaMergeJob {
+                    task_id: row.get(0)?,
+                    input_url: row.get(1)?,
+                    output_path: row.get(2)?,
+                    ffmpeg_bin: row.get(3)?,
+                    ffmpeg_args: row.get(4)?,
+                    status: row.get(5)?,
+                    error_message: row.get(6)?,
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(Into::into)
+    }
+
     pub fn run_integrity_check(&self) -> Result<String> {
         let conn = self.conn.lock().expect("db mutex poisoned");
         let result = conn.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;

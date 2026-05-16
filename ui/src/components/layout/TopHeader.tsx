@@ -4,6 +4,7 @@ import {
   CloudDownloadOutlined,
   FileSearchOutlined,
   GlobalOutlined,
+  MacCommandOutlined,
   ReloadOutlined,
   SyncOutlined,
 } from '@ant-design/icons'
@@ -17,6 +18,7 @@ interface TopHeaderProps {
   openLogsWindow: () => void
   quickToggleTheme: () => void
   refresh: () => void
+  openCommandPalette: () => void
   loading: boolean
 }
 
@@ -28,6 +30,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   openLogsWindow,
   quickToggleTheme,
   refresh,
+  openCommandPalette,
   loading,
 }) => {
   return (
@@ -44,6 +47,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         </Button>
         <Button shape="round" icon={<ReloadOutlined />} onClick={refresh} loading={loading}>
           {t('refresh')}
+        </Button>
+        <Button shape="round" icon={<MacCommandOutlined />} onClick={openCommandPalette}>
+          {t('commandPalette')}
         </Button>
         <Dropdown
           menu={{

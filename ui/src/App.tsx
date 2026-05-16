@@ -1,5 +1,6 @@
 import {
   App as AntApp,
+  Alert,
   Button,
   Card,
   ConfigProvider,
@@ -44,6 +45,10 @@ import { readText as readClipboardText, writeText as writeClipboardText } from '
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import * as api from './api/client'
 import { ResizableTitle } from './components/ResizableTitle'
+import {
+  CommandPaletteDialog,
+  type CommandPaletteItem,
+} from './components/dialogs/CommandPaletteDialog'
 import { Sidebar } from './components/layout/Sidebar'
 import { TopHeader } from './components/layout/TopHeader'
 import { defaultLayoutFor, useTableLayout } from './hooks/useTableLayout'
@@ -62,6 +67,7 @@ import type {
   LinkCandidate,
   LinkParseResult,
   Locale,
+  MediaMergeJob,
   OperationLog,
   SaveDirSuggestion,
   StartupNotice,
@@ -100,6 +106,8 @@ import {
   shortcutFromKeyboardEvent,
   type ShortcutDisplayMode,
 } from './utils/shortcuts'
+import { buildTaskAnalytics, topEntries } from './utils/taskAnalytics'
+import { matchesTaskQuery } from './utils/taskQuery'
 import type { ShortcutAction, ShortcutBindings, ShortcutItem } from './types/shortcuts'
 import './App.css'
 import 'react-resizable/css/styles.css'
@@ -297,6 +305,25 @@ function shortenText(value: string, max = 56): string {
   return `${s.slice(0, max - 1)}…`
 }
 
+function extractFfmpegArg(args: string | undefined, key: string): string {
+  const parts: string[] = String(args || '').match(/"[^"]*"|'[^']*'|\S+/g) || []
+  const idx = parts.indexOf(key)
+  const raw = idx >= 0 ? parts[idx + 1] || '' : ''
+  return raw.replace(/^['"]|['"]$/g, '')
+}
+
+function ffmpegHeaderSummary(args: string | undefined): string {
+  return String(args || '').includes('-headers') ? '<custom headers>' : '-'
+}
+
+function isExpiredMediaTask(task: Task | null): boolean {
+  const source = String(task?.source || '').toLowerCase()
+  const health = String(task?.health || '').toLowerCase()
+  const error = `${task?.error_code || ''} ${task?.error_message || ''}`.toLowerCase()
+  const looksLikeMedia = source.includes('.m3u8') || source.includes('.mpd')
+  return health === 'url_expired' || (looksLikeMedia && /expired|403|401|forbidden|unauthorized/.test(error))
+}
+
 function inferNameFromUrl(raw: string): string {
   try {
     const u = new URL(raw)
@@ -384,6 +411,8 @@ export default function App() {
     sortBy,
     setSortBy,
   } = useUiViewStore()
+  const [downloadedView, setDownloadedView] = useState<'recent' | 'archive'>('recent')
+  const [archiveCutoffTs] = useState(() => Math.floor(Date.now() / 1000) - 30 * 24 * 3600)
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([])
   const { tableLayouts, setTableLayouts } = useTableLayout()
   const [layoutOpen, setLayoutOpen] = useState(false)
@@ -409,6 +438,8 @@ export default function App() {
   const [shortcutCaptured, setShortcutCaptured] = useState('')
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false)
   const [shortcutHelpQuery, setShortcutHelpQuery] = useState('')
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+  const [commandPaletteQuery, setCommandPaletteQuery] = useState('')
   const [settingsTab, setSettingsTab] = useState('basic')
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [siderCollapsed, setSiderCollapsed] = useState(false)
@@ -453,6 +484,7 @@ export default function App() {
   const [detailTask, setDetailTask] = useState<Task | null>(null)
   const [detailCategoryInput, setDetailCategoryInput] = useState('')
   const [detailFiles, setDetailFiles] = useState<TaskFile[]>([])
+  const [detailMediaMergeJob, setDetailMediaMergeJob] = useState<MediaMergeJob | null>(null)
   const [detailRuntimeText, setDetailRuntimeText] = useState('')
   const [detailTrackers, setDetailTrackers] = useState<string[]>([])
   const [detailRuntimeOptions, setDetailRuntimeOptions] = useState({
@@ -981,12 +1013,31 @@ export default function App() {
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b))
   }, [tasks])
+  const historyAnalytics = useMemo(() => buildTaskAnalytics(tasks), [tasks])
+  const topCategories = useMemo(() => topEntries(historyAnalytics.categoryCounts), [historyAnalytics])
+  const topDomains = useMemo(() => topEntries(historyAnalytics.domainCounts), [historyAnalytics])
+  const downloadedArchiveCounts = useMemo(() => {
+    let recent = 0
+    let archive = 0
+    for (const task of tasks) {
+      if (String(task.status || '').toLowerCase() !== 'completed') continue
+      const updatedAt = Number(task.updated_at || 0)
+      if (updatedAt > 0 && updatedAt < archiveCutoffTs) archive += 1
+      else recent += 1
+    }
+    return { recent, archive }
+  }, [archiveCutoffTs, tasks])
 
   const list = useMemo(
     () => {
-      const bySection = tasks.filter((task) =>
-        section === 'downloaded' ? task.status === 'completed' : task.status !== 'completed',
-      )
+      const bySection = tasks.filter((task) => {
+        const status = String(task.status || '').toLowerCase()
+        if (section !== 'downloaded') return status !== 'completed'
+        if (status !== 'completed') return false
+        const updatedAt = Number(task.updated_at || 0)
+        const archived = updatedAt > 0 && updatedAt < archiveCutoffTs
+        return downloadedView === 'archive' ? archived : !archived
+      })
       const filtered = bySection.filter((task) => {
         const status = String(task.status || '').toLowerCase()
         if (statusFilter !== 'all' && status !== statusFilter) return false
@@ -994,10 +1045,7 @@ export default function App() {
         if (categoryFilter === '__uncategorized__' && category) return false
         if (categoryFilter !== 'all' && categoryFilter !== '__uncategorized__' && category !== categoryFilter)
           return false
-        const query = searchText.trim().toLowerCase()
-        if (!query) return true
-        const text = `${task.name || ''} ${task.source || ''} ${task.id || ''}`.toLowerCase()
-        return text.includes(query)
+        return matchesTaskQuery(task, searchText)
       })
       const progressValue = (task: Task) =>
         task.total_length > 0 ? task.completed_length / Math.max(task.total_length, 1) : 0
@@ -1015,7 +1063,7 @@ export default function App() {
       })
       return filtered
     },
-    [categoryFilter, searchText, section, sortBy, statusFilter, tasks],
+    [archiveCutoffTs, categoryFilter, downloadedView, searchText, section, sortBy, statusFilter, tasks],
   )
   const useVirtualTable = list.length > 150
   const tableScroll = useMemo(
@@ -1225,7 +1273,7 @@ export default function App() {
     }
   }, [msg, refresh, t, tasks])
 
-  const onGlobalClearCompleted = async () => {
+  const onGlobalClearCompleted = useCallback(async () => {
     Modal.confirm({
       title: t('clearCompleted'),
       content: t('clearCompletedConfirm'),
@@ -1243,7 +1291,7 @@ export default function App() {
         }
       },
     })
-  }
+  }, [msg, refresh, t, tasks])
 
   const onOpenFile = useCallback(async (task: Task) => {
     try {
@@ -1274,7 +1322,7 @@ export default function App() {
   const onOpenFileSelection = useCallback(async (task: Task) => {
     try {
       setFileSelectLoading(true)
-      const detail = await api.call<{ task: Task; files: TaskFile[] }>('get_task_detail', {
+      const detail = await api.call<{ task: Task; files: TaskFile[]; media_merge_job?: MediaMergeJob | null }>('get_task_detail', {
         taskId: task.id,
       })
       const files = Array.isArray(detail?.files) ? detail.files : []
@@ -1299,6 +1347,7 @@ export default function App() {
     setDetailTask(task)
     setDetailCategoryInput(String(task.category || ''))
     setDetailFiles([])
+    setDetailMediaMergeJob(null)
     setDetailRuntimeText('')
     setDetailTrackers([])
     setDetailRuntimeOptions({
@@ -1312,12 +1361,13 @@ export default function App() {
     setDetailBtSummary('')
     setDetailRetryLogs([])
     try {
-      const detail = await api.call<{ task: Task; files: TaskFile[] }>('get_task_detail', {
+      const detail = await api.call<{ task: Task; files: TaskFile[]; media_merge_job?: MediaMergeJob | null }>('get_task_detail', {
         taskId: task.id,
       })
       setDetailTask(detail?.task || task)
       setDetailCategoryInput(String((detail?.task || task)?.category || ''))
       setDetailFiles(Array.isArray(detail?.files) ? detail.files : [])
+      setDetailMediaMergeJob(detail?.media_merge_job || null)
       try {
         const runtime = await api.call<unknown>('get_task_runtime_status', { taskId: task.id })
         setDetailRuntimeText(JSON.stringify(runtime ?? {}, null, 2))
@@ -1676,6 +1726,36 @@ export default function App() {
       }
     },
     [addForm, msg, t],
+  )
+
+  const openPageScanReviewForUrl = useCallback(
+    async (pageUrl: string, saveDir?: string | null, category?: string | null) => {
+      const url = String(pageUrl || '').trim()
+      if (!url) {
+        msg.warning(t('urlRequired'))
+        return
+      }
+      setCandidateReviewLoading(true)
+      try {
+        const result = await api.call<LinkParseResult>('scan_page_resources', { pageUrl: url })
+        const candidates = Array.isArray(result?.candidates) ? result.candidates : []
+        setCandidateReviewMode('page')
+        setCandidateReviewItems(candidates)
+        setCandidateReviewSelectedUrls(candidates.map((item) => item.url))
+        setCandidateReviewQuery('')
+        setCandidateReviewKindFilter('all')
+        setCandidateReviewDomainFilter('all')
+        setCandidateReviewSizeFilter('all')
+        setCandidateReviewSaveDir(String(saveDir || '').trim())
+        setCandidateReviewCategory(String(category || '').trim())
+        setCandidateReviewOpen(true)
+      } catch (err) {
+        msg.error(parseErr(err))
+      } finally {
+        setCandidateReviewLoading(false)
+      }
+    },
+    [msg, t],
   )
 
   const onCreateCandidateTasks = useCallback(async () => {
@@ -2302,6 +2382,103 @@ export default function App() {
     ],
   )
 
+  const commandPaletteItems = useMemo<CommandPaletteItem[]>(
+    () => [
+      {
+        key: 'new_download',
+        label: t('newDownload'),
+        keywords: [t('addTask'), t('navDownloading')],
+        shortcut: displayShortcut(shortcutBindings.new_download),
+        run: () => performShortcutAction('new_download'),
+      },
+      {
+        key: 'focus_search',
+        label: t('shortcutFocusSearch'),
+        keywords: [t('search'), t('searchPlaceholder')],
+        shortcut: displayShortcut(shortcutBindings.focus_search),
+        run: () => performShortcutAction('focus_search'),
+      },
+      {
+        key: 'open_logs',
+        label: t('logsWindow'),
+        keywords: [t('shortcutOpenLogs')],
+        shortcut: displayShortcut(shortcutBindings.open_logs),
+        run: () => performShortcutAction('open_logs'),
+      },
+      {
+        key: 'open_settings',
+        label: t('settings'),
+        keywords: [t('shortcutOpenSettings')],
+        shortcut: displayShortcut(shortcutBindings.open_settings),
+        run: () => performShortcutAction('open_settings'),
+      },
+      {
+        key: 'switch_downloading',
+        label: t('navDownloading'),
+        keywords: [t('shortcutSwitchDownloading')],
+        shortcut: displayShortcut(shortcutBindings.switch_downloading),
+        run: () => performShortcutAction('switch_downloading'),
+      },
+      {
+        key: 'switch_downloaded',
+        label: t('navDownloaded'),
+        keywords: [t('shortcutSwitchDownloaded')],
+        shortcut: displayShortcut(shortcutBindings.switch_downloaded),
+        run: () => performShortcutAction('switch_downloaded'),
+      },
+      {
+        key: 'pause_all',
+        label: t('pauseAll'),
+        keywords: [t('shortcutPauseAll'), t('navDownloading')],
+        shortcut: displayShortcut(shortcutBindings.pause_all),
+        run: () => performShortcutAction('pause_all'),
+      },
+      {
+        key: 'resume_all',
+        label: t('resumeAll'),
+        keywords: [t('shortcutResumeAll'), t('navDownloading')],
+        shortcut: displayShortcut(shortcutBindings.resume_all),
+        run: () => performShortcutAction('resume_all'),
+      },
+      {
+        key: 'retry_failed',
+        label: t('retryFailed'),
+        keywords: [t('shortcutRetryFailed'), t('filterError')],
+        shortcut: displayShortcut(shortcutBindings.retry_failed),
+        run: () => performShortcutAction('retry_failed'),
+      },
+      {
+        key: 'clear_completed',
+        label: t('clearCompleted'),
+        keywords: [t('filterCompleted'), t('navDownloaded')],
+        disabled: tasks.every((task) => String(task.status).toLowerCase() !== 'completed'),
+        run: onGlobalClearCompleted,
+      },
+      {
+        key: 'refresh_list',
+        label: t('refresh'),
+        keywords: [t('shortcutRefreshList')],
+        shortcut: displayShortcut(shortcutBindings.refresh_list),
+        run: () => performShortcutAction('refresh_list'),
+      },
+      {
+        key: 'toggle_theme',
+        label: t('darkLight'),
+        keywords: [t('shortcutToggleTheme')],
+        shortcut: displayShortcut(shortcutBindings.toggle_theme),
+        run: () => performShortcutAction('toggle_theme'),
+      },
+    ],
+    [
+      displayShortcut,
+      onGlobalClearCompleted,
+      performShortcutAction,
+      shortcutBindings,
+      t,
+      tasks,
+    ],
+  )
+
   useEffect(() => {
     if (!shortcutEditorOpen) return
     const onKeyDown = (e: KeyboardEvent) => {
@@ -2341,6 +2518,11 @@ export default function App() {
           e.preventDefault()
           return
         }
+      }
+      if (mod && key === 'k') {
+        e.preventDefault()
+        setCommandPaletteOpen(true)
+        return
       }
       if (editing) return
       for (const action of Object.keys(shortcutBindings) as ShortcutAction[]) {
@@ -2792,6 +2974,7 @@ export default function App() {
               openLogsWindow={openLogsWindow}
               quickToggleTheme={quickToggleTheme}
               refresh={refresh}
+              openCommandPalette={() => setCommandPaletteOpen(true)}
               loading={loading}
             />
 
@@ -2865,6 +3048,23 @@ export default function App() {
                         { value: 'name_asc', label: `${t('sortBy')}: ${t('sortName')}` },
                       ]}
                     />
+                    {section === 'downloaded' && (
+                      <Select
+                        style={{ width: 190 }}
+                        value={downloadedView}
+                        onChange={(value) => setDownloadedView(value as 'recent' | 'archive')}
+                        options={[
+                          {
+                            value: 'recent',
+                            label: `${t('recentDownloads')} (${downloadedArchiveCounts.recent})`,
+                          },
+                          {
+                            value: 'archive',
+                            label: `${t('archiveView')} (${downloadedArchiveCounts.archive})`,
+                          },
+                        ]}
+                      />
+                    )}
                     <Button icon={<SlidersOutlined />} onClick={() => setLayoutOpen(true)}>
                       {t('layoutSettings')}
                     </Button>
@@ -2893,6 +3093,25 @@ export default function App() {
                       {t('batchRemove')}
                     </Button>
                   </Space>
+                  {section === 'downloaded' && (
+                    <div className="history-summary">
+                      <Typography.Text type="secondary">
+                        {t('historySummary')}: {historyAnalytics.total} {t('tasks')}
+                      </Typography.Text>
+                      <Tag>{`${t('filterCompleted')}: ${historyAnalytics.statusCounts.completed || 0}`}</Tag>
+                      <Tag>{`${t('filterError')}: ${historyAnalytics.statusCounts.error || 0}`}</Tag>
+                      <Tag>{`${t('totalSize')}: ${fmtBytes(historyAnalytics.totalBytes)}`}</Tag>
+                      <Tag>{`${t('sizeLarge')}: ${
+                        historyAnalytics.sizeBuckets.large + historyAnalytics.sizeBuckets.huge
+                      }`}</Tag>
+                      {topCategories.map(([name, count]) => (
+                        <Tag key={`category-${name}`}>{`${t('categoryFilter')}: ${name} (${count})`}</Tag>
+                      ))}
+                      {topDomains.map(([name, count]) => (
+                        <Tag key={`domain-${name}`}>{`${t('domain')}: ${name} (${count})`}</Tag>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="task-table-wrap" ref={tableWrapRef}>
                   {!hasLoadedOnce && loading ? (
@@ -3084,6 +3303,15 @@ export default function App() {
             </Layout.Content>
           </Layout>
         </Layout>
+
+        <CommandPaletteDialog
+          open={commandPaletteOpen}
+          query={commandPaletteQuery}
+          items={commandPaletteItems}
+          t={t}
+          onQueryChange={setCommandPaletteQuery}
+          onClose={() => setCommandPaletteOpen(false)}
+        />
 
         <Suspense fallback={null}>
           <ShortcutEditorDialog
@@ -3324,6 +3552,66 @@ export default function App() {
                 <Descriptions.Item label={t('sourceLabel')}>
                   <Typography.Text copyable={{ text: detailTask?.source || '' }}>
                     {detailTask?.source || '-'}
+                  </Typography.Text>
+                </Descriptions.Item>
+              </Descriptions>
+            </Card>
+            <Card size="small" title={t('sourceProvenance')} loading={detailLoading}>
+              {isExpiredMediaTask(detailTask) && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  style={{ marginBottom: 12 }}
+                  message={t('expiredMediaRefreshTitle')}
+                  description={t('expiredMediaRefreshDescription')}
+                  action={
+                    <Button
+                      size="small"
+                      onClick={() =>
+                        void openPageScanReviewForUrl(
+                          detailTask?.source || '',
+                          detailTask?.save_dir,
+                          detailTask?.category,
+                        )
+                      }
+                    >
+                      {t('rescanSource')}
+                    </Button>
+                  }
+                />
+              )}
+              <Descriptions size="small" column={1}>
+                <Descriptions.Item label={t('sourceLabel')}>
+                  <Typography.Text copyable={{ text: detailTask?.source || '' }}>
+                    {detailTask?.source || '-'}
+                  </Typography.Text>
+                </Descriptions.Item>
+                <Descriptions.Item label={t('mediaInputUrl')}>
+                  <Typography.Text copyable={{ text: detailMediaMergeJob?.input_url || detailTask?.source || '' }}>
+                    {detailMediaMergeJob?.input_url || detailTask?.source || '-'}
+                  </Typography.Text>
+                </Descriptions.Item>
+                <Descriptions.Item label={t('finalOutputPath')}>
+                  <Typography.Text copyable={{ text: detailMediaMergeJob?.output_path || '' }}>
+                    {detailMediaMergeJob?.output_path || '-'}
+                  </Typography.Text>
+                </Descriptions.Item>
+                <Descriptions.Item label="Referer">
+                  <Typography.Text copyable={{ text: extractFfmpegArg(detailMediaMergeJob?.ffmpeg_args, '-referer') }}>
+                    {extractFfmpegArg(detailMediaMergeJob?.ffmpeg_args, '-referer') || '-'}
+                  </Typography.Text>
+                </Descriptions.Item>
+                <Descriptions.Item label={t('headersSummary')}>
+                  {ffmpegHeaderSummary(detailMediaMergeJob?.ffmpeg_args)}
+                </Descriptions.Item>
+                <Descriptions.Item label="ffmpeg">
+                  <Typography.Text copyable={{ text: detailMediaMergeJob?.ffmpeg_bin || '' }}>
+                    {detailMediaMergeJob?.ffmpeg_bin || '-'}
+                  </Typography.Text>
+                </Descriptions.Item>
+                <Descriptions.Item label={t('ffmpegArgs')}>
+                  <Typography.Text copyable={{ text: detailMediaMergeJob?.ffmpeg_args || '' }}>
+                    {detailMediaMergeJob?.ffmpeg_args || '-'}
                   </Typography.Text>
                 </Descriptions.Item>
               </Descriptions>

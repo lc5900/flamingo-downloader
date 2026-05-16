@@ -1,5 +1,28 @@
 # Flamingo Downloader TODO
 
+## 2026-05-16 Iteration
+
+参考 FDM/IDM/Gopeed/Motrix 等同类下载器的常见能力，当前已完成基础下载、批量添加、浏览器接管、本地 API 和发布质量闭环；下一轮重点放在大量任务下的检索、媒体来源追溯和历史复盘。
+
+### P0 - Task Discovery and Large-list Workflow
+
+- [x] 支持任务列表高级查询语法：`status:error`、`type:video`、`domain:example.com`、`category:media`、`size:>1GB`
+- [x] 增加全局命令面板，集中入口覆盖新建下载、聚焦搜索、打开日志、切换页面和批量动作
+
+### P1 - Media Provenance and Refresh
+
+- [x] 在任务详情中展示媒体来源追溯：来源页面、最终 URL、Referer、headers 摘要、ffmpeg 参数
+- [x] 对过期媒体候选增加刷新提示与重新扫描入口
+
+### P1 - History and Analytics
+
+- [x] 增加下载历史统计摘要：按状态、分类、域名、大小分布聚合
+- [x] 增加已完成任务归档视图，避免长期历史挤占主列表
+
+### P2 - Performance Guardrails
+
+- [x] 增加千级任务列表的性能基准脚本，覆盖筛选、排序、选择和虚拟表格渲染
+
 ## 2026-05-01 Product Iteration Roadmap
 
 本轮 roadmap 已收口为可交付版本；深度媒体体验和更重的信息架构想法已转入 [`BACKLOG.md`](BACKLOG.md)。

@@ -160,6 +160,18 @@ export type TaskFile = {
   selected: boolean
 }
 
+export type MediaMergeJob = {
+  task_id: string
+  input_url: string
+  output_path: string
+  ffmpeg_bin: string
+  ffmpeg_args: string
+  status: string
+  error_message?: string | null
+  created_at: number
+  updated_at: number
+}
+
 export type OperationLog = {
   ts: number
   action: string
