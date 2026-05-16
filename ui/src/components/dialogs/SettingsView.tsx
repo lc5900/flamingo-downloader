@@ -2,6 +2,7 @@ import type React from 'react'
 import {
   Button,
   Card,
+  Collapse,
   Divider,
   Form,
   Input,
@@ -172,53 +173,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         }}
                       />
                     </Form.Item>
-                    <Typography.Text type="secondary" style={{ display: 'block', marginTop: -6, marginBottom: 8 }}>
-                      {t('shortcutHint')}
-                    </Typography.Text>
-                    <Typography.Title level={5}>{t('grpShortcuts')}</Typography.Title>
-                    {isMac && (
-                      <Form.Item label={t('shortcutDisplayMode')} style={{ maxWidth: 260, marginBottom: 10 }}>
-                        <Select
-                          value={shortcutDisplayMode}
-                          onChange={(v) => {
-                            const mode = v === 'symbol' ? 'symbol' : 'text'
-                            setShortcutDisplayMode(mode)
-                            saveShortcutDisplayMode(mode)
-                          }}
-                          options={[
-                            { label: t('shortcutDisplayText'), value: 'text' },
-                            { label: t('shortcutDisplaySymbol'), value: 'symbol' },
-                          ]}
-                        />
-                      </Form.Item>
-                    )}
-                    <Space direction="vertical" style={{ width: '100%' }}>
-                      {shortcutItems.map((item) => (
-                        <div key={item.key} className="grid-2" style={{ alignItems: 'center' }}>
-                          <Typography.Text>{item.label}</Typography.Text>
-                          <Space.Compact block>
-                            <Input
-                              value={displayShortcut(shortcutDraft[item.key])}
-                              readOnly
-                              placeholder={t('shortcutPress')}
-                            />
-                            <Button onClick={() => openShortcutEditor(item.key)}>{t('shortcutEdit')}</Button>
-                            <Button onClick={() => setShortcutBinding(item.key, '')}>{t('shortcutClear')}</Button>
-                          </Space.Compact>
-                        </div>
-                      ))}
-                      <Space>
-                        <Button onClick={() => setShortcutHelpOpen(true)}>{t('shortcutCheatsheet')}</Button>
-                        <Button
-                          onClick={() => {
-                            setShortcutDraft({ ...DEFAULT_SHORTCUT_BINDINGS })
-                          }}
-                        >
-                          {t('shortcutResetDefaults')}
-                        </Button>
-                      </Space>
-                    </Space>
-
                     <Divider />
                     <Typography.Title level={5}>{t('grpDownload')}</Typography.Title>
                     <div className="grid-2">
@@ -265,195 +219,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </Space>
 
                     <Divider />
-                    <Typography.Title level={5}>{t('grpAria2')}</Typography.Title>
-                    <Form.Item name="aria2_bin_path" label={t('aria2Path')}>
-                      <Input />
-                    </Form.Item>
-                    <Space style={{ marginBottom: 12 }}>
-                      <Button onClick={browseAria2Path}>{t('browse')}</Button>
-                      <Button onClick={detectAria2Path}>{t('detectAria2')}</Button>
-                      <Button onClick={loadSettings}>{t('reload')}</Button>
-                      <Button onClick={openImportExport}>{t('importExport')}</Button>
-                    </Space>
-                    <Form.Item name="enable_upnp" label={t('enableUpnp')} valuePropName="checked">
-                      <Switch />
-                    </Form.Item>
-
-                    <Divider />
-                    <Typography.Title level={5}>{t('grpIntegration')}</Typography.Title>
-                    <div className="grid-2">
-                      <Form.Item name="github_cdn" label={t('githubCdn')}>
-                        <Input />
-                      </Form.Item>
-                      <Form.Item name="github_token" label={t('githubToken')}>
-                        <Input.Password />
-                      </Form.Item>
-                      <Form.Item name="browser_bridge_enabled" label={t('bridgeEnabled')} valuePropName="checked">
-                        <Switch />
-                      </Form.Item>
-                      <Form.Item name="browser_bridge_port" label={t('bridgePort')}>
-                        <InputNumber min={1} max={65535} style={{ width: '100%' }} />
-                      </Form.Item>
-                    </div>
-                    <Form.Item name="browser_bridge_token" label={t('bridgeToken')}>
-                      <Input />
-                    </Form.Item>
-                    <Form.Item name="browser_bridge_allowed_origins" label={t('bridgeAllowedOrigins')}>
-                      <Input placeholder="chrome-extension://,moz-extension://" />
-                    </Form.Item>
-                    <Form.Item name="local_api_scopes" label={t('localApiScopes')}>
-                      <Select
-                        mode="multiple"
-                        options={[
-                          { label: t('localApiScopeRead'), value: 'read' },
-                          { label: t('localApiScopeAdd'), value: 'add' },
-                          { label: t('localApiScopeControl'), value: 'control' },
-                        ]}
-                      />
-                    </Form.Item>
-                    <Space wrap style={{ marginBottom: 8 }}>
-                      <Button loading={bridgeChecking} onClick={checkBridgeStatus}>
-                        {t('bridgeCheck')}
-                      </Button>
-                      <Button onClick={rotateBrowserBridgeToken}>
-                        {t('rotateBridgeToken')}
-                      </Button>
-                      <Button
-                        loading={bridgeChecking}
-                        onClick={async () => {
-                          await saveSettings()
-                          await checkBridgeStatus()
-                        }}
-                      >
-                        {t('bridgeReconnect')}
-                      </Button>
-                      <Button onClick={() => setBridgeWizardOpen(true)}>{t('bridgePairWizard')}</Button>
-                      <Tag color={bridgeStatus?.connected ? 'green' : 'orange'}>
-                        {t('bridgeStatus')}: {bridgeStatus?.connected ? t('bridgeConnected') : t('bridgeDisconnected')}
-                      </Tag>
-                    </Space>
-                    <Typography.Text type="secondary" style={{ display: 'block', marginTop: -4, marginBottom: 8 }}>
-                      {bridgeStatus?.endpoint ? `${bridgeStatus.endpoint} - ${bridgeStatus.message}` : bridgeStatus?.message || '-'}
-                    </Typography.Text>
-                    <Typography.Text strong style={{ display: 'block', marginBottom: 6 }}>
-                      {t('localApiRecentUsage')}
-                    </Typography.Text>
-                    <Space direction="vertical" style={{ width: '100%', marginBottom: 8 }}>
-                      {localApiRecentActivity.length === 0 ? (
-                        <Typography.Text type="secondary">-</Typography.Text>
-                      ) : (
-                        localApiRecentActivity.map((log, idx) => (
-                          <Typography.Text key={`${log.ts}-${idx}`} type="secondary">
-                            [{new Date((log.ts || 0) * 1000).toLocaleString()}] {log.action}: {log.message}
-                          </Typography.Text>
-                        ))
-                      )}
-                    </Space>
-                    <Form.Item name="clipboard_watch_enabled" label={t('clipboardWatchEnabled')} valuePropName="checked">
-                      <Switch />
-                    </Form.Item>
-
-                    <Divider />
-                    <Typography.Title level={5}>{t('grpReliability')}</Typography.Title>
-                    <div className="grid-2">
-                      <Form.Item name="retry_max_attempts" label={t('retryMaxAttempts')}>
-                        <InputNumber min={0} max={20} style={{ width: '100%' }} />
-                      </Form.Item>
-                      <Form.Item name="retry_backoff_secs" label={t('retryBackoff')}>
-                        <InputNumber min={1} max={3600} style={{ width: '100%' }} />
-                      </Form.Item>
-                      <Form.Item name="metadata_timeout_secs" label={t('metadataTimeout')}>
-                        <InputNumber min={30} max={3600} style={{ width: '100%' }} />
-                      </Form.Item>
-                    </div>
-                    <Form.Item name="retry_fallback_mirrors" label={t('retryMirrors')}>
-                      <Input.TextArea rows={2} placeholder="https://mirror1.example.com\nhttps://mirror2.example.com" />
-                    </Form.Item>
-                    <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
-                      {t('speedPlan')}
-                    </Typography.Text>
-                    <Space wrap style={{ marginBottom: 10 }}>
-                      <Typography.Text type="secondary">{t('scheduleMode')}</Typography.Text>
-                      <Select
-                        style={{ width: 260 }}
-                        value={speedPlanMode}
-                        onChange={(v) => onSpeedPlanModeChange(v as SpeedPlanMode)}
-                        options={[
-                          { label: t('scheduleManual'), value: 'manual' },
-                          { label: t('scheduleOff'), value: 'off' },
-                          { label: t('scheduleWorkdayLimited'), value: 'workday_limited' },
-                          { label: t('scheduleNightBoost'), value: 'night_boost' },
-                        ]}
-                      />
-                    </Space>
-                    <Form.List name="speed_plan_rules">
-                      {(fields, { add, remove }) => (
-                        <Space direction="vertical" style={{ width: '100%' }}>
-                          {fields.map((field) => (
-                            <Card key={field.key} size="small">
-                              <div className="grid-rule">
-                                <Form.Item name={[field.name, 'days']} label={t('speedDays')}>
-                                  <Input placeholder="1,2,3,4,5 (Mon=1..Sun=7)" />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'start']} label={t('speedStart')}>
-                                  <Input placeholder="09:00" />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'end']} label={t('speedEnd')}>
-                                  <Input placeholder="18:00" />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'limit']} label={t('speedLimit')}>
-                                  <Input placeholder="0 / 2M / 10M" />
-                                </Form.Item>
-                              </div>
-                              <Button danger onClick={() => remove(field.name)}>
-                                {t('removeRule')}
-                              </Button>
-                            </Card>
-                          ))}
-                          <Button
-                            icon={<PlusOutlined />}
-                            onClick={() =>
-                              add({
-                                days: '',
-                                start: '',
-                                end: '',
-                                limit: '0',
-                              })
-                            }
-                          >
-                            {t('addRule')}
-                          </Button>
-                        </Space>
-                      )}
-                    </Form.List>
-                    <Form.Item name="speed_plan" hidden>
-                      <Input />
-                    </Form.Item>
-                    <Form.Item
-                      name="auto_delete_control_files"
-                      label={t('autoDeleteControlFiles')}
-                      valuePropName="checked"
-                    >
-                      <Switch />
-                    </Form.Item>
-                    <Form.Item name="auto_clear_completed_days" label={t('autoClearCompletedDays')}>
-                      <InputNumber min={0} max={3650} style={{ width: '100%' }} />
-                    </Form.Item>
-                    <Form.Item name="completion_webhook_url" label={t('completionWebhookUrl')}>
-                      <Input placeholder="http://127.0.0.1:9000/hooks/flamingo" />
-                    </Form.Item>
-                    <Form.Item name="completion_command" label={t('completionCommand')}>
-                      <Input placeholder="python script.py --event {event} --task {task_id}" />
-                    </Form.Item>
-                    <Form.Item
-                      name="completion_hook_on_error"
-                      label={t('completionHookOnError')}
-                      valuePropName="checked"
-                    >
-                      <Switch />
-                    </Form.Item>
-
-                    <Divider />
                     <Typography.Title level={5}>{isMac ? t('trayPrefsMac') : t('trayPrefs')}</Typography.Title>
                     <div className="grid-2">
                       <Form.Item name="start_minimized" label={t('startMinimized')} valuePropName="checked">
@@ -489,120 +254,377 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         />
                       </Form.Item>
                     </div>
-                    <Space style={{ marginBottom: 8 }}>
-                      <Button onClick={resetUiLayout}>{t('resetUiLayout')}</Button>
-                      <Button danger onClick={resetSettingsToDefaults}>{t('resetSettingsDefaults')}</Button>
-                    </Space>
+                    <Divider />
+                    <Collapse
+                      className="settings-advanced-collapse"
+                      size="small"
+                      items={[
+                        {
+                          key: 'advanced',
+                          label: t('advancedSettings'),
+                          children: (
+                            <>
+                              <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+                                {t('advancedSettingsHint')}
+                              </Typography.Text>
+                              <Typography.Title level={5}>{t('grpShortcuts')}</Typography.Title>
+                              <Typography.Text type="secondary" style={{ display: 'block', marginTop: -6, marginBottom: 8 }}>
+                                {t('shortcutHint')}
+                              </Typography.Text>
+                              {isMac && (
+                                <Form.Item label={t('shortcutDisplayMode')} style={{ maxWidth: 260, marginBottom: 10 }}>
+                                  <Select
+                                    value={shortcutDisplayMode}
+                                    onChange={(v) => {
+                                      const mode = v === 'symbol' ? 'symbol' : 'text'
+                                      setShortcutDisplayMode(mode)
+                                      saveShortcutDisplayMode(mode)
+                                    }}
+                                    options={[
+                                      { label: t('shortcutDisplayText'), value: 'text' },
+                                      { label: t('shortcutDisplaySymbol'), value: 'symbol' },
+                                    ]}
+                                  />
+                                </Form.Item>
+                              )}
+                              <Space direction="vertical" style={{ width: '100%' }}>
+                                {shortcutItems.map((item) => (
+                                  <div key={item.key} className="grid-2" style={{ alignItems: 'center' }}>
+                                    <Typography.Text>{item.label}</Typography.Text>
+                                    <Space.Compact block>
+                                      <Input
+                                        value={displayShortcut(shortcutDraft[item.key])}
+                                        readOnly
+                                        placeholder={t('shortcutPress')}
+                                      />
+                                      <Button onClick={() => openShortcutEditor(item.key)}>{t('shortcutEdit')}</Button>
+                                      <Button onClick={() => setShortcutBinding(item.key, '')}>{t('shortcutClear')}</Button>
+                                    </Space.Compact>
+                                  </div>
+                                ))}
+                                <Space>
+                                  <Button onClick={() => setShortcutHelpOpen(true)}>{t('shortcutCheatsheet')}</Button>
+                                  <Button
+                                    onClick={() => {
+                                      setShortcutDraft({ ...DEFAULT_SHORTCUT_BINDINGS })
+                                    }}
+                                  >
+                                    {t('shortcutResetDefaults')}
+                                  </Button>
+                                </Space>
+                              </Space>
 
-                    <Divider />
-                    <Typography.Title level={5}>{t('rulesTitle')}</Typography.Title>
-                    <Form.List name="download_dir_rules">
-                      {(fields, { add, remove }) => (
-                        <Space direction="vertical" style={{ width: '100%' }}>
-                          {fields.map((field) => (
-                            <Card key={field.key} size="small">
-                              <div className="grid-rule">
-                                <Form.Item name={[field.name, 'enabled']} label={t('enabled')} valuePropName="checked">
+                              <Divider />
+                              <Typography.Title level={5}>{t('grpAria2')}</Typography.Title>
+                              <Form.Item name="aria2_bin_path" label={t('aria2Path')}>
+                                <Input />
+                              </Form.Item>
+                              <Space style={{ marginBottom: 12 }}>
+                                <Button onClick={browseAria2Path}>{t('browse')}</Button>
+                                <Button onClick={detectAria2Path}>{t('detectAria2')}</Button>
+                                <Button onClick={loadSettings}>{t('reload')}</Button>
+                                <Button onClick={openImportExport}>{t('importExport')}</Button>
+                              </Space>
+                              <Form.Item name="enable_upnp" label={t('enableUpnp')} valuePropName="checked">
+                                <Switch />
+                              </Form.Item>
+
+                              <Divider />
+                              <Typography.Title level={5}>{t('grpIntegration')}</Typography.Title>
+                              <div className="grid-2">
+                                <Form.Item name="github_cdn" label={t('githubCdn')}>
+                                  <Input />
+                                </Form.Item>
+                                <Form.Item name="github_token" label={t('githubToken')}>
+                                  <Input.Password />
+                                </Form.Item>
+                                <Form.Item name="browser_bridge_enabled" label={t('bridgeEnabled')} valuePropName="checked">
                                   <Switch />
                                 </Form.Item>
-                                <Form.Item name={[field.name, 'matcher']} label={t('matcher')}>
-                                  <Select
-                                    options={[
-                                      { label: 'ext', value: 'ext' },
-                                      { label: 'domain', value: 'domain' },
-                                      { label: 'type', value: 'type' },
-                                    ]}
-                                  />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'pattern']} label={t('pattern')}>
-                                  <Input placeholder="mp4,mkv or github.com or torrent" />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'save_dir']} label={t('saveDir')}>
-                                  <Input placeholder="/path/to/save" />
-                                </Form.Item>
-                                <Form.Item
-                                  name={[field.name, 'subdir_by_domain']}
-                                  label={t('subdirByDomain')}
-                                  valuePropName="checked"
-                                >
-                                  <Switch />
-                                </Form.Item>
-                                <Form.Item
-                                  name={[field.name, 'subdir_by_date']}
-                                  label={t('subdirByDate')}
-                                  valuePropName="checked"
-                                >
-                                  <Switch />
+                                <Form.Item name="browser_bridge_port" label={t('bridgePort')}>
+                                  <InputNumber min={1} max={65535} style={{ width: '100%' }} />
                                 </Form.Item>
                               </div>
-                              <Button danger onClick={() => remove(field.name)}>
-                                {t('removeRule')}
-                              </Button>
-                            </Card>
-                          ))}
-                          <Button
-                            icon={<PlusOutlined />}
-                            onClick={() =>
-                              add({
-                                enabled: true,
-                                matcher: 'ext',
-                                subdir_by_domain: false,
-                                subdir_by_date: false,
-                              })
-                            }
-                          >
-                            {t('addRule')}
-                          </Button>
-                        </Space>
-                      )}
-                    </Form.List>
-                    <Divider />
-                    <Typography.Title level={5}>{t('categoryRulesTitle')}</Typography.Title>
-                    <Form.List name="category_rules">
-                      {(fields, { add, remove }) => (
-                        <Space direction="vertical" style={{ width: '100%' }}>
-                          {fields.map((field) => (
-                            <Card key={field.key} size="small">
-                              <div className="grid-rule">
-                                <Form.Item name={[field.name, 'enabled']} label={t('enabled')} valuePropName="checked">
-                                  <Switch />
+                              <Form.Item name="browser_bridge_token" label={t('bridgeToken')}>
+                                <Input />
+                              </Form.Item>
+                              <Form.Item name="browser_bridge_allowed_origins" label={t('bridgeAllowedOrigins')}>
+                                <Input placeholder="chrome-extension://,moz-extension://" />
+                              </Form.Item>
+                              <Form.Item name="local_api_scopes" label={t('localApiScopes')}>
+                                <Select
+                                  mode="multiple"
+                                  options={[
+                                    { label: t('localApiScopeRead'), value: 'read' },
+                                    { label: t('localApiScopeAdd'), value: 'add' },
+                                    { label: t('localApiScopeControl'), value: 'control' },
+                                  ]}
+                                />
+                              </Form.Item>
+                              <Space wrap style={{ marginBottom: 8 }}>
+                                <Button loading={bridgeChecking} onClick={checkBridgeStatus}>
+                                  {t('bridgeCheck')}
+                                </Button>
+                                <Button onClick={rotateBrowserBridgeToken}>
+                                  {t('rotateBridgeToken')}
+                                </Button>
+                                <Button
+                                  loading={bridgeChecking}
+                                  onClick={async () => {
+                                    await saveSettings()
+                                    await checkBridgeStatus()
+                                  }}
+                                >
+                                  {t('bridgeReconnect')}
+                                </Button>
+                                <Button onClick={() => setBridgeWizardOpen(true)}>{t('bridgePairWizard')}</Button>
+                                <Tag color={bridgeStatus?.connected ? 'green' : 'orange'}>
+                                  {t('bridgeStatus')}:{' '}
+                                  {bridgeStatus?.connected ? t('bridgeConnected') : t('bridgeDisconnected')}
+                                </Tag>
+                              </Space>
+                              <Typography.Text type="secondary" style={{ display: 'block', marginTop: -4, marginBottom: 8 }}>
+                                {bridgeStatus?.endpoint ? `${bridgeStatus.endpoint} - ${bridgeStatus.message}` : bridgeStatus?.message || '-'}
+                              </Typography.Text>
+                              <Typography.Text strong style={{ display: 'block', marginBottom: 6 }}>
+                                {t('localApiRecentUsage')}
+                              </Typography.Text>
+                              <Space direction="vertical" style={{ width: '100%', marginBottom: 8 }}>
+                                {localApiRecentActivity.length === 0 ? (
+                                  <Typography.Text type="secondary">-</Typography.Text>
+                                ) : (
+                                  localApiRecentActivity.map((log, idx) => (
+                                    <Typography.Text key={`${log.ts}-${idx}`} type="secondary">
+                                      [{new Date((log.ts || 0) * 1000).toLocaleString()}] {log.action}: {log.message}
+                                    </Typography.Text>
+                                  ))
+                                )}
+                              </Space>
+                              <Form.Item name="clipboard_watch_enabled" label={t('clipboardWatchEnabled')} valuePropName="checked">
+                                <Switch />
+                              </Form.Item>
+
+                              <Divider />
+                              <Typography.Title level={5}>{t('grpReliability')}</Typography.Title>
+                              <div className="grid-2">
+                                <Form.Item name="retry_max_attempts" label={t('retryMaxAttempts')}>
+                                  <InputNumber min={0} max={20} style={{ width: '100%' }} />
                                 </Form.Item>
-                                <Form.Item name={[field.name, 'matcher']} label={t('matcher')}>
-                                  <Select
-                                    options={[
-                                      { label: 'ext', value: 'ext' },
-                                      { label: 'domain', value: 'domain' },
-                                      { label: 'type', value: 'type' },
-                                    ]}
-                                  />
+                                <Form.Item name="retry_backoff_secs" label={t('retryBackoff')}>
+                                  <InputNumber min={1} max={3600} style={{ width: '100%' }} />
                                 </Form.Item>
-                                <Form.Item name={[field.name, 'pattern']} label={t('pattern')}>
-                                  <Input placeholder="mp4,mkv or github.com or torrent" />
-                                </Form.Item>
-                                <Form.Item name={[field.name, 'category']} label={t('categoryName')}>
-                                  <Input placeholder="video / docs / work" />
+                                <Form.Item name="metadata_timeout_secs" label={t('metadataTimeout')}>
+                                  <InputNumber min={30} max={3600} style={{ width: '100%' }} />
                                 </Form.Item>
                               </div>
-                              <Button danger onClick={() => remove(field.name)}>
-                                {t('removeRule')}
-                              </Button>
-                            </Card>
-                          ))}
-                          <Button
-                            icon={<PlusOutlined />}
-                            onClick={() =>
-                              add({
-                                enabled: true,
-                                matcher: 'ext',
-                                category: '',
-                              })
-                            }
-                          >
-                            {t('addRule')}
-                          </Button>
-                        </Space>
-                      )}
-                    </Form.List>
+                              <Form.Item name="retry_fallback_mirrors" label={t('retryMirrors')}>
+                                <Input.TextArea rows={2} placeholder="https://mirror1.example.com\nhttps://mirror2.example.com" />
+                              </Form.Item>
+                              <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+                                {t('speedPlan')}
+                              </Typography.Text>
+                              <Space wrap style={{ marginBottom: 10 }}>
+                                <Typography.Text type="secondary">{t('scheduleMode')}</Typography.Text>
+                                <Select
+                                  style={{ width: 260 }}
+                                  value={speedPlanMode}
+                                  onChange={(v) => onSpeedPlanModeChange(v as SpeedPlanMode)}
+                                  options={[
+                                    { label: t('scheduleManual'), value: 'manual' },
+                                    { label: t('scheduleOff'), value: 'off' },
+                                    { label: t('scheduleWorkdayLimited'), value: 'workday_limited' },
+                                    { label: t('scheduleNightBoost'), value: 'night_boost' },
+                                  ]}
+                                />
+                              </Space>
+                              <Form.List name="speed_plan_rules">
+                                {(fields, { add, remove }) => (
+                                  <Space direction="vertical" style={{ width: '100%' }}>
+                                    {fields.map((field) => (
+                                      <Card key={field.key} size="small">
+                                        <div className="grid-rule">
+                                          <Form.Item name={[field.name, 'days']} label={t('speedDays')}>
+                                            <Input placeholder="1,2,3,4,5 (Mon=1..Sun=7)" />
+                                          </Form.Item>
+                                          <Form.Item name={[field.name, 'start']} label={t('speedStart')}>
+                                            <Input placeholder="09:00" />
+                                          </Form.Item>
+                                          <Form.Item name={[field.name, 'end']} label={t('speedEnd')}>
+                                            <Input placeholder="18:00" />
+                                          </Form.Item>
+                                          <Form.Item name={[field.name, 'limit']} label={t('speedLimit')}>
+                                            <Input placeholder="0 / 2M / 10M" />
+                                          </Form.Item>
+                                        </div>
+                                        <Button danger onClick={() => remove(field.name)}>
+                                          {t('removeRule')}
+                                        </Button>
+                                      </Card>
+                                    ))}
+                                    <Button
+                                      icon={<PlusOutlined />}
+                                      onClick={() =>
+                                        add({
+                                          days: '',
+                                          start: '',
+                                          end: '',
+                                          limit: '0',
+                                        })
+                                      }
+                                    >
+                                      {t('addRule')}
+                                    </Button>
+                                  </Space>
+                                )}
+                              </Form.List>
+                              <Form.Item name="speed_plan" hidden>
+                                <Input />
+                              </Form.Item>
+                              <Form.Item
+                                name="auto_delete_control_files"
+                                label={t('autoDeleteControlFiles')}
+                                valuePropName="checked"
+                              >
+                                <Switch />
+                              </Form.Item>
+                              <Form.Item name="auto_clear_completed_days" label={t('autoClearCompletedDays')}>
+                                <InputNumber min={0} max={3650} style={{ width: '100%' }} />
+                              </Form.Item>
+                              <Form.Item name="completion_webhook_url" label={t('completionWebhookUrl')}>
+                                <Input placeholder="http://127.0.0.1:9000/hooks/flamingo" />
+                              </Form.Item>
+                              <Form.Item name="completion_command" label={t('completionCommand')}>
+                                <Input placeholder="python script.py --event {event} --task {task_id}" />
+                              </Form.Item>
+                              <Form.Item
+                                name="completion_hook_on_error"
+                                label={t('completionHookOnError')}
+                                valuePropName="checked"
+                              >
+                                <Switch />
+                              </Form.Item>
+
+                              <Divider />
+                              <Typography.Title level={5}>{t('rulesTitle')}</Typography.Title>
+                              <Form.List name="download_dir_rules">
+                                {(fields, { add, remove }) => (
+                                  <Space direction="vertical" style={{ width: '100%' }}>
+                                    {fields.map((field) => (
+                                      <Card key={field.key} size="small">
+                                        <div className="grid-rule">
+                                          <Form.Item name={[field.name, 'enabled']} label={t('enabled')} valuePropName="checked">
+                                            <Switch />
+                                          </Form.Item>
+                                          <Form.Item name={[field.name, 'matcher']} label={t('matcher')}>
+                                            <Select
+                                              options={[
+                                                { label: 'ext', value: 'ext' },
+                                                { label: 'domain', value: 'domain' },
+                                                { label: 'type', value: 'type' },
+                                              ]}
+                                            />
+                                          </Form.Item>
+                                          <Form.Item name={[field.name, 'pattern']} label={t('pattern')}>
+                                            <Input placeholder="mp4,mkv or github.com or torrent" />
+                                          </Form.Item>
+                                          <Form.Item name={[field.name, 'save_dir']} label={t('saveDir')}>
+                                            <Input placeholder="/path/to/save" />
+                                          </Form.Item>
+                                          <Form.Item
+                                            name={[field.name, 'subdir_by_domain']}
+                                            label={t('subdirByDomain')}
+                                            valuePropName="checked"
+                                          >
+                                            <Switch />
+                                          </Form.Item>
+                                          <Form.Item
+                                            name={[field.name, 'subdir_by_date']}
+                                            label={t('subdirByDate')}
+                                            valuePropName="checked"
+                                          >
+                                            <Switch />
+                                          </Form.Item>
+                                        </div>
+                                        <Button danger onClick={() => remove(field.name)}>
+                                          {t('removeRule')}
+                                        </Button>
+                                      </Card>
+                                    ))}
+                                    <Button
+                                      icon={<PlusOutlined />}
+                                      onClick={() =>
+                                        add({
+                                          enabled: true,
+                                          matcher: 'ext',
+                                          subdir_by_domain: false,
+                                          subdir_by_date: false,
+                                        })
+                                      }
+                                    >
+                                      {t('addRule')}
+                                    </Button>
+                                  </Space>
+                                )}
+                              </Form.List>
+                              <Divider />
+                              <Typography.Title level={5}>{t('categoryRulesTitle')}</Typography.Title>
+                              <Form.List name="category_rules">
+                                {(fields, { add, remove }) => (
+                                  <Space direction="vertical" style={{ width: '100%' }}>
+                                    {fields.map((field) => (
+                                      <Card key={field.key} size="small">
+                                        <div className="grid-rule">
+                                          <Form.Item name={[field.name, 'enabled']} label={t('enabled')} valuePropName="checked">
+                                            <Switch />
+                                          </Form.Item>
+                                          <Form.Item name={[field.name, 'matcher']} label={t('matcher')}>
+                                            <Select
+                                              options={[
+                                                { label: 'ext', value: 'ext' },
+                                                { label: 'domain', value: 'domain' },
+                                                { label: 'type', value: 'type' },
+                                              ]}
+                                            />
+                                          </Form.Item>
+                                          <Form.Item name={[field.name, 'pattern']} label={t('pattern')}>
+                                            <Input placeholder="mp4,mkv or github.com or torrent" />
+                                          </Form.Item>
+                                          <Form.Item name={[field.name, 'category']} label={t('categoryName')}>
+                                            <Input placeholder="video / docs / work" />
+                                          </Form.Item>
+                                        </div>
+                                        <Button danger onClick={() => remove(field.name)}>
+                                          {t('removeRule')}
+                                        </Button>
+                                      </Card>
+                                    ))}
+                                    <Button
+                                      icon={<PlusOutlined />}
+                                      onClick={() =>
+                                        add({
+                                          enabled: true,
+                                          matcher: 'ext',
+                                          category: '',
+                                        })
+                                      }
+                                    >
+                                      {t('addRule')}
+                                    </Button>
+                                  </Space>
+                                )}
+                              </Form.List>
+
+                              <Divider />
+                              <Typography.Title level={5}>{t('advancedMaintenance')}</Typography.Title>
+                              <Space style={{ marginBottom: 8 }}>
+                                <Button onClick={resetUiLayout}>{t('resetUiLayout')}</Button>
+                                <Button danger onClick={resetSettingsToDefaults}>{t('resetSettingsDefaults')}</Button>
+                              </Space>
+                            </>
+                          ),
+                        },
+                      ]}
+                    />
                   </Form>
                 ),
               },

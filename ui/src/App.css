@@ -814,6 +814,21 @@ body.app-theme-dark .ant-dropdown .ant-dropdown-menu-item-selected {
   margin-bottom: 10px;
 }
 
+.settings-advanced-collapse {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(126, 148, 186, 0.22);
+}
+
+.settings-advanced-collapse .ant-collapse-content,
+.settings-advanced-collapse .ant-collapse-header {
+  background: transparent !important;
+}
+
+.root-layout.theme-dark .settings-advanced-collapse {
+  background: rgba(16, 24, 38, 0.28);
+  border-color: rgba(146, 174, 226, 0.26);
+}
+
 .shortcut-help-list {
   display: flex;
   flex-direction: column;
