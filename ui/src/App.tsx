@@ -106,6 +106,7 @@ import {
   shortcutFromKeyboardEvent,
   type ShortcutDisplayMode,
 } from './utils/shortcuts'
+import { buildTaskAnalytics, topEntries } from './utils/taskAnalytics'
 import { matchesTaskQuery } from './utils/taskQuery'
 import type { ShortcutAction, ShortcutBindings, ShortcutItem } from './types/shortcuts'
 import './App.css'
@@ -1010,6 +1011,9 @@ export default function App() {
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b))
   }, [tasks])
+  const historyAnalytics = useMemo(() => buildTaskAnalytics(tasks), [tasks])
+  const topCategories = useMemo(() => topEntries(historyAnalytics.categoryCounts), [historyAnalytics])
+  const topDomains = useMemo(() => topEntries(historyAnalytics.domainCounts), [historyAnalytics])
 
   const list = useMemo(
     () => {
@@ -3054,6 +3058,25 @@ export default function App() {
                       {t('batchRemove')}
                     </Button>
                   </Space>
+                  {section === 'downloaded' && (
+                    <div className="history-summary">
+                      <Typography.Text type="secondary">
+                        {t('historySummary')}: {historyAnalytics.total} {t('tasks')}
+                      </Typography.Text>
+                      <Tag>{`${t('filterCompleted')}: ${historyAnalytics.statusCounts.completed || 0}`}</Tag>
+                      <Tag>{`${t('filterError')}: ${historyAnalytics.statusCounts.error || 0}`}</Tag>
+                      <Tag>{`${t('totalSize')}: ${fmtBytes(historyAnalytics.totalBytes)}`}</Tag>
+                      <Tag>{`${t('sizeLarge')}: ${
+                        historyAnalytics.sizeBuckets.large + historyAnalytics.sizeBuckets.huge
+                      }`}</Tag>
+                      {topCategories.map(([name, count]) => (
+                        <Tag key={`category-${name}`}>{`${t('categoryFilter')}: ${name} (${count})`}</Tag>
+                      ))}
+                      {topDomains.map(([name, count]) => (
+                        <Tag key={`domain-${name}`}>{`${t('domain')}: ${name} (${count})`}</Tag>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="task-table-wrap" ref={tableWrapRef}>
                   {!hasLoadedOnce && loading ? (
