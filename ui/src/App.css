@@ -274,6 +274,21 @@ body.app-platform-nonmac .root-layout.theme-dark {
   justify-content: flex-start;
 }
 
+.command-palette-item {
+  cursor: pointer;
+  border-radius: 8px;
+  padding-inline: 8px !important;
+}
+
+.command-palette-item:hover {
+  background: rgba(22, 119, 255, 0.08);
+}
+
+.command-palette-item.disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .content-status-bar {
   margin-top: 10px;
   border: 1px solid var(--glass-stroke-light);

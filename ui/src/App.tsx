@@ -44,6 +44,10 @@ import { readText as readClipboardText, writeText as writeClipboardText } from '
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import * as api from './api/client'
 import { ResizableTitle } from './components/ResizableTitle'
+import {
+  CommandPaletteDialog,
+  type CommandPaletteItem,
+} from './components/dialogs/CommandPaletteDialog'
 import { Sidebar } from './components/layout/Sidebar'
 import { TopHeader } from './components/layout/TopHeader'
 import { defaultLayoutFor, useTableLayout } from './hooks/useTableLayout'
@@ -410,6 +414,8 @@ export default function App() {
   const [shortcutCaptured, setShortcutCaptured] = useState('')
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false)
   const [shortcutHelpQuery, setShortcutHelpQuery] = useState('')
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+  const [commandPaletteQuery, setCommandPaletteQuery] = useState('')
   const [settingsTab, setSettingsTab] = useState('basic')
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [siderCollapsed, setSiderCollapsed] = useState(false)
@@ -1223,7 +1229,7 @@ export default function App() {
     }
   }, [msg, refresh, t, tasks])
 
-  const onGlobalClearCompleted = async () => {
+  const onGlobalClearCompleted = useCallback(async () => {
     Modal.confirm({
       title: t('clearCompleted'),
       content: t('clearCompletedConfirm'),
@@ -1241,7 +1247,7 @@ export default function App() {
         }
       },
     })
-  }
+  }, [msg, refresh, t, tasks])
 
   const onOpenFile = useCallback(async (task: Task) => {
     try {
@@ -2300,6 +2306,103 @@ export default function App() {
     ],
   )
 
+  const commandPaletteItems = useMemo<CommandPaletteItem[]>(
+    () => [
+      {
+        key: 'new_download',
+        label: t('newDownload'),
+        keywords: [t('addTask'), t('navDownloading')],
+        shortcut: displayShortcut(shortcutBindings.new_download),
+        run: () => performShortcutAction('new_download'),
+      },
+      {
+        key: 'focus_search',
+        label: t('shortcutFocusSearch'),
+        keywords: [t('search'), t('searchPlaceholder')],
+        shortcut: displayShortcut(shortcutBindings.focus_search),
+        run: () => performShortcutAction('focus_search'),
+      },
+      {
+        key: 'open_logs',
+        label: t('logsWindow'),
+        keywords: [t('shortcutOpenLogs')],
+        shortcut: displayShortcut(shortcutBindings.open_logs),
+        run: () => performShortcutAction('open_logs'),
+      },
+      {
+        key: 'open_settings',
+        label: t('settings'),
+        keywords: [t('shortcutOpenSettings')],
+        shortcut: displayShortcut(shortcutBindings.open_settings),
+        run: () => performShortcutAction('open_settings'),
+      },
+      {
+        key: 'switch_downloading',
+        label: t('navDownloading'),
+        keywords: [t('shortcutSwitchDownloading')],
+        shortcut: displayShortcut(shortcutBindings.switch_downloading),
+        run: () => performShortcutAction('switch_downloading'),
+      },
+      {
+        key: 'switch_downloaded',
+        label: t('navDownloaded'),
+        keywords: [t('shortcutSwitchDownloaded')],
+        shortcut: displayShortcut(shortcutBindings.switch_downloaded),
+        run: () => performShortcutAction('switch_downloaded'),
+      },
+      {
+        key: 'pause_all',
+        label: t('pauseAll'),
+        keywords: [t('shortcutPauseAll'), t('navDownloading')],
+        shortcut: displayShortcut(shortcutBindings.pause_all),
+        run: () => performShortcutAction('pause_all'),
+      },
+      {
+        key: 'resume_all',
+        label: t('resumeAll'),
+        keywords: [t('shortcutResumeAll'), t('navDownloading')],
+        shortcut: displayShortcut(shortcutBindings.resume_all),
+        run: () => performShortcutAction('resume_all'),
+      },
+      {
+        key: 'retry_failed',
+        label: t('retryFailed'),
+        keywords: [t('shortcutRetryFailed'), t('filterError')],
+        shortcut: displayShortcut(shortcutBindings.retry_failed),
+        run: () => performShortcutAction('retry_failed'),
+      },
+      {
+        key: 'clear_completed',
+        label: t('clearCompleted'),
+        keywords: [t('filterCompleted'), t('navDownloaded')],
+        disabled: tasks.every((task) => String(task.status).toLowerCase() !== 'completed'),
+        run: onGlobalClearCompleted,
+      },
+      {
+        key: 'refresh_list',
+        label: t('refresh'),
+        keywords: [t('shortcutRefreshList')],
+        shortcut: displayShortcut(shortcutBindings.refresh_list),
+        run: () => performShortcutAction('refresh_list'),
+      },
+      {
+        key: 'toggle_theme',
+        label: t('darkLight'),
+        keywords: [t('shortcutToggleTheme')],
+        shortcut: displayShortcut(shortcutBindings.toggle_theme),
+        run: () => performShortcutAction('toggle_theme'),
+      },
+    ],
+    [
+      displayShortcut,
+      onGlobalClearCompleted,
+      performShortcutAction,
+      shortcutBindings,
+      t,
+      tasks,
+    ],
+  )
+
   useEffect(() => {
     if (!shortcutEditorOpen) return
     const onKeyDown = (e: KeyboardEvent) => {
@@ -2339,6 +2442,11 @@ export default function App() {
           e.preventDefault()
           return
         }
+      }
+      if (mod && key === 'k') {
+        e.preventDefault()
+        setCommandPaletteOpen(true)
+        return
       }
       if (editing) return
       for (const action of Object.keys(shortcutBindings) as ShortcutAction[]) {
@@ -2790,6 +2898,7 @@ export default function App() {
               openLogsWindow={openLogsWindow}
               quickToggleTheme={quickToggleTheme}
               refresh={refresh}
+              openCommandPalette={() => setCommandPaletteOpen(true)}
               loading={loading}
             />
 
@@ -3082,6 +3191,15 @@ export default function App() {
             </Layout.Content>
           </Layout>
         </Layout>
+
+        <CommandPaletteDialog
+          open={commandPaletteOpen}
+          query={commandPaletteQuery}
+          items={commandPaletteItems}
+          t={t}
+          onQueryChange={setCommandPaletteQuery}
+          onClose={() => setCommandPaletteOpen(false)}
+        />
 
         <Suspense fallback={null}>
           <ShortcutEditorDialog

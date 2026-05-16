@@ -7,7 +7,7 @@
 ### P0 - Task Discovery and Large-list Workflow
 
 - [x] 支持任务列表高级查询语法：`status:error`、`type:video`、`domain:example.com`、`category:media`、`size:>1GB`
-- [ ] 增加全局命令面板，集中入口覆盖新建下载、聚焦搜索、打开日志、切换页面和批量动作
+- [x] 增加全局命令面板，集中入口覆盖新建下载、聚焦搜索、打开日志、切换页面和批量动作
 
 ### P1 - Media Provenance and Refresh
 
