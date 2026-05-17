@@ -344,6 +344,7 @@ export const I18N_KEYS = [
   "tabBasic",
   "tabDiagnostics",
   "tabMagnet",
+  "tabShortcuts",
   "tabTorrent",
   "tabUpdates",
   "tabUrl",

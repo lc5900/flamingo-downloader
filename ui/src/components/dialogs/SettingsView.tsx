@@ -124,6 +124,56 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   updateText,
   appUpdateStrategyText,
 }) => {
+  const shortcutSettings = (
+    <Space direction="vertical" style={{ width: '100%' }}>
+      <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+        {t('shortcutHint')}
+      </Typography.Text>
+      {isMac && (
+        <div className="grid-2" style={{ alignItems: 'center' }}>
+          <Typography.Text>{t('shortcutDisplayMode')}</Typography.Text>
+          <Select
+            style={{ maxWidth: 260 }}
+            value={shortcutDisplayMode}
+            onChange={(v) => {
+              const mode = v === 'symbol' ? 'symbol' : 'text'
+              setShortcutDisplayMode(mode)
+              saveShortcutDisplayMode(mode)
+            }}
+            options={[
+              { label: t('shortcutDisplayText'), value: 'text' },
+              { label: t('shortcutDisplaySymbol'), value: 'symbol' },
+            ]}
+          />
+        </div>
+      )}
+      {shortcutItems.map((item) => (
+        <div key={item.key} className="grid-2" style={{ alignItems: 'center' }}>
+          <Typography.Text>{item.label}</Typography.Text>
+          <Space.Compact block>
+            <Input
+              value={displayShortcut(shortcutDraft[item.key])}
+              readOnly
+              placeholder={t('shortcutPress')}
+            />
+            <Button onClick={() => openShortcutEditor(item.key)}>{t('shortcutEdit')}</Button>
+            <Button onClick={() => setShortcutBinding(item.key, '')}>{t('shortcutClear')}</Button>
+          </Space.Compact>
+        </div>
+      ))}
+      <Space>
+        <Button onClick={() => setShortcutHelpOpen(true)}>{t('shortcutCheatsheet')}</Button>
+        <Button
+          onClick={() => {
+            setShortcutDraft({ ...DEFAULT_SHORTCUT_BINDINGS })
+          }}
+        >
+          {t('shortcutResetDefaults')}
+        </Button>
+      </Space>
+    </Space>
+  )
+
   return (
     <Card
       className="main-card settings-card"
@@ -267,54 +317,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                               <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
                                 {t('advancedSettingsHint')}
                               </Typography.Text>
-                              <Typography.Title level={5}>{t('grpShortcuts')}</Typography.Title>
-                              <Typography.Text type="secondary" style={{ display: 'block', marginTop: -6, marginBottom: 8 }}>
-                                {t('shortcutHint')}
-                              </Typography.Text>
-                              {isMac && (
-                                <Form.Item label={t('shortcutDisplayMode')} style={{ maxWidth: 260, marginBottom: 10 }}>
-                                  <Select
-                                    value={shortcutDisplayMode}
-                                    onChange={(v) => {
-                                      const mode = v === 'symbol' ? 'symbol' : 'text'
-                                      setShortcutDisplayMode(mode)
-                                      saveShortcutDisplayMode(mode)
-                                    }}
-                                    options={[
-                                      { label: t('shortcutDisplayText'), value: 'text' },
-                                      { label: t('shortcutDisplaySymbol'), value: 'symbol' },
-                                    ]}
-                                  />
-                                </Form.Item>
-                              )}
-                              <Space direction="vertical" style={{ width: '100%' }}>
-                                {shortcutItems.map((item) => (
-                                  <div key={item.key} className="grid-2" style={{ alignItems: 'center' }}>
-                                    <Typography.Text>{item.label}</Typography.Text>
-                                    <Space.Compact block>
-                                      <Input
-                                        value={displayShortcut(shortcutDraft[item.key])}
-                                        readOnly
-                                        placeholder={t('shortcutPress')}
-                                      />
-                                      <Button onClick={() => openShortcutEditor(item.key)}>{t('shortcutEdit')}</Button>
-                                      <Button onClick={() => setShortcutBinding(item.key, '')}>{t('shortcutClear')}</Button>
-                                    </Space.Compact>
-                                  </div>
-                                ))}
-                                <Space>
-                                  <Button onClick={() => setShortcutHelpOpen(true)}>{t('shortcutCheatsheet')}</Button>
-                                  <Button
-                                    onClick={() => {
-                                      setShortcutDraft({ ...DEFAULT_SHORTCUT_BINDINGS })
-                                    }}
-                                  >
-                                    {t('shortcutResetDefaults')}
-                                  </Button>
-                                </Space>
-                              </Space>
-
-                              <Divider />
                               <Typography.Title level={5}>{t('grpAria2')}</Typography.Title>
                               <Form.Item name="aria2_bin_path" label={t('aria2Path')}>
                                 <Input />
@@ -627,6 +629,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     />
                   </Form>
                 ),
+              },
+              {
+                key: 'shortcuts',
+                label: t('tabShortcuts'),
+                children: shortcutSettings,
               },
               {
                 key: 'diagnostics',
