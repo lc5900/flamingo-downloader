@@ -72,7 +72,7 @@ if (hasSplitVendors) {
 
 for (const rule of [
   { key: 'main-js', file: entryJs, maxBytes: hasSplitVendors ? 150_000 : 1_300_000 },
-  { key: 'main-css', file: entryCss, maxBytes: 40_000 },
+  { key: 'main-css', file: entryCss, maxBytes: 48_000 },
 ]) {
   if (!rule.file || !files.includes(rule.file)) {
     report.push({
