@@ -76,6 +76,7 @@ import type {
   MediaMergeJob,
   OperationLog,
   SaveDirSuggestion,
+  SectionKey,
   StartupNotice,
   StartupSelfCheck,
   StorageSummary,
