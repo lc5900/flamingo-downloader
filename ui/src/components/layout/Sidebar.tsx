@@ -9,7 +9,7 @@ import {
   SafetyCertificateOutlined,
   SettingOutlined,
 } from '@ant-design/icons'
-import type { SectionKey, Task } from '../../types'
+import type { BrowserBridgeStatus, SectionKey, Task } from '../../types'
 import flamingoIcon from '../../../../src-tauri/icons/icon.png'
 
 interface SidebarProps {
@@ -23,6 +23,7 @@ interface SidebarProps {
   setSection: React.Dispatch<React.SetStateAction<SectionKey>>
   openSettings: () => void
   setSiderCollapsed: React.Dispatch<React.SetStateAction<boolean>>
+  bridgeStatus: BrowserBridgeStatus | null
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -36,6 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setSection,
   openSettings,
   setSiderCollapsed,
+  bridgeStatus,
 }) => {
   const activeCount = tasks.filter((x) => x.status !== 'completed').length
   const completedCount = tasks.filter((x) => x.status === 'completed').length
@@ -96,13 +98,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </Tooltip>
         <Tooltip title={siderCollapsed ? t('mediaDiscovery') : undefined} placement="right">
-          <button type="button" className="side-nav-item side-nav-item-muted" disabled>
+          <button
+            type="button"
+            className={`side-nav-item ${!settingsOpen && section === 'media_discovery' ? 'active' : ''}`}
+            onClick={() => {
+              setSettingsOpen(false)
+              setSection('media_discovery')
+            }}
+          >
             <CompassOutlined className="side-nav-icon" />
             {!siderCollapsed && <span className="side-nav-label">{t('mediaDiscovery')}</span>}
           </button>
         </Tooltip>
         <Tooltip title={siderCollapsed ? t('rules') : undefined} placement="right">
-          <button type="button" className="side-nav-item side-nav-item-muted" disabled>
+          <button
+            type="button"
+            className={`side-nav-item ${!settingsOpen && section === 'rules' ? 'active' : ''}`}
+            onClick={() => {
+              setSettingsOpen(false)
+              setSection('rules')
+            }}
+          >
             <SafetyCertificateOutlined className="side-nav-icon" />
             {!siderCollapsed && <span className="side-nav-label">{t('rules')}</span>}
           </button>
@@ -128,10 +144,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="side-footer">
         {!siderCollapsed && (
           <div className="side-connection-card">
-            <span className="side-connection-dot" />
+            <span className={`side-connection-dot ${bridgeStatus?.connected ? 'connected' : 'disconnected'}`} />
             <span>
-              <strong>{t('bridgeConnected')}</strong>
-              <small>DHT: {Math.max(0, activeCount * 11 + 532)}</small>
+              <strong>{bridgeStatus?.connected ? t('bridgeConnected') : t('bridgeDisconnected')}</strong>
+              {bridgeStatus?.endpoint && <small>{bridgeStatus.endpoint}</small>}
             </span>
           </div>
         )}

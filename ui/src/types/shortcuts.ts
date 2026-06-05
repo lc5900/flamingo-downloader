@@ -10,6 +10,8 @@ export type ShortcutAction =
   | 'retry_failed'
   | 'switch_downloading'
   | 'switch_downloaded'
+  | 'switch_media_discovery'
+  | 'switch_rules'
 
 export type ShortcutBindings = Record<ShortcutAction, string>
 

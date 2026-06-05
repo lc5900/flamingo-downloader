@@ -11,7 +11,7 @@ import {
   SearchOutlined,
   SyncOutlined,
 } from '@ant-design/icons'
-import type { Locale } from '../../types'
+import type { Locale, SectionKey } from '../../types'
 
 interface TopHeaderProps {
   t: (k: string) => string
@@ -25,6 +25,8 @@ interface TopHeaderProps {
   loading: boolean
   searchText: string
   setSearchText: (value: string) => void
+  section: SectionKey
+  setSection: (s: SectionKey) => void
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -39,13 +41,22 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   loading,
   searchText,
   setSearchText,
+  section,
+  setSection,
 }) => {
+  const sectionOrder: SectionKey[] = ['downloading', 'downloaded', 'media_discovery', 'rules']
+  const cycleSection = (direction: -1 | 1) => {
+    const idx = sectionOrder.indexOf(section)
+    const next = (idx + direction + sectionOrder.length) % sectionOrder.length
+    setSection(sectionOrder[next])
+  }
+
   return (
     <Layout.Header className="header">
       <div className="header-inner">
         <Space size={8} className="header-nav-controls">
-          <Button shape="circle" icon={<ArrowLeftOutlined />} aria-label="Back" />
-          <Button shape="circle" icon={<ArrowRightOutlined />} aria-label="Forward" />
+          <Button shape="circle" icon={<ArrowLeftOutlined />} aria-label="Back" onClick={() => cycleSection(-1)} />
+          <Button shape="circle" icon={<ArrowRightOutlined />} aria-label="Forward" onClick={() => cycleSection(1)} />
         </Space>
         <Input
           id="global-task-search-input"

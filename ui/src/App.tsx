@@ -56,6 +56,8 @@ import { defaultLayoutFor, useTableLayout } from './hooks/useTableLayout'
 import { detectLocale, I18N } from './i18n'
 import { DownloadedPage } from './pages/DownloadedPage'
 import { DownloadingPage } from './pages/DownloadingPage'
+import { MediaDiscoveryPage } from './pages/MediaDiscoveryPage'
+import { RulesPage } from './pages/RulesPage'
 import { useUiViewStore } from './stores/uiViewStore'
 import type {
   AddFormValues,
@@ -213,6 +215,8 @@ const DEFAULT_SHORTCUT_BINDINGS: ShortcutBindings = {
   retry_failed: 'CmdOrCtrl+Shift+F',
   switch_downloading: 'Alt+1',
   switch_downloaded: 'Alt+2',
+  switch_media_discovery: 'Alt+3',
+  switch_rules: 'Alt+4',
 }
 
 function loadShortcutBindings(): ShortcutBindings {
@@ -1827,6 +1831,23 @@ export default function App() {
     t,
   ])
 
+  const onCreateTasksFromUrls = useCallback(async (urls: string[], saveDir: string, category: string) => {
+    if (urls.length === 0) return
+    const options: Record<string, unknown> = {}
+    if (saveDir) options.save_dir = saveDir
+    if (category) options.category = category
+    for (const url of urls) {
+      const isMagnet = url.startsWith('magnet:')
+      if (isMagnet) {
+        await api.call('add_magnet', { magnet: url, options })
+      } else {
+        await api.call('add_url', { url, options })
+      }
+    }
+    msg.success(i18nFormat(t('taskAddedCount'), { count: urls.length }))
+    await refresh()
+  }, [msg, refresh, t])
+
   const onAddUrl = async () => {
     try {
       const values = await addForm.validateFields()
@@ -2062,6 +2083,8 @@ export default function App() {
     setTableLayouts({
       downloading: defaultLayoutFor('downloading'),
       downloaded: defaultLayoutFor('downloaded'),
+      media_discovery: defaultLayoutFor('media_discovery'),
+      rules: defaultLayoutFor('rules'),
     })
     setSearchText('')
     setStatusFilter('all')
@@ -2198,7 +2221,19 @@ export default function App() {
   const openAboutDialog = useCallback(() => {
     Modal.info({
       title: 'Flamingo Downloader',
-      content: 'Flamingo Downloader',
+      content: (
+        <div>
+          <p><strong>Flamingo Downloader</strong> v0.1.0</p>
+          <p>A cross-platform download manager built with Tauri + Rust + aria2.</p>
+          <p>Supports HTTP/HTTPS/FTP, magnet links, and .torrent files.</p>
+          <p>
+            GitHub:{' '}
+            <a href="https://github.com/lc5900/flamingo-downloader" target="_blank" rel="noreferrer">
+              github.com/lc5900/flamingo-downloader
+            </a>
+          </p>
+        </div>
+      ),
       okText: 'OK',
     })
   }, [])
@@ -2278,6 +2313,8 @@ export default function App() {
         { key: 'retry_failed', label: t('shortcutRetryFailed') },
         { key: 'switch_downloading', label: t('shortcutSwitchDownloading') },
         { key: 'switch_downloaded', label: t('shortcutSwitchDownloaded') },
+        { key: 'switch_media_discovery', label: t('switchMediaDiscovery') },
+        { key: 'switch_rules', label: t('switchRules') },
       ] as ShortcutItem[],
     [t],
   )
@@ -2336,7 +2373,7 @@ export default function App() {
           await onOpenAdd()
           break
         case 'focus_search': {
-          const el = document.getElementById('task-search-input') as HTMLInputElement | null
+          const el = document.getElementById('global-task-search-input') as HTMLInputElement | null
           el?.focus()
           break
         }
@@ -2368,6 +2405,14 @@ export default function App() {
         case 'switch_downloaded':
           setSettingsOpen(false)
           setSection('downloaded')
+          break
+        case 'switch_media_discovery':
+          setSettingsOpen(false)
+          setSection('media_discovery')
+          break
+        case 'switch_rules':
+          setSettingsOpen(false)
+          setSection('rules')
           break
         default:
           break
@@ -2429,6 +2474,18 @@ export default function App() {
         keywords: [t('shortcutSwitchDownloaded')],
         shortcut: displayShortcut(shortcutBindings.switch_downloaded),
         run: () => performShortcutAction('switch_downloaded'),
+      },
+      {
+        key: 'switch_media_discovery',
+        label: t('mediaDiscovery'),
+        keywords: [t('switchMediaDiscovery'), t('mediaDiscoveryTitle')],
+        run: () => performShortcutAction('switch_media_discovery'),
+      },
+      {
+        key: 'switch_rules',
+        label: t('rules'),
+        keywords: [t('switchRules'), t('rulesManagement')],
+        run: () => performShortcutAction('switch_rules'),
       },
       {
         key: 'pause_all',
@@ -2967,6 +3024,7 @@ export default function App() {
             setSection={setSection}
             openSettings={openSettings}
             setSiderCollapsed={setSiderCollapsed}
+            bridgeStatus={bridgeStatus}
           />
 
           <Layout>
@@ -2982,6 +3040,8 @@ export default function App() {
               loading={loading}
               searchText={searchText}
               setSearchText={setSearchText}
+              section={section}
+              setSection={setSection}
             />
 
             <Layout.Content
@@ -2997,7 +3057,13 @@ export default function App() {
               onDrop={onDropToAdd}
             >
               {dragHover && <div className="drop-hint">{t('dropHint')}</div>}
-              {!settingsOpen && (
+              {!settingsOpen && section === 'media_discovery' && (
+                <MediaDiscoveryPage t={t} onCreateTasks={onCreateTasksFromUrls} />
+              )}
+              {!settingsOpen && section === 'rules' && (
+                <RulesPage t={t} />
+              )}
+              {!settingsOpen && (section === 'downloading' || section === 'downloaded') && (
               <>
               <Suspense fallback={null}>
               <TaskPageShell>

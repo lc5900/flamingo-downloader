@@ -1,6 +1,6 @@
 export type Locale = 'en-US' | 'zh-CN'
 export type ThemeMode = 'system' | 'light' | 'dark'
-export type SectionKey = 'downloading' | 'downloaded'
+export type SectionKey = 'downloading' | 'downloaded' | 'media_discovery' | 'rules'
 export type MatcherType = 'ext' | 'domain' | 'type'
 
 export type Task = {

@@ -314,8 +314,6 @@
   "categoryRulesTitle": "分类自动打标规则",
   "categoryName": "分类名称",
   "importExport": "导入 / 导出",
-  "exportTasks": "导出任务列表",
-  "importTasks": "导入任务列表",
   "importExportTitle": "任务列表导入 / 导出",
   "exportResult": "导出 JSON",
   "importInput": "导入 JSON",
@@ -378,5 +376,18 @@
   "freeSpace": "可用空间",
   "duplicateDetectedTitle": "检测到重复来源",
   "duplicateDetectedContent": "已有 {count} 条相同来源任务，是否仍继续新增？",
-  "continueAdd": "继续新增"
+  "continueAdd": "继续新增",
+  "scanPage": "扫描页面",
+  "parseText": "解析文本",
+  "downloadSelected": "下载所选",
+  "noCandidates": "输入网址并点击扫描，发现可下载的媒体资源",
+  "mediaDiscoveryTitle": "媒体发现",
+  "downloadDirRules": "下载目录规则",
+  "categoryAutoTagRules": "分类自动打标规则",
+  "testRule": "测试规则",
+  "testUrlPlaceholder": "输入网址测试规则匹配...",
+  "saveRules": "保存规则",
+  "rulesManagement": "规则管理",
+  "switchMediaDiscovery": "切换到媒体发现",
+  "switchRules": "切换到规则管理"
 }

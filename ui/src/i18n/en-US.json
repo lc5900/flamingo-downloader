@@ -314,8 +314,6 @@
   "categoryRulesTitle": "Category Auto-tag Rules",
   "categoryName": "Category",
   "importExport": "Import / Export",
-  "exportTasks": "Export Task List",
-  "importTasks": "Import Task List",
   "importExportTitle": "Task List Import / Export",
   "exportResult": "Exported JSON",
   "importInput": "Import JSON",
@@ -378,5 +376,18 @@
   "freeSpace": "Free Space",
   "duplicateDetectedTitle": "Duplicate source detected",
   "duplicateDetectedContent": "{count} item(s) already exist. Continue adding anyway?",
-  "continueAdd": "Continue"
+  "continueAdd": "Continue",
+  "scanPage": "Scan Page",
+  "parseText": "Parse Text",
+  "downloadSelected": "Download Selected",
+  "noCandidates": "Enter a URL and click Scan to discover downloadable media",
+  "mediaDiscoveryTitle": "Media Discovery",
+  "downloadDirRules": "Download Directory Rules",
+  "categoryAutoTagRules": "Category Auto-tag Rules",
+  "testRule": "Test Rule",
+  "testUrlPlaceholder": "Enter a URL to test against rules...",
+  "saveRules": "Save Rules",
+  "rulesManagement": "Rules Management",
+  "switchMediaDiscovery": "Switch to Media Discovery",
+  "switchRules": "Switch to Rules"
 }

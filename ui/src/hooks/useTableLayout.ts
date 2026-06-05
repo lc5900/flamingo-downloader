@@ -24,6 +24,18 @@ const DEFAULT_TABLE_LAYOUT: TableLayoutStore = {
     hiddenColumns: [],
     density: 'small',
   },
+  media_discovery: {
+    columnWidths: { ...DEFAULT_COLUMN_WIDTHS },
+    columnOrder: ['name', 'size', 'status', 'actions'],
+    hiddenColumns: [],
+    density: 'small',
+  },
+  rules: {
+    columnWidths: { ...DEFAULT_COLUMN_WIDTHS },
+    columnOrder: ['name', 'actions'],
+    hiddenColumns: [],
+    density: 'small',
+  },
 }
 
 export function defaultLayoutFor(section: SectionKey): TableLayout {
@@ -85,17 +97,23 @@ function loadTableLayoutStore(): TableLayoutStore {
       return {
         downloading: defaultLayoutFor('downloading'),
         downloaded: defaultLayoutFor('downloaded'),
+        media_discovery: defaultLayoutFor('media_discovery'),
+        rules: defaultLayoutFor('rules'),
       }
     }
     const parsed = JSON.parse(raw) as Partial<TableLayoutStore>
     return {
       downloading: sanitizeLayoutForSection('downloading', parsed?.downloading),
       downloaded: sanitizeLayoutForSection('downloaded', parsed?.downloaded),
+      media_discovery: sanitizeLayoutForSection('media_discovery', parsed?.media_discovery),
+      rules: sanitizeLayoutForSection('rules', parsed?.rules),
     }
   } catch {
     return {
       downloading: defaultLayoutFor('downloading'),
       downloaded: defaultLayoutFor('downloaded'),
+      media_discovery: defaultLayoutFor('media_discovery'),
+      rules: defaultLayoutFor('rules'),
     }
   }
 }
