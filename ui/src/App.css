@@ -1680,11 +1680,27 @@ body,
 .task-table-wrap {
   border: 1px solid #e6ebf3;
   border-radius: 14px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   background: #fff;
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+.task-table-wrap::-webkit-scrollbar {
+  height: 10px;
+}
+
+.task-table-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.task-table-wrap::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: rgba(126, 148, 186, 0.42);
+  background-clip: padding-box;
 }
 
 .task-table-wrap .ant-table-wrapper,
@@ -1699,15 +1715,43 @@ body,
 .task-table-wrap .ant-table {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: transparent !important;
 }
 
 .task-table-wrap .ant-table-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
+  background: transparent !important;
 }
 
 .task-table-wrap .ant-table-body,
 .task-table-wrap .ant-table-content {
+  flex: 1;
   min-height: 0;
+}
+
+.task-table-wrap .ant-table-content {
+  display: flex;
+  flex-direction: column;
+  overflow: visible !important;
+  background: transparent !important;
+}
+
+.task-table-wrap .ant-table {
+  min-width: 100%;
+}
+
+.task-table-wrap .ant-table-content > table {
+  flex: 0 0 auto;
+}
+
+.task-table-wrap .ant-table-placeholder > td,
+.task-table-wrap .ant-table-tbody > tr:last-child > td {
+  border-bottom: 0 !important;
 }
 
 .main-card .ant-table-thead > tr > th {

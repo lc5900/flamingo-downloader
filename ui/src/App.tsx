@@ -6,6 +6,7 @@ import {
   ConfigProvider,
   Divider,
   Drawer,
+  Dropdown,
   Empty,
   Form,
   Input,
@@ -32,8 +33,10 @@ import {
   ArrowDownOutlined,
   ArrowUpOutlined,
   DeleteOutlined,
+  DownOutlined,
   FileSearchOutlined,
   FolderOpenOutlined,
+  MoreOutlined,
   SlidersOutlined,
   VerticalAlignBottomOutlined,
   VerticalAlignTopOutlined,
@@ -1073,13 +1076,15 @@ export default function App() {
   const useVirtualTable = list.length > 150
   const tableScroll = useMemo(
     () =>
-      ({
-        x: section === 'downloaded' ? 720 : 840,
-        y: section === 'downloaded'
-          ? ('calc(100vh - 430px)' as const)
-          : ('calc(100vh - 390px)' as const),
-      }),
-    [section],
+      useVirtualTable
+        ? {
+            x: section === 'downloaded' ? 720 : 840,
+            y: '100%' as const,
+          }
+        : {
+            x: section === 'downloaded' ? 720 : 840,
+          },
+    [section, useVirtualTable],
   )
   const onRowSelectionChange = useCallback((keys: React.Key[]) => {
     setSelectedTaskIds(keys.map((k) => String(k)))
@@ -3074,15 +3079,6 @@ export default function App() {
                 >
                 <div className="list-toolbar">
                   <Space wrap className="list-toolbar-row">
-                    <Input
-                      id="task-search-input"
-                      allowClear
-                      value={searchText}
-                      onChange={(e) => setSearchText(e.target.value)}
-                      style={{ width: 300 }}
-                      placeholder={t('searchPlaceholder')}
-                      addonBefore={t('search')}
-                    />
                     <Select
                       style={{ width: 170 }}
                       value={statusFilter}
@@ -3141,30 +3137,50 @@ export default function App() {
                     <Button icon={<SlidersOutlined />} onClick={() => setLayoutOpen(true)}>
                       {t('layoutSettings')}
                     </Button>
-                  </Space>
-                  <Space wrap className="list-toolbar-row">
-                    {section === 'downloading' && (
-                      <>
-                        <Button size="small" onClick={onGlobalPauseAll}>{t('pauseAll')}</Button>
-                        <Button size="small" onClick={onGlobalResumeAll}>{t('resumeAll')}</Button>
-                        <Button size="small" onClick={onGlobalRetryFailed}>{t('retryFailed')}</Button>
-                      </>
-                    )}
-                    {section === 'downloaded' && (
-                      <Button size="small" danger onClick={onGlobalClearCompleted}>
-                        {t('clearCompleted')}
+                    <Dropdown
+                      menu={{
+                        items: [
+                          ...(section === 'downloading'
+                            ? [
+                                { key: 'pauseAll', label: t('pauseAll') },
+                                { key: 'resumeAll', label: t('resumeAll') },
+                                { key: 'retryFailed', label: t('retryFailed') },
+                              ]
+                            : [{ key: 'clearCompleted', label: t('clearCompleted'), danger: true }]),
+                          { type: 'divider' as const },
+                          {
+                            key: 'batchPause',
+                            label: t('batchPause'),
+                            disabled: visibleSelectedTaskIds.length === 0 || section === 'downloaded',
+                          },
+                          {
+                            key: 'batchResume',
+                            label: t('batchResume'),
+                            disabled: visibleSelectedTaskIds.length === 0 || section === 'downloaded',
+                          },
+                          {
+                            key: 'batchRemove',
+                            label: t('batchRemove'),
+                            danger: true,
+                            disabled: visibleSelectedTaskIds.length === 0,
+                          },
+                        ],
+                        onClick: ({ key }) => {
+                          if (key === 'pauseAll') void onGlobalPauseAll()
+                          if (key === 'resumeAll') void onGlobalResumeAll()
+                          if (key === 'retryFailed') void onGlobalRetryFailed()
+                          if (key === 'clearCompleted') void onGlobalClearCompleted()
+                          if (key === 'batchPause') void onBatchPause()
+                          if (key === 'batchResume') void onBatchResume()
+                          if (key === 'batchRemove') onRequestBatchRemove()
+                        },
+                      }}
+                    >
+                      <Button icon={<MoreOutlined />}>
+                        {t('moreActions')} <DownOutlined />
                       </Button>
-                    )}
+                    </Dropdown>
                     <Tag>{`${t('selectedCount')}: ${visibleSelectedTaskIds.length}`}</Tag>
-                    <Button size="small" onClick={onBatchPause} disabled={visibleSelectedTaskIds.length === 0 || section === 'downloaded'}>
-                      {t('batchPause')}
-                    </Button>
-                    <Button size="small" onClick={onBatchResume} disabled={visibleSelectedTaskIds.length === 0 || section === 'downloaded'}>
-                      {t('batchResume')}
-                    </Button>
-                    <Button size="small" danger onClick={onRequestBatchRemove} disabled={visibleSelectedTaskIds.length === 0}>
-                      {t('batchRemove')}
-                    </Button>
                   </Space>
                   {section === 'downloaded' && (
                     <div className="history-summary">

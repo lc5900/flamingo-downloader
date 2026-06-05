@@ -188,6 +188,7 @@ export const I18N_KEYS = [
   "metadataTimeout",
   "minimizeToTray",
   "minimizeToTrayMac",
+  "moreActions",
   "moveDown",
   "moveUp",
   "navDownloaded",
