@@ -26,7 +26,7 @@ export function normalizeThemeMode(v: unknown): ThemeMode {
   const x = String(v || '').toLowerCase()
   if (x === 'light' || x === 'dark') return x
   if (x === 'system') return x
-  return 'light'
+  return 'system'
 }
 
 export function normalizeSpeedPlanRules(input: unknown): SpeedPlanRuleInput[] {

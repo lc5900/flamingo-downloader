@@ -19,8 +19,7 @@ interface SidebarProps {
   section: SectionKey
   tasks: Task[]
   t: (k: string) => string
-  setSettingsOpen: (v: boolean) => void
-  setSection: React.Dispatch<React.SetStateAction<SectionKey>>
+  navigateToSection: (s: SectionKey) => void
   openSettings: () => void
   setSiderCollapsed: React.Dispatch<React.SetStateAction<boolean>>
   bridgeStatus: BrowserBridgeStatus | null
@@ -33,8 +32,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   section,
   tasks,
   t,
-  setSettingsOpen,
-  setSection,
+  navigateToSection,
   openSettings,
   setSiderCollapsed,
   bridgeStatus,
@@ -65,10 +63,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             className={`side-nav-item ${!settingsOpen && section === 'downloading' ? 'active' : ''}`}
-            onClick={() => {
-              setSettingsOpen(false)
-              setSection('downloading')
-            }}
+            onClick={() => navigateToSection('downloading')}
           >
             <DownloadOutlined className="side-nav-icon" />
             {!siderCollapsed && (
@@ -83,10 +78,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             className={`side-nav-item ${!settingsOpen && section === 'downloaded' ? 'active' : ''}`}
-            onClick={() => {
-              setSettingsOpen(false)
-              setSection('downloaded')
-            }}
+            onClick={() => navigateToSection('downloaded')}
           >
             <FileDoneOutlined className="side-nav-icon" />
             {!siderCollapsed && (
@@ -101,10 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             className={`side-nav-item ${!settingsOpen && section === 'media_discovery' ? 'active' : ''}`}
-            onClick={() => {
-              setSettingsOpen(false)
-              setSection('media_discovery')
-            }}
+            onClick={() => navigateToSection('media_discovery')}
           >
             <CompassOutlined className="side-nav-icon" />
             {!siderCollapsed && <span className="side-nav-label">{t('mediaDiscovery')}</span>}
@@ -114,10 +103,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             className={`side-nav-item ${!settingsOpen && section === 'rules' ? 'active' : ''}`}
-            onClick={() => {
-              setSettingsOpen(false)
-              setSection('rules')
-            }}
+            onClick={() => navigateToSection('rules')}
           >
             <SafetyCertificateOutlined className="side-nav-icon" />
             {!siderCollapsed && <span className="side-nav-label">{t('rules')}</span>}

@@ -432,6 +432,10 @@ export default function App() {
   const [removeTask, setRemoveTask] = useState<Task | null>(null)
   const [removeTaskIds, setRemoveTaskIds] = useState<string[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const navigateToSection = useCallback((target: SectionKey) => {
+    setSettingsOpen(false)
+    setSection(target)
+  }, [setSection])
   const [windowMoving, setWindowMoving] = useState(false)
   const [shortcutBindings, setShortcutBindings] = useState<ShortcutBindings>(() => loadShortcutBindings())
   const [shortcutDraft, setShortcutDraft] = useState<ShortcutBindings>(() => loadShortcutBindings())
@@ -2404,20 +2408,16 @@ export default function App() {
           await onGlobalRetryFailed()
           break
         case 'switch_downloading':
-          setSettingsOpen(false)
-          setSection('downloading')
+          navigateToSection('downloading')
           break
         case 'switch_downloaded':
-          setSettingsOpen(false)
-          setSection('downloaded')
+          navigateToSection('downloaded')
           break
         case 'switch_media_discovery':
-          setSettingsOpen(false)
-          setSection('media_discovery')
+          navigateToSection('media_discovery')
           break
         case 'switch_rules':
-          setSettingsOpen(false)
-          setSection('rules')
+          navigateToSection('rules')
           break
         default:
           break
@@ -2432,7 +2432,7 @@ export default function App() {
       onGlobalPauseAll,
       onGlobalResumeAll,
       onGlobalRetryFailed,
-      setSection,
+      navigateToSection,
     ],
   )
 
@@ -3025,8 +3025,7 @@ export default function App() {
             section={section}
             tasks={tasks}
             t={t}
-            setSettingsOpen={setSettingsOpen}
-            setSection={setSection}
+            navigateToSection={navigateToSection}
             openSettings={openSettings}
             setSiderCollapsed={setSiderCollapsed}
             bridgeStatus={bridgeStatus}
