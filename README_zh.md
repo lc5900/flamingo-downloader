@@ -29,15 +29,35 @@ English README: [`README.md`](README.md)
 
 最新截图位于 `docs/screenshots/`。
 
-### 主界面
+### 主界面（下载中）
 
-![主界面](docs/screenshots/main-overview.png)
+![主界面 - 下载中](docs/screenshots/main-overview.png)
 
-当前主界面采用浅色 Flamingo 桌面布局：品牌侧栏、顶部搜索与操作按钮、任务表格，以及用于桥接状态、存储空间和快捷系统操作的右侧概览栏。
+主界面采用浅色 Flamingo 桌面布局：品牌侧栏、顶部搜索与操作按钮、任务表格、状态概览卡片，以及用于网络、存储和快捷操作的右侧洞察面板。
+
+### 主界面（已下载）
+
+![主界面 - 已下载](docs/screenshots/main-downloaded.png)
+
+已下载视图展示已完成任务，含历史统计摘要和归档/最近切换。
 
 ### 新建下载
 
 ![新建下载](docs/screenshots/add-download-modal.png)
+
+双栏标签式布局，支持 URL/磁力/种子模式，含预设、输出命名和高级选项。
+
+### 媒体发现
+
+![媒体发现](docs/screenshots/media-discovery.png)
+
+扫描网页中的可下载媒体资源，支持批量选择和下载操作。
+
+### 规则管理
+
+![规则管理](docs/screenshots/rules-management.png)
+
+独立页面管理下载目录规则和分类自动打标规则。
 
 ### 设置页
 

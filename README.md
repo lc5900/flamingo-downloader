@@ -29,15 +29,35 @@ Chinese README: [`README_zh.md`](README_zh.md)
 
 Latest screenshots are in `docs/screenshots/`.
 
-### Main
+### Main (Downloading)
 
-![Main Window](docs/screenshots/main-overview.png)
+![Main Window - Downloading](docs/screenshots/main-overview.png)
 
-The current main window uses a light Flamingo desktop layout: branded sidebar, toolbar search/actions, task table, and a compact overview panel for bridge status, storage, and quick system actions.
+The main window uses a light Flamingo desktop layout: branded sidebar, toolbar search/actions, task table, status overview cards, and a right-side insight panel for network, storage, and quick actions.
+
+### Main (Downloaded)
+
+![Main Window - Downloaded](docs/screenshots/main-downloaded.png)
+
+The downloaded view shows completed tasks with history summary statistics and archive/recent toggle.
 
 ### New Download
 
 ![Add Download](docs/screenshots/add-download-modal.png)
+
+Tabbed two-column layout with URL/Magnet/Torrent modes, presets, output naming, and advanced options.
+
+### Media Discovery
+
+![Media Discovery](docs/screenshots/media-discovery.png)
+
+Scan web pages for downloadable media resources with batch selection and download action.
+
+### Rules Management
+
+![Rules Management](docs/screenshots/rules-management.png)
+
+Dedicated page for managing download directory rules and category auto-tag rules.
 
 ### Settings
 
