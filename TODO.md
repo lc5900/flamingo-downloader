@@ -1,5 +1,26 @@
 # Flamingo Downloader TODO
 
+## 2026-06-06 UI Reference Completion
+
+Reference: `ChatGPT Image 2026年6月5日 23_07_22 (1).png` through `(7).png`.
+
+### P0 - Main Task Surfaces
+
+- [x] Add the four status overview cards above the task table for downloading/downloaded views.
+- [x] Expand the right insight panel to match the reference information groups: network/upload/download, today summary, storage directories, and quick actions.
+- [x] Keep horizontal table scrolling visually owned by the table container with no orphan divider or blank footer area.
+
+### P0 - Primary Workflows
+
+- [x] Rework the add-download dialog into a tabbed two-column layout with URL/Magnet/Torrent modes, upload dropzone, presets, output naming, merge format, rate limits, headers, checksum, and BT seeding controls visible in the same flow.
+- [x] Rework the task-detail drawer with a header identity area, tabbed detail sections, and a compact action rail.
+- [x] Give Media Discovery a persistent resource detail panel with selected item metadata and direct create/open actions.
+
+### P1 - Secondary Surfaces
+
+- [x] Bring Settings closer to the reference layout with left-side section navigation and top category cards while preserving existing settings coverage.
+- [x] Polish command palette, clipboard detection, drag-to-add, logs window, tray/about surfaces to match the reference visual language where platform APIs allow it. Tray menus remain native platform menus by design.
+
 ## 2026-05-16 Iteration
 
 参考 FDM/IDM/Gopeed/Motrix 等同类下载器的常见能力，当前已完成基础下载、批量添加、浏览器接管、本地 API 和发布质量闭环；下一轮重点放在大量任务下的检索、媒体来源追溯和历史复盘。

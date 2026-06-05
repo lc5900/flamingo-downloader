@@ -19,6 +19,7 @@ import {
   Space,
   Switch,
   Table,
+  Tabs,
   Tag,
   Tooltip,
   Tree,
@@ -32,14 +33,18 @@ import type { ColumnsType } from 'antd/es/table'
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
   DeleteOutlined,
   DownOutlined,
   FileSearchOutlined,
   FolderOpenOutlined,
   MoreOutlined,
+  PauseCircleOutlined,
   SlidersOutlined,
   VerticalAlignBottomOutlined,
   VerticalAlignTopOutlined,
+  WarningOutlined,
 } from '@ant-design/icons'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
@@ -850,6 +855,7 @@ export default function App() {
         if (!inferred) return
         clipboardPromptingRef.current = true
         Modal.confirm({
+          rootClassName: 'clipboard-detected-modal',
           title: t('clipboardDetectedTitle'),
           content: `${inferred.value}\n\n${t('clipboardDetectedUse')}`,
           onOk: async () => {
@@ -1108,6 +1114,50 @@ export default function App() {
     () => tasks.reduce((sum, task) => sum + Number(task.download_speed || 0), 0),
     [tasks],
   )
+  const taskStatusSummary = useMemo(() => {
+    let active = 0
+    let waiting = 0
+    let paused = 0
+    let error = 0
+    let completed = 0
+    let completedToday = 0
+    let completedBytes = 0
+    const dayStart = new Date()
+    dayStart.setHours(0, 0, 0, 0)
+    const dayStartTs = Math.floor(dayStart.getTime() / 1000)
+    for (const task of tasks) {
+      const status = String(task.status || '').toLowerCase()
+      if (status === 'completed') {
+        completed += 1
+        completedBytes += Number(task.total_length || task.completed_length || 0)
+        if (Number(task.updated_at || 0) >= dayStartTs) completedToday += 1
+      } else if (status === 'active' || Number(task.download_speed || 0) > 0) {
+        active += 1
+      } else if (status === 'paused') {
+        paused += 1
+      } else if (status === 'error') {
+        error += 1
+      } else {
+        waiting += 1
+      }
+    }
+    return { active, waiting, paused, error, completed, completedToday, completedBytes }
+  }, [tasks])
+  const activeSaveDirs = useMemo(() => {
+    const counts = new Map<string, { count: number; bytes: number }>()
+    for (const task of tasks) {
+      const dir = String(task.save_dir || '').trim()
+      if (!dir) continue
+      const prev = counts.get(dir) || { count: 0, bytes: 0 }
+      prev.count += 1
+      prev.bytes += Number(task.total_length || task.completed_length || 0)
+      counts.set(dir, prev)
+    }
+    return Array.from(counts.entries())
+      .map(([dir, meta]) => ({ dir, ...meta }))
+      .sort((a, b) => b.bytes - a.bytes || b.count - a.count)
+      .slice(0, 3)
+  }, [tasks])
 
   const quickToggleTheme = useCallback(async () => {
     let nextMode: ThemeMode = 'light'
@@ -2230,18 +2280,22 @@ export default function App() {
 
   const openAboutDialog = useCallback(() => {
     Modal.info({
+      rootClassName: 'about-flamingo-modal',
       title: 'Flamingo Downloader',
       content: (
-        <div>
-          <p><strong>Flamingo Downloader</strong> v0.1.0</p>
-          <p>A cross-platform download manager built with Tauri + Rust + aria2.</p>
-          <p>Supports HTTP/HTTPS/FTP, magnet links, and .torrent files.</p>
-          <p>
+        <div className="about-flamingo-content">
+          <div className="about-flamingo-mark">F</div>
+          <div>
+            <p><strong>Flamingo Downloader</strong> v0.1.0</p>
+            <p>A cross-platform download manager built with Tauri + Rust + aria2.</p>
+            <p>Supports HTTP/HTTPS/FTP, magnet links, and .torrent files.</p>
+            <p>
             GitHub:{' '}
             <a href="https://github.com/lc5900/flamingo-downloader" target="_blank" rel="noreferrer">
               github.com/lc5900/flamingo-downloader
             </a>
-          </p>
+            </p>
+          </div>
         </div>
       ),
       okText: 'OK',
@@ -3077,6 +3131,44 @@ export default function App() {
                   className="main-card"
                   title={section === 'downloaded' ? t('downloadedList') : t('currentDownloads')}
                 >
+                <div className="status-overview-grid" aria-label={t('overview')}>
+                  <div className="status-overview-card is-active">
+                    <span className="status-overview-icon"><ArrowDownOutlined /></span>
+                    <div>
+                      <Typography.Text type="secondary">
+                        {section === 'downloaded' ? t('filterCompleted') : t('activeDownloads')}
+                      </Typography.Text>
+                      <strong>{section === 'downloaded' ? taskStatusSummary.completed : taskStatusSummary.active}</strong>
+                      <Typography.Text type="secondary">
+                        {section === 'downloaded' ? fmtBytes(taskStatusSummary.completedBytes) : `${fmtBytes(totalDownloadSpeed)}/s`}
+                      </Typography.Text>
+                    </div>
+                  </div>
+                  <div className="status-overview-card is-waiting">
+                    <span className="status-overview-icon"><ClockCircleOutlined /></span>
+                    <div>
+                      <Typography.Text type="secondary">{t('waitingTasks')}</Typography.Text>
+                      <strong>{taskStatusSummary.waiting}</strong>
+                      <Typography.Text type="secondary">{t('filterQueued')}</Typography.Text>
+                    </div>
+                  </div>
+                  <div className="status-overview-card is-paused">
+                    <span className="status-overview-icon"><PauseCircleOutlined /></span>
+                    <div>
+                      <Typography.Text type="secondary">{t('filterPaused')}</Typography.Text>
+                      <strong>{taskStatusSummary.paused}</strong>
+                      <Typography.Text type="secondary">{t('pause')}</Typography.Text>
+                    </div>
+                  </div>
+                  <div className="status-overview-card is-error">
+                    <span className="status-overview-icon"><WarningOutlined /></span>
+                    <div>
+                      <Typography.Text type="secondary">{t('filterError')}</Typography.Text>
+                      <strong>{taskStatusSummary.error}</strong>
+                      <Typography.Text type="secondary">{t('retryFailed')}</Typography.Text>
+                    </div>
+                  </div>
+                </div>
                 <div className="list-toolbar">
                   <Space wrap className="list-toolbar-row">
                     <Select
@@ -3304,11 +3396,11 @@ export default function App() {
                   <div className="insight-card">
                     <div className="insight-card-title">
                       <ArrowDownOutlined />
-                      <span>{section === 'downloaded' ? t('overview') : t('bridgeStatus')}</span>
+                      <span>{t('networkStatus')}</span>
                     </div>
                     <div className="insight-metric">
-                      <span>{section === 'downloaded' ? t('filterCompleted') : t('colSpeed')}</span>
-                      <strong>{section === 'downloaded' ? list.length : `${fmtBytes(totalDownloadSpeed)}/s`}</strong>
+                      <span>{t('downloadSpeed')}</span>
+                      <strong>{fmtBytes(totalDownloadSpeed)}/s</strong>
                     </div>
                     <div className="sparkline sparkline-blue" aria-hidden="true">
                       <i />
@@ -3319,15 +3411,44 @@ export default function App() {
                       <i />
                     </div>
                     <div className="insight-metric insight-metric-inline">
-                      <span>{t('navDownloading')}</span>
+                      <span>{t('uploadSpeed')}</span>
+                      <strong>-</strong>
+                    </div>
+                    <div className="insight-metric insight-metric-inline">
+                      <span>{t('activeConnections')}</span>
                       <strong>{activeTaskCount}</strong>
                     </div>
                   </div>
                   <div className="insight-card">
                     <div className="insight-card-title">
-                      <FolderOpenOutlined />
-                      <span>{t('freeSpace')}</span>
+                      <CheckCircleOutlined />
+                      <span>{t('todayOverview')}</span>
                     </div>
+                    <div className="insight-stat-list">
+                      <div><span>{t('todayCompleted')}</span><strong>{taskStatusSummary.completedToday}</strong></div>
+                      <div><span>{t('filterCompleted')}</span><strong>{taskStatusSummary.completed}</strong></div>
+                      <div><span>{t('totalSize')}</span><strong>{fmtBytes(taskStatusSummary.completedBytes)}</strong></div>
+                    </div>
+                  </div>
+                  <div className="insight-card">
+                    <div className="insight-card-title">
+                      <FolderOpenOutlined />
+                      <span>{t('storageDirectories')}</span>
+                    </div>
+                    {activeSaveDirs.length > 0 ? (
+                      <div className="storage-dir-list">
+                        {activeSaveDirs.map((item) => (
+                          <div className="storage-dir-item" key={item.dir}>
+                            <div>
+                              <strong>{item.dir}</strong>
+                              <span>{item.count} {t('tasks')}</span>
+                            </div>
+                            <Typography.Text>{fmtBytes(item.bytes)}</Typography.Text>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <>
                     <div className="storage-line">
                       <span>{fmtBytes(Number(storageSummary?.free_bytes || 0))}</span>
                       <strong>{storageSummary?.download_dir || '-'}</strong>
@@ -3335,6 +3456,8 @@ export default function App() {
                     <div className="storage-bar">
                       <span style={{ width: storageSummary?.free_bytes ? '68%' : '8%' }} />
                     </div>
+                      </>
+                    )}
                   </div>
                   <div className="insight-card quick-actions-card">
                     <div className="insight-card-title">
@@ -3491,6 +3614,7 @@ export default function App() {
             addOpen={addOpen}
             setAddOpen={setAddOpen}
             addType={addType}
+            setAddType={setAddType}
             onAddUrl={onAddUrl}
             addSubmitting={addSubmitting}
             addForm={addForm}
@@ -3622,13 +3746,34 @@ export default function App() {
           <Suspense fallback={null}>
         <TaskDetailPage>
           <Drawer
-            title={t('taskDetails')}
+            title={
+              <div className="task-detail-title">
+                <span className="task-detail-file-icon">{String(detailTask?.task_type || 'http').toUpperCase().slice(0, 3)}</span>
+                <div>
+                  <Typography.Text strong ellipsis>
+                    {detailTask?.name || detailTask?.source || detailTask?.id || t('taskDetails')}
+                  </Typography.Text>
+                  <Typography.Text type="secondary">
+                    {detailTask?.source || detailTask?.id || '-'}
+                  </Typography.Text>
+                </div>
+              </div>
+            }
             placement="right"
-            width={620}
+            width={760}
             open={detailOpen}
             onClose={() => setDetailOpen(false)}
+            className="task-detail-drawer"
           >
-            <Space direction="vertical" style={{ width: '100%' }} size={16}>
+            <div className="task-detail-body">
+              <div className="task-detail-tabs">
+                <Tabs
+                  items={[
+                    {
+                      key: 'basic',
+                      label: t('basicInfo'),
+                      children: (
+                        <Space direction="vertical" style={{ width: '100%' }} size={16}>
             <Card size="small" title={t('overview')} loading={detailLoading}>
               <Descriptions size="small" column={1}>
                 <Descriptions.Item label={t('colName')}>
@@ -3758,6 +3903,14 @@ export default function App() {
                 </Descriptions.Item>
               </Descriptions>
             </Card>
+                        </Space>
+                      ),
+                    },
+                    {
+                      key: 'files',
+                      label: t('fileParams'),
+                      children: (
+                        <Space direction="vertical" style={{ width: '100%' }} size={16}>
             <Card size="small" title={t('fileSelect')} loading={detailLoading}>
               <Space direction="vertical" style={{ width: '100%' }}>
                 {detailFiles.length === 0 ? (
@@ -3830,6 +3983,14 @@ export default function App() {
                 </Button>
               </Space>
             </Card>
+                        </Space>
+                      ),
+                    },
+                    {
+                      key: 'runtime',
+                      label: t('runtimeDiagnostics'),
+                      children: (
+                        <Space direction="vertical" style={{ width: '100%' }} size={16}>
             <Card
               size="small"
               title={t('runtimeStatus')}
@@ -3877,7 +4038,31 @@ export default function App() {
                 )}
               </Space>
             </Card>
-            </Space>
+                        </Space>
+                      ),
+                    },
+                  ]}
+                />
+              </div>
+              <aside className="task-detail-actions">
+                {detailTask && String(detailTask.status || '').toLowerCase() !== 'completed' && (
+                  <Button type="primary" block onClick={() => void onPauseResume(detailTask)}>
+                    {String(detailTask.status || '').toLowerCase() === 'paused' ? t('resume') : t('pause')}
+                  </Button>
+                )}
+                <Button block icon={<FolderOpenOutlined />} onClick={() => detailTask && void onOpenDir(detailTask)}>
+                  {t('openDir')}
+                </Button>
+                <Button block onClick={() => detailTask && void writeClipboardText(detailTask.source || '')}>
+                  {t('copy')}
+                </Button>
+                {detailTask && String(detailTask.status || '').toLowerCase() === 'error' && (
+                  <Button danger block onClick={() => void retrySingleTask(detailTask)}>
+                    {t('retryFailed')}
+                  </Button>
+                )}
+              </aside>
+            </div>
           </Drawer>
         </TaskDetailPage>
           </Suspense>

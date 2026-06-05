@@ -189,6 +189,42 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     >
       <div className="settings-inline-body">
         <div className="settings-shell">
+          <aside className="settings-side-nav">
+            {[
+              { key: 'basic', label: t('tabBasic') },
+              { key: 'shortcuts', label: t('tabShortcuts') },
+              { key: 'diagnostics', label: t('tabDiagnostics') },
+              { key: 'updates', label: t('tabUpdates') },
+            ].map((item) => (
+              <Button
+                key={item.key}
+                type={settingsTab === item.key ? 'primary' : 'text'}
+                block
+                onClick={() => setSettingsTab(item.key)}
+              >
+                {item.label}
+              </Button>
+            ))}
+          </aside>
+          <div className="settings-content-area">
+            <div className="settings-category-strip">
+              {[
+                { key: 'basic', title: t('tabBasic'), desc: t('grpDownload') },
+                { key: 'basic', title: t('bridgeStatus'), desc: t('grpIntegration') },
+                { key: 'diagnostics', title: t('grpReliability'), desc: t('startupSelfCheck') },
+                { key: 'updates', title: t('tabUpdates'), desc: t('checkUpdate') },
+              ].map((item, index) => (
+                <button
+                  type="button"
+                  className={`settings-category-card ${settingsTab === item.key ? 'active' : ''}`}
+                  key={`${item.key}-${index}`}
+                  onClick={() => setSettingsTab(item.key)}
+                >
+                  <strong>{item.title}</strong>
+                  <span>{item.desc}</span>
+                </button>
+              ))}
+            </div>
           <Tabs
             className="settings-tabs"
             activeKey={settingsTab}
@@ -710,6 +746,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               },
             ]}
           />
+          </div>
         </div>
       </div>
     </Card>

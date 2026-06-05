@@ -15,6 +15,8 @@ Chinese README: [`README_zh.md`](README_zh.md)
 
 - Supports HTTP/HTTPS/FTP, magnet, and `.torrent`
 - Clean split between **Downloading** and **Downloaded** workflows
+- **Media Discovery**: scan web pages for downloadable media resources with batch selection
+- **Rules management**: dedicated page for download directory rules and category auto-tag rules
 - Refreshed desktop shell with Flamingo branding, global search, compact toolbar controls, and a right-side status overview
 - Persistent task state with SQLite + startup self-check + recovery
 - Per-task controls (speed, split, seeding, headers, save dir)

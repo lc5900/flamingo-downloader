@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { Button, Card, Input, Select, Space, Table, Tag, Typography, message } from 'antd'
+import { Button, Card, Descriptions, Input, Select, Space, Table, Tag, Typography, message } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { SearchOutlined, DownloadOutlined, ScanOutlined, FileTextOutlined } from '@ant-design/icons'
 import * as api from '../api/client'
@@ -110,6 +110,10 @@ export const MediaDiscoveryPage: React.FC<MediaDiscoveryPageProps> = ({ t, onCre
 
   const visibleUrlSet = new Set(filteredCandidates.map((item) => item.url))
   const selectedVisibleCount = selectedUrls.filter((url) => visibleUrlSet.has(url)).length
+  const selectedCandidate =
+    candidates.find((candidate) => candidate.url === selectedUrls[0]) || filteredCandidates[0] || null
+  const selectedCandidateDomain = selectedCandidate ? candidateDomain(selectedCandidate) : ''
+  const selectedCandidateSize = Number(selectedCandidate?.content_length || 0)
 
   const columns: ColumnsType<LinkCandidate> = [
     {
@@ -162,7 +166,7 @@ export const MediaDiscoveryPage: React.FC<MediaDiscoveryPageProps> = ({ t, onCre
   ]
 
   return (
-    <div className="task-workspace">
+    <div className="media-discovery-workspace">
       <Card className="main-card" title={t('mediaDiscoveryTitle')}>
         <Space direction="vertical" style={{ width: '100%' }} size={12}>
           <Space.Compact style={{ width: '100%' }}>
@@ -289,6 +293,9 @@ export const MediaDiscoveryPage: React.FC<MediaDiscoveryPageProps> = ({ t, onCre
                   selectedRowKeys: selectedUrls,
                   onChange: (keys) => setSelectedUrls(keys.map((k) => String(k))),
                 }}
+                onRow={(record) => ({
+                  onClick: () => setSelectedUrls([record.url]),
+                })}
                 scroll={{ y: 480 }}
               />
             </>
@@ -302,6 +309,69 @@ export const MediaDiscoveryPage: React.FC<MediaDiscoveryPageProps> = ({ t, onCre
           )}
         </Space>
       </Card>
+      <aside className="media-detail-panel">
+        <Card className="main-card media-detail-card" title={t('resourceDetails')}>
+          {selectedCandidate ? (
+            <Space direction="vertical" style={{ width: '100%' }} size={14}>
+              <div className="media-preview">
+                <div className="media-preview-thumb">
+                  <span>{String(selectedCandidate.kind || 'HTTP').toUpperCase().slice(0, 4)}</span>
+                </div>
+                <div>
+                  <Typography.Text strong ellipsis>
+                    {selectedCandidate.filename_hint || selectedCandidate.final_url || selectedCandidate.url}
+                  </Typography.Text>
+                  <Typography.Text type="secondary" ellipsis>
+                    {selectedCandidateDomain || t('candidateUnknownDomain')}
+                  </Typography.Text>
+                </div>
+              </div>
+              <Descriptions size="small" column={1}>
+                <Descriptions.Item label={t('candidateType')}>
+                  <Tag>{String(selectedCandidate.kind || 'http').toUpperCase()}</Tag>
+                </Descriptions.Item>
+                <Descriptions.Item label={t('candidateSizeGroup')}>
+                  {selectedCandidateSize > 0 ? fmtBytes(selectedCandidateSize) : selectedCandidate.content_type || t('candidateUnknownSize')}
+                </Descriptions.Item>
+                <Descriptions.Item label={t('candidateScore')}>
+                  {selectedCandidate.score}
+                </Descriptions.Item>
+                <Descriptions.Item label={t('candidateDuplicates')}>
+                  {Number(selectedCandidate.duplicate_count || 0)}
+                </Descriptions.Item>
+                <Descriptions.Item label={t('url')}>
+                  <Typography.Text copyable={{ text: selectedCandidate.final_url || selectedCandidate.url }} ellipsis>
+                    {selectedCandidate.final_url || selectedCandidate.url}
+                  </Typography.Text>
+                </Descriptions.Item>
+              </Descriptions>
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Button
+                  block
+                  onClick={() => window.open(selectedCandidate.final_url || selectedCandidate.url, '_blank')}
+                >
+                  {t('openInBrowser')}
+                </Button>
+                <Button
+                  block
+                  type="primary"
+                  icon={<DownloadOutlined />}
+                  onClick={handleDownloadSelected}
+                  loading={creating}
+                  disabled={selectedUrls.length === 0}
+                >
+                  {t('downloadSelected')} ({selectedUrls.length})
+                </Button>
+              </Space>
+            </Space>
+          ) : (
+            <div className="media-detail-empty">
+              <ScanOutlined />
+              <Typography.Text type="secondary">{t('candidateNoResults')}</Typography.Text>
+            </div>
+          )}
+        </Card>
+      </aside>
     </div>
   )
 }

@@ -50,6 +50,7 @@ export const CommandPaletteDialog: React.FC<CommandPaletteDialogProps> = ({
       onCancel={onClose}
       footer={null}
       width={560}
+      className="command-palette-modal"
       destroyOnHidden
       afterOpenChange={(visible) => {
         if (!visible) onQueryChange('')
@@ -57,6 +58,7 @@ export const CommandPaletteDialog: React.FC<CommandPaletteDialogProps> = ({
     >
       <Space direction="vertical" style={{ width: '100%' }} size="middle">
         <Input
+          className="command-palette-search"
           autoFocus
           allowClear
           value={query}
