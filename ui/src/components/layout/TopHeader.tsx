@@ -1,11 +1,14 @@
 import type React from 'react'
-import { Button, Dropdown, Layout, Space } from 'antd'
+import { Button, Dropdown, Input, Layout, Space, Tooltip } from 'antd'
 import {
+  ArrowLeftOutlined,
+  ArrowRightOutlined,
   CloudDownloadOutlined,
   FileSearchOutlined,
   GlobalOutlined,
   MacCommandOutlined,
   ReloadOutlined,
+  SearchOutlined,
   SyncOutlined,
 } from '@ant-design/icons'
 import type { Locale } from '../../types'
@@ -20,6 +23,8 @@ interface TopHeaderProps {
   refresh: () => void
   openCommandPalette: () => void
   loading: boolean
+  searchText: string
+  setSearchText: (value: string) => void
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -32,25 +37,39 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   refresh,
   openCommandPalette,
   loading,
+  searchText,
+  setSearchText,
 }) => {
   return (
     <Layout.Header className="header">
-      <Space wrap>
-        <Button type="primary" shape="round" icon={<CloudDownloadOutlined />} onClick={onOpenAdd}>
+      <div className="header-inner">
+        <Space size={8} className="header-nav-controls">
+          <Button shape="circle" icon={<ArrowLeftOutlined />} aria-label="Back" />
+          <Button shape="circle" icon={<ArrowRightOutlined />} aria-label="Forward" />
+        </Space>
+        <Input
+          id="global-task-search-input"
+          className="header-search"
+          allowClear
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          prefix={<SearchOutlined />}
+          suffix={<span className="header-kbd">Ctrl K</span>}
+          placeholder={t('searchPlaceholder')}
+        />
+        <Space size={10} className="header-actions">
+          <Button type="primary" shape="round" icon={<CloudDownloadOutlined />} onClick={onOpenAdd}>
           {t('newDownload')}
-        </Button>
-        <Button shape="round" icon={<FileSearchOutlined />} onClick={openLogsWindow}>
-          {t('logsWindow')}
-        </Button>
-        <Button shape="round" icon={<SyncOutlined />} onClick={quickToggleTheme}>
-          {t('darkLight')}
-        </Button>
-        <Button shape="round" icon={<ReloadOutlined />} onClick={refresh} loading={loading}>
-          {t('refresh')}
-        </Button>
-        <Button shape="round" icon={<MacCommandOutlined />} onClick={openCommandPalette}>
-          {t('commandPalette')}
-        </Button>
+          </Button>
+          <Button shape="round" icon={<ReloadOutlined />} onClick={refresh} loading={loading}>
+            {t('refresh')}
+          </Button>
+          <Button shape="round" icon={<FileSearchOutlined />} onClick={openLogsWindow}>
+            {t('logsWindow')}
+          </Button>
+          <Tooltip title={t('darkLight')}>
+            <Button shape="circle" icon={<SyncOutlined />} onClick={quickToggleTheme} aria-label={t('darkLight')} />
+          </Tooltip>
         <Dropdown
           menu={{
             selectedKeys: [locale],
@@ -65,7 +84,18 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             {locale === 'zh-CN' ? '简体中文' : 'English'}
           </Button>
         </Dropdown>
-      </Space>
+          <Tooltip title={t('commandPalette')}>
+            <Button
+              shape="round"
+              icon={<MacCommandOutlined />}
+              onClick={openCommandPalette}
+              className="command-pill"
+            >
+              P
+            </Button>
+          </Tooltip>
+        </Space>
+      </div>
     </Layout.Header>
   )
 }

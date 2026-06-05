@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.lc5900.flamingo.downloader",
   "build": {
-    "beforeDevCommand": "",
+    "beforeDevCommand": "npm --prefix ui run build || npm --prefix ../ui run build",
     "beforeBuildCommand": "node scripts/tauri-before-build.mjs || node ../scripts/tauri-before-build.mjs",
     "frontendDist": "../ui/dist"
   },

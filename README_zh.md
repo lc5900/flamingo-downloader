@@ -15,6 +15,7 @@ English README: [`README.md`](README.md)
 
 - 支持 HTTP/HTTPS/FTP、magnet、`.torrent`
 - 下载中 / 已下载分区清晰，常用操作完整
+- 全新的 Flamingo 桌面外壳：品牌侧栏、全局搜索、紧凑工具栏、右侧状态概览
 - SQLite 持久化 + 启动自检 + 任务恢复
 - 任务级参数可控（限速、分片、做种、请求头、保存目录）
 - 支持按 `ext/domain/type` 自动分流目录和分类
@@ -29,6 +30,8 @@ English README: [`README.md`](README.md)
 ### 主界面
 
 ![主界面](docs/screenshots/main-overview.png)
+
+当前主界面采用浅色 Flamingo 桌面布局：品牌侧栏、顶部搜索与操作按钮、任务表格，以及用于桥接状态、存储空间和快捷系统操作的右侧概览栏。
 
 ### 新建下载
 
@@ -50,8 +53,11 @@ English README: [`README.md`](README.md)
 ### 开发运行
 
 ```bash
-cargo run --manifest-path src-tauri/Cargo.toml
+cd src-tauri
+cargo tauri dev
 ```
+
+`cargo tauri dev` 会通过 Tauri 的 `beforeDevCommand` 先构建 React 前端，再启动桌面窗口。
 
 ### 可选：只跑前端
 

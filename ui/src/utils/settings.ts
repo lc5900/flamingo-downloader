@@ -25,7 +25,8 @@ const SPEED_PLAN_PRESETS: Record<Exclude<SpeedPlanMode, 'manual'>, SpeedPlanRule
 export function normalizeThemeMode(v: unknown): ThemeMode {
   const x = String(v || '').toLowerCase()
   if (x === 'light' || x === 'dark') return x
-  return 'system'
+  if (x === 'system') return x
+  return 'light'
 }
 
 export function normalizeSpeedPlanRules(input: unknown): SpeedPlanRuleInput[] {

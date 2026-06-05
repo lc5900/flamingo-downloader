@@ -32,6 +32,7 @@ import {
   ArrowDownOutlined,
   ArrowUpOutlined,
   DeleteOutlined,
+  FileSearchOutlined,
   FolderOpenOutlined,
   SlidersOutlined,
   VerticalAlignBottomOutlined,
@@ -418,7 +419,7 @@ export default function App() {
   const [layoutOpen, setLayoutOpen] = useState(false)
   const tableWrapRef = useRef<HTMLDivElement | null>(null)
   const [tableWrapWidth, setTableWrapWidth] = useState(0)
-  const [themeMode, setThemeMode] = useState<ThemeMode>('system')
+  const [themeMode, setThemeMode] = useState<ThemeMode>('light')
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false)
   const [removeDeleteFiles, setRemoveDeleteFiles] = useState(false)
   const [removeTask, setRemoveTask] = useState<Task | null>(null)
@@ -1068,10 +1069,13 @@ export default function App() {
   const useVirtualTable = list.length > 150
   const tableScroll = useMemo(
     () =>
-      useVirtualTable
-        ? { x: section === 'downloaded' ? 720 : 840, y: 'calc(100vh - 360px)' as const }
-        : { x: section === 'downloaded' ? 720 : 840 },
-    [section, useVirtualTable],
+      ({
+        x: section === 'downloaded' ? 720 : 840,
+        y: section === 'downloaded'
+          ? ('calc(100vh - 430px)' as const)
+          : ('calc(100vh - 390px)' as const),
+      }),
+    [section],
   )
   const onRowSelectionChange = useCallback((keys: React.Key[]) => {
     setSelectedTaskIds(keys.map((k) => String(k)))
@@ -2922,30 +2926,30 @@ export default function App() {
       theme={{
         algorithm: effectiveTheme === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
         token: {
-          borderRadius: 12,
-          colorPrimary: effectiveTheme === 'dark' ? '#818cf8' : '#6366f1',
-          colorInfo: effectiveTheme === 'dark' ? '#818cf8' : '#6366f1',
-          colorSuccess: '#10b981',
-          colorWarning: '#f59e0b',
-          colorError: '#ef4444',
+          borderRadius: 14,
+          colorPrimary: '#ff3f6e',
+          colorInfo: '#2f80ed',
+          colorSuccess: '#25c26e',
+          colorWarning: '#ffad33',
+          colorError: '#ff4d67',
           fontFamily: "'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
           colorBgLayout: 'transparent',
           colorBgContainer:
             effectiveTheme === 'dark'
-              ? 'rgba(15, 23, 42, 0.45)'
-              : 'rgba(255, 255, 255, 0.65)',
+              ? 'rgba(20, 25, 35, 0.72)'
+              : 'rgba(255, 255, 255, 0.86)',
           colorBgElevated:
             effectiveTheme === 'dark'
-              ? 'rgba(30, 41, 59, 0.6)'
-              : 'rgba(255, 255, 255, 0.85)',
+              ? 'rgba(26, 32, 44, 0.9)'
+              : 'rgba(255, 255, 255, 0.96)',
           colorBgMask:
             effectiveTheme === 'dark'
               ? 'rgba(0, 0, 0, 0.4)'
               : 'rgba(0, 0, 0, 0.15)',
           boxShadowSecondary:
             effectiveTheme === 'dark'
-              ? '0 16px 48px rgba(0, 0, 0, 0.6)'
-              : '0 16px 48px rgba(0, 0, 0, 0.08)',
+              ? '0 20px 56px rgba(0, 0, 0, 0.55)'
+              : '0 18px 48px rgba(36, 44, 68, 0.12)',
         },
       }}
     >
@@ -2976,6 +2980,8 @@ export default function App() {
               refresh={refresh}
               openCommandPalette={() => setCommandPaletteOpen(true)}
               loading={loading}
+              searchText={searchText}
+              setSearchText={setSearchText}
             />
 
             <Layout.Content
@@ -2995,6 +3001,7 @@ export default function App() {
               <>
               <Suspense fallback={null}>
               <TaskPageShell>
+                <div className="task-workspace">
                 <Card
                   className="main-card"
                   title={section === 'downloaded' ? t('downloadedList') : t('currentDownloads')}
@@ -3211,6 +3218,59 @@ export default function App() {
                   )}
                 </div>
                 </Card>
+                <aside className="insight-panel" aria-label={t('overview')}>
+                  <div className="insight-card">
+                    <div className="insight-card-title">
+                      <ArrowDownOutlined />
+                      <span>{section === 'downloaded' ? t('overview') : t('bridgeStatus')}</span>
+                    </div>
+                    <div className="insight-metric">
+                      <span>{section === 'downloaded' ? t('filterCompleted') : t('colSpeed')}</span>
+                      <strong>{section === 'downloaded' ? list.length : `${fmtBytes(totalDownloadSpeed)}/s`}</strong>
+                    </div>
+                    <div className="sparkline sparkline-blue" aria-hidden="true">
+                      <i />
+                      <i />
+                      <i />
+                      <i />
+                      <i />
+                      <i />
+                    </div>
+                    <div className="insight-metric insight-metric-inline">
+                      <span>{t('navDownloading')}</span>
+                      <strong>{activeTaskCount}</strong>
+                    </div>
+                  </div>
+                  <div className="insight-card">
+                    <div className="insight-card-title">
+                      <FolderOpenOutlined />
+                      <span>{t('freeSpace')}</span>
+                    </div>
+                    <div className="storage-line">
+                      <span>{fmtBytes(Number(storageSummary?.free_bytes || 0))}</span>
+                      <strong>{storageSummary?.download_dir || '-'}</strong>
+                    </div>
+                    <div className="storage-bar">
+                      <span style={{ width: storageSummary?.free_bytes ? '68%' : '8%' }} />
+                    </div>
+                  </div>
+                  <div className="insight-card quick-actions-card">
+                    <div className="insight-card-title">
+                      <SlidersOutlined />
+                      <span>{t('systemTools')}</span>
+                    </div>
+                    <Button block icon={<FolderOpenOutlined />} onClick={openImportExport}>
+                      {t('systemImportExport')}
+                    </Button>
+                    <Button block icon={<FileSearchOutlined />} onClick={openLogsWindow}>
+                      {t('systemOpenLogs')}
+                    </Button>
+                    <Button block icon={<ArrowUpOutlined />} onClick={openSettings}>
+                      {t('systemOpenSettings')}
+                    </Button>
+                  </div>
+                </aside>
+                </div>
               </TaskPageShell>
               </Suspense>
               {section === 'downloading' && (

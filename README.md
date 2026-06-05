@@ -15,6 +15,7 @@ Chinese README: [`README_zh.md`](README_zh.md)
 
 - Supports HTTP/HTTPS/FTP, magnet, and `.torrent`
 - Clean split between **Downloading** and **Downloaded** workflows
+- Refreshed desktop shell with Flamingo branding, global search, compact toolbar controls, and a right-side status overview
 - Persistent task state with SQLite + startup self-check + recovery
 - Per-task controls (speed, split, seeding, headers, save dir)
 - Rule-based directories and category tagging (`ext/domain/type`)
@@ -29,6 +30,8 @@ Latest screenshots are in `docs/screenshots/`.
 ### Main
 
 ![Main Window](docs/screenshots/main-overview.png)
+
+The current main window uses a light Flamingo desktop layout: branded sidebar, toolbar search/actions, task table, and a compact overview panel for bridge status, storage, and quick system actions.
 
 ### New Download
 
@@ -50,8 +53,11 @@ Latest screenshots are in `docs/screenshots/`.
 ### Run (dev)
 
 ```bash
-cargo run --manifest-path src-tauri/Cargo.toml
+cd src-tauri
+cargo tauri dev
 ```
+
+`cargo tauri dev` builds the React UI first through Tauri's `beforeDevCommand`, then starts the desktop shell.
 
 ### Optional: run UI only
 
