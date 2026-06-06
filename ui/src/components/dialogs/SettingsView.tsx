@@ -14,7 +14,15 @@ import {
   Tag,
   Typography,
 } from 'antd'
-import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
+import {
+  CloudDownloadOutlined,
+  KeyOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  SafetyCertificateOutlined,
+  SettingOutlined,
+  ToolOutlined,
+} from '@ant-design/icons'
 import type { FormInstance } from 'antd'
 import type { Dispatch, SetStateAction } from 'react'
 import type { BrowserBridgeStatus, GlobalSettings, OperationLog, StartupSelfCheck } from '../../types'
@@ -191,14 +199,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="settings-shell">
           <aside className="settings-side-nav">
             {[
-              { key: 'basic', label: t('tabBasic') },
-              { key: 'shortcuts', label: t('tabShortcuts') },
-              { key: 'diagnostics', label: t('tabDiagnostics') },
-              { key: 'updates', label: t('tabUpdates') },
+              { key: 'basic', label: t('tabBasic'), icon: <SettingOutlined /> },
+              { key: 'shortcuts', label: t('tabShortcuts'), icon: <KeyOutlined /> },
+              { key: 'diagnostics', label: t('tabDiagnostics'), icon: <ToolOutlined /> },
+              { key: 'updates', label: t('tabUpdates'), icon: <CloudDownloadOutlined /> },
             ].map((item) => (
               <Button
                 key={item.key}
                 type={settingsTab === item.key ? 'primary' : 'text'}
+                icon={item.icon}
                 block
                 onClick={() => setSettingsTab(item.key)}
               >
@@ -209,10 +218,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <div className="settings-content-area">
             <div className="settings-category-strip">
               {[
-                { key: 'basic', title: t('tabBasic'), desc: t('grpDownload') },
-                { key: 'basic', title: t('bridgeStatus'), desc: t('grpIntegration') },
-                { key: 'diagnostics', title: t('grpReliability'), desc: t('startupSelfCheck') },
-                { key: 'updates', title: t('tabUpdates'), desc: t('checkUpdate') },
+                { key: 'basic', title: t('tabBasic'), desc: t('grpDownload'), icon: <SettingOutlined /> },
+                { key: 'basic', title: t('bridgeStatus'), desc: t('grpIntegration'), icon: <SafetyCertificateOutlined /> },
+                { key: 'diagnostics', title: t('grpReliability'), desc: t('startupSelfCheck'), icon: <ToolOutlined /> },
+                { key: 'updates', title: t('tabUpdates'), desc: t('checkUpdate'), icon: <CloudDownloadOutlined /> },
               ].map((item, index) => (
                 <button
                   type="button"
@@ -220,8 +229,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   key={`${item.key}-${index}`}
                   onClick={() => setSettingsTab(item.key)}
                 >
-                  <strong>{item.title}</strong>
-                  <span>{item.desc}</span>
+                  <span className="settings-category-icon">{item.icon}</span>
+                  <span className="settings-category-copy">
+                    <strong>{item.title}</strong>
+                    <span>{item.desc}</span>
+                  </span>
                 </button>
               ))}
             </div>

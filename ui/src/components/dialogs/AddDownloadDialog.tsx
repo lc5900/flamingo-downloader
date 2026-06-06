@@ -176,6 +176,7 @@ export const AddDownloadDialog: React.FC<AddDownloadDialogProps> = ({
       onCancel={() => setAddOpen(false)}
       onOk={onAddUrl}
       okText={t('add')}
+      cancelText={t('cancel')}
       confirmLoading={addSubmitting}
       className="add-modal"
       rootClassName="add-modal-root"

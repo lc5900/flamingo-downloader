@@ -21,6 +21,24 @@ Reference: `ChatGPT Image 2026年6月5日 23_07_22 (1).png` through `(7).png`.
 - [x] Bring Settings closer to the reference layout with left-side section navigation and top category cards while preserving existing settings coverage.
 - [x] Polish command palette, clipboard detection, drag-to-add, logs window, tray/about surfaces to match the reference visual language where platform APIs allow it. Tray menus remain native platform menus by design.
 
+## 2026-06-06 UI Reference Review Round 2
+
+Compared the current runtime screenshots (`ScreenShot_1.png` through `ScreenShot_6.png`) with the seven reference designs.
+
+### P0 - Dark Theme Readability
+
+- [x] Replace remaining light-theme hard-coded text colors on overview cards, storage lists, settings navigation, media details, dialogs, and table surfaces.
+- [x] Add explicit dark-theme colors for secondary text, placeholders, tags, buttons, empty states, dividers, and hover/selected rows.
+- [x] Keep card and input contrast readable without turning the dark theme into a single flat slate surface.
+
+### P1 - Reference Fidelity
+
+- [x] Keep Media Discovery filters and result controls visible in the empty state, matching the stable toolbar structure in the reference.
+- [x] Expand Settings category navigation with stronger icon/section hierarchy and reference-like category cards.
+- [x] Reduce excessive empty-list whitespace and keep the empty action state near the table header while preserving bottom-owned horizontal scrolling.
+- [x] Refine the right insight panel quick actions and storage presentation to match the reference hierarchy more closely.
+- [x] Improve the add-download dialog proportions and advanced panel scrolling on shorter windows.
+
 ## 2026-05-16 Iteration
 
 参考 FDM/IDM/Gopeed/Motrix 等同类下载器的常见能力，当前已完成基础下载、批量添加、浏览器接管、本地 API 和发布质量闭环；下一轮重点放在大量任务下的检索、媒体来源追溯和历史复盘。

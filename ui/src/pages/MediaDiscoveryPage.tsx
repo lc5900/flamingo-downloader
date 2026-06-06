@@ -186,127 +186,125 @@ export const MediaDiscoveryPage: React.FC<MediaDiscoveryPageProps> = ({ t, onCre
             </Button>
           </Space.Compact>
 
-          {candidates.length > 0 && (
-            <>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                <Input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder={t('candidateQueryPlaceholder')}
-                  style={{ width: 260 }}
-                  allowClear
-                />
-                <Select
-                  value={kindFilter}
-                  onChange={setKindFilter}
-                  style={{ width: 140 }}
-                  options={[
-                    { label: t('filterAll'), value: 'all' },
-                    ...kindOptions.map((v) => ({ label: v.toUpperCase(), value: v })),
-                  ]}
-                />
-                <Select
-                  value={domainFilter}
-                  onChange={setDomainFilter}
-                  style={{ width: 200 }}
-                  showSearch
-                  optionFilterProp="label"
-                  options={[
-                    { label: t('filterAll'), value: 'all' },
-                    ...domainOptions.map((v) => ({ label: v, value: v })),
-                  ]}
-                />
-                <Select
-                  value={sizeFilter}
-                  onChange={(v) => setSizeFilter(v)}
-                  style={{ width: 150 }}
-                  options={[
-                    { label: t('filterAll'), value: 'all' },
-                    { label: t('candidateUnknownSize'), value: 'unknown' },
-                    { label: '< 100 MB', value: 'lt100m' },
-                    { label: '100 MB - 1 GB', value: '100m-1g' },
-                    { label: '>= 1 GB', value: 'ge1g' },
-                  ]}
-                />
-              </div>
+          <div className="media-filter-bar">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('candidateQueryPlaceholder')}
+              allowClear
+            />
+            <Select
+              value={kindFilter}
+              onChange={setKindFilter}
+              options={[
+                { label: t('filterAll'), value: 'all' },
+                ...kindOptions.map((v) => ({ label: v.toUpperCase(), value: v })),
+              ]}
+            />
+            <Select
+              value={domainFilter}
+              onChange={setDomainFilter}
+              showSearch
+              optionFilterProp="label"
+              options={[
+                { label: t('filterAll'), value: 'all' },
+                ...domainOptions.map((v) => ({ label: v, value: v })),
+              ]}
+            />
+            <Select
+              value={sizeFilter}
+              onChange={(v) => setSizeFilter(v)}
+              options={[
+                { label: t('filterAll'), value: 'all' },
+                { label: t('candidateUnknownSize'), value: 'unknown' },
+                { label: '< 100 MB', value: 'lt100m' },
+                { label: '100 MB - 1 GB', value: '100m-1g' },
+                { label: '>= 1 GB', value: 'ge1g' },
+              ]}
+            />
+          </div>
 
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                <Typography.Text type="secondary">
-                  {t('selectedCount')}: {selectedUrls.length} / {candidates.length}
-                </Typography.Text>
-                <Typography.Text type="secondary">
-                  {t('candidateSelectVisible')}: {selectedVisibleCount} / {filteredCandidates.length}
-                </Typography.Text>
-                <Button size="small" onClick={() => setSelectedUrls(filteredCandidates.map((item) => item.url))}>
-                  {t('selectAll')}
-                </Button>
-                <Button size="small" onClick={() => setSelectedUrls([])}>
-                  {t('selectNone')}
-                </Button>
-                <Button
-                  size="small"
-                  onClick={() => {
-                    const visibleUrls = filteredCandidates.map((item) => item.url)
-                    const visibleSet = new Set(visibleUrls)
-                    const selectedSet = new Set(selectedUrls)
-                    const hiddenSelected = selectedUrls.filter((u) => !visibleSet.has(u))
-                    const nextVisible = visibleUrls.filter((u) => !selectedSet.has(u))
-                    setSelectedUrls([...hiddenSelected, ...nextVisible])
-                  }}
-                >
-                  {t('invertSelection')}
-                </Button>
-                <div style={{ flex: 1 }} />
-                <Input
-                  value={saveDir}
-                  onChange={(e) => setSaveDir(e.target.value)}
-                  placeholder={t('saveDirOptional')}
-                  style={{ width: 220 }}
-                  size="small"
-                />
-                <Input
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  placeholder={t('setCategory')}
-                  style={{ width: 150 }}
-                  size="small"
-                />
-                <Button
-                  type="primary"
-                  icon={<DownloadOutlined />}
-                  onClick={handleDownloadSelected}
-                  loading={creating}
-                  disabled={selectedUrls.length === 0}
-                >
-                  {t('downloadSelected')} ({selectedUrls.length})
-                </Button>
-              </div>
+          <div className="media-result-actions">
+            <Typography.Text type="secondary">
+              {t('selectedCount')}: {selectedUrls.length} / {candidates.length}
+            </Typography.Text>
+            <Typography.Text type="secondary">
+              {t('candidateSelectVisible')}: {selectedVisibleCount} / {filteredCandidates.length}
+            </Typography.Text>
+            <Button
+              size="small"
+              disabled={filteredCandidates.length === 0}
+              onClick={() => setSelectedUrls(filteredCandidates.map((item) => item.url))}
+            >
+              {t('selectAll')}
+            </Button>
+            <Button size="small" disabled={selectedUrls.length === 0} onClick={() => setSelectedUrls([])}>
+              {t('selectNone')}
+            </Button>
+            <Button
+              size="small"
+              disabled={filteredCandidates.length === 0}
+              onClick={() => {
+                const visibleUrls = filteredCandidates.map((item) => item.url)
+                const visibleSet = new Set(visibleUrls)
+                const selectedSet = new Set(selectedUrls)
+                const hiddenSelected = selectedUrls.filter((u) => !visibleSet.has(u))
+                const nextVisible = visibleUrls.filter((u) => !selectedSet.has(u))
+                setSelectedUrls([...hiddenSelected, ...nextVisible])
+              }}
+            >
+              {t('invertSelection')}
+            </Button>
+            <div className="media-result-actions-spacer" />
+            <Input
+              value={saveDir}
+              onChange={(e) => setSaveDir(e.target.value)}
+              placeholder={t('saveDirOptional')}
+              size="small"
+            />
+            <Input
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              placeholder={t('setCategory')}
+              size="small"
+            />
+            <Button
+              type="primary"
+              icon={<DownloadOutlined />}
+              onClick={handleDownloadSelected}
+              loading={creating}
+              disabled={selectedUrls.length === 0}
+            >
+              {t('downloadSelected')} ({selectedUrls.length})
+            </Button>
+          </div>
 
-              <Table<LinkCandidate>
-                size="small"
-                rowKey="url"
-                columns={columns}
-                dataSource={filteredCandidates}
-                pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (total) => `${total} items` }}
-                locale={{ emptyText: t('candidateNoResults') }}
-                rowSelection={{
-                  selectedRowKeys: selectedUrls,
-                  onChange: (keys) => setSelectedUrls(keys.map((k) => String(k))),
-                }}
-                onRow={(record) => ({
-                  onClick: () => setSelectedUrls([record.url]),
-                })}
-                scroll={{ y: 480 }}
-              />
-            </>
-          )}
-
-          {candidates.length === 0 && !loading && (
-            <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--ant-color-text-tertiary)' }}>
-              <ScanOutlined style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }} />
-              <div>{t('noCandidates')}</div>
-            </div>
-          )}
+          <Table<LinkCandidate>
+            className="media-result-table"
+            size="small"
+            rowKey="url"
+            columns={columns}
+            dataSource={filteredCandidates}
+            loading={loading}
+            pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (total) => `${total} items` }}
+            locale={{
+              emptyText: (
+                <div className="media-empty-state">
+                  <ScanOutlined />
+                  <Typography.Text>{t('candidateNoResults')}</Typography.Text>
+                  <Typography.Text type="secondary">{t('noCandidates')}</Typography.Text>
+                </div>
+              ),
+            }}
+            rowSelection={{
+              selectedRowKeys: selectedUrls,
+              onChange: (keys) => setSelectedUrls(keys.map((k) => String(k))),
+            }}
+            onRow={(record) => ({
+              onClick: () => setSelectedUrls([record.url]),
+            })}
+            scroll={{ y: 480 }}
+          />
         </Space>
       </Card>
       <aside className="media-detail-panel">
