@@ -1,4 +1,5 @@
 import type React from 'react'
+import './SettingsView.css'
 import {
   Button,
   Card,

@@ -14,6 +14,7 @@ import {
 import { InboxOutlined } from '@ant-design/icons'
 import type { FormInstance } from 'antd'
 import type { AddFormValues, DownloadRule, TaskOptionPreset } from '../../types'
+import './AddDownloadDialog.css'
 
 export interface AddDownloadDialogProps {
   t: (k: string) => string

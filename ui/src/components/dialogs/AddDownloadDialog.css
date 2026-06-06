@@ -1,0 +1,101 @@
+.add-modal-root .ant-modal-wrap {
+  overflow: hidden;
+}
+
+.add-modal .ant-modal {
+  top: 24px;
+  padding-bottom: 0;
+  height: calc(100vh - 48px);
+}
+
+.add-modal .ant-modal-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 100%;
+}
+
+.add-modal .ant-modal-body {
+  flex: 1;
+  min-height: 0;
+}
+
+.add-modal-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding-right: 4px;
+}
+
+.add-modal-body .ant-tabs-nav {
+  margin-bottom: 12px;
+}
+
+.add-modal .ant-modal-body {
+  padding-top: 8px !important;
+}
+
+.add-modal-scroll-content {
+  min-height: 0;
+}
+
+.add-modal-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 470px;
+  gap: 22px;
+  align-items: start;
+}
+
+.add-primary-panel,
+.add-advanced-panel {
+  min-width: 0;
+}
+
+.add-primary-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.add-advanced-panel {
+  padding: 16px;
+  border: 1px solid #e9edf4;
+  border-radius: 14px;
+  background: rgba(251, 252, 255, 0.86);
+  max-height: calc(100vh - 250px);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.add-section-title {
+  margin-bottom: 10px;
+  color: #252b3a;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.add-preset-row,
+.add-advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 12px;
+}
+
+.add-compact-actions {
+  margin-bottom: 16px;
+}
+
+.matched-rule-text {
+  display: block;
+  margin: -4px 0 12px;
+}
+
+.torrent-dropzone.ant-upload-wrapper .ant-upload-drag {
+  min-height: 260px;
+  border-color: rgba(255, 63, 110, 0.46);
+  background: rgba(255, 247, 250, 0.78);
+}
+
+.torrent-dropzone .ant-upload-drag-icon .anticon {
+  color: var(--flamingo-pink) !important;
+  font-size: 42px;
+}

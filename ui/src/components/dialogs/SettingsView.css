@@ -1,0 +1,176 @@
+.settings-tabs {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.settings-modal-root .ant-modal-wrap {
+  overflow: hidden;
+}
+
+.settings-modal .ant-modal {
+  top: 24px;
+  padding-bottom: 0;
+  height: calc(100vh - 48px);
+}
+
+.settings-modal .ant-modal-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 100%;
+}
+
+.settings-modal .ant-modal-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: calc(100vh - 180px);
+  min-height: 0;
+  overflow: hidden;
+  padding-right: 8px;
+}
+
+.settings-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.settings-tabs .ant-tabs-content-holder {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 6px;
+  overscroll-behavior: contain;
+}
+
+.settings-tabs .ant-tabs-nav {
+  margin-bottom: 10px;
+}
+
+.settings-tabs .ant-tabs-content,
+.settings-tabs .ant-tabs-tabpane {
+  height: 100%;
+}
+
+.settings-inline-header {
+  padding: 18px 22px;
+  border-bottom-color: #edf0f5;
+}
+
+.settings-inline-body {
+  padding: 0 20px 18px;
+}
+
+.settings-shell {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.settings-side-nav {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #e9edf4;
+  border-radius: 14px;
+  background: rgba(251, 252, 255, 0.86);
+}
+
+.settings-side-nav .ant-btn {
+  justify-content: flex-start;
+  height: 40px;
+  text-align: left;
+}
+
+.settings-content-area {
+  min-width: 0;
+}
+
+.settings-tabs > .ant-tabs-nav {
+  display: none;
+}
+
+.settings-category-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.settings-category-card {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #e9edf4;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.88);
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-category-card.active {
+  border-color: rgba(255, 63, 110, 0.54);
+  background: rgba(255, 242, 246, 0.88);
+}
+
+.settings-category-copy,
+.settings-category-card strong,
+.settings-category-copy > span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-category-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--flamingo-blue);
+  background: rgba(47, 128, 237, 0.1);
+}
+
+.settings-category-card.active .settings-category-icon {
+  color: var(--flamingo-pink);
+  background: rgba(255, 63, 110, 0.12);
+}
+
+.settings-category-copy {
+  flex: 1;
+}
+
+.settings-category-card strong {
+  color: #252b3a;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.settings-category-copy > span {
+  margin-top: 4px;
+  color: #6f7788;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.settings-inline-panel .ant-card,
+.settings-inline-panel .ant-card-head,
+.settings-inline-panel .ant-card-body {
+  border-color: #edf0f5 !important;
+}
