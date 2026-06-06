@@ -4,3 +4,23 @@
 /downloads/
 .DS_Store
 ui/pnpm-lock.yaml
+
+# Internal docs / AI tooling
+CLAUDE.md
+TODO.md
+BACKLOG.md
+PROGRESS.md
+.codex/
+
+# Build output
+dist/
+
+# Screenshots / temp images
+ScreenShot_*.png
+ChatGPT Image*.png
+
+# Internal docs
+docs/browser-extension-checklist.md
+docs/download-sample-set.md
+docs/remote-dashboard-feasibility.md
+docs/roadmap-acceptance.md
