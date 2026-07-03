@@ -19,15 +19,15 @@
     "gen:i18n-keys": "node scripts/gen-i18n-keys.mjs"
   },
   "dependencies": {
-    "@ant-design/icons": "^6.2.5",
+    "@ant-design/icons": "^6.3.2",
     "@fontsource/outfit": "^5.2.8",
-    "@tauri-apps/api": "^2.11.0",
+    "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-clipboard-manager": "^2.3.0",
     "@tauri-apps/plugin-dialog": "^2.7.1",
-    "antd": "^6.4.3",
+    "antd": "^6.5.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.7",
-    "react-resizable": "^4.0.1"
+    "react-resizable": "^4.0.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.3",
@@ -35,15 +35,15 @@
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
     "@types/react-resizable": "^4.0.0",
-    "@vitejs/plugin-react": "^6.0.2",
+    "@vitejs/plugin-react": "^6.0.3",
     "eslint": "^9.39.3",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.2",
-    "globals": "^17.6.0",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "globals": "^17.7.0",
     "typescript": "~6.0.3",
-    "typescript-eslint": "^8.60.1",
-    "vite": "^8.0.16",
-    "vitest": "^4.1.8"
+    "typescript-eslint": "^8.62.0",
+    "vite": "^8.1.0",
+    "vitest": "^4.1.9"
   },
   "overrides": {
     "minimatch": "^10.2.1",
