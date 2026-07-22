@@ -26,7 +26,7 @@
     "@tauri-apps/plugin-dialog": "^2.7.2",
     "antd": "^6.5.1",
     "react": "^19.2.8",
-    "react-dom": "^19.2.7",
+    "react-dom": "^19.2.8",
     "react-resizable": "^4.0.2"
   },
   "devDependencies": {
