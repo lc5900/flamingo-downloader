@@ -38,6 +38,11 @@ updates:
           - "typescript-eslint"
           - "@typescript-eslint/*"
     ignore:
+      # typescript-eslint 8.x currently requires TypeScript <6.1.0.
+      # Keep Dependabot from opening incompatible TypeScript major upgrades.
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-major"
       - dependency-name: "eslint"
         update-types:
           - "version-update:semver-major"
