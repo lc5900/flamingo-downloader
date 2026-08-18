@@ -24,7 +24,7 @@
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-clipboard-manager": "^2.3.0",
     "@tauri-apps/plugin-dialog": "^2.7.2",
-    "antd": "^6.5.3",
+    "antd": "^6.6.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-resizable": "^4.0.2"
