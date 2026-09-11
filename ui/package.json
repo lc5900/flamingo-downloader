@@ -23,7 +23,7 @@
     "@fontsource/outfit": "^5.3.0",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-clipboard-manager": "^2.3.3",
-    "@tauri-apps/plugin-dialog": "^2.7.2",
+    "@tauri-apps/plugin-dialog": "^2.7.3",
     "antd": "^6.6.2",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
