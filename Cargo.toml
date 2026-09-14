@@ -9,7 +9,7 @@ async-trait = "0.1"
 base64 = "0.23"
 bzip2 = "0.6"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-dirs = "6"
+dirs = "7"
 flate2 = "1"
 fs2 = "0.4"
 hex = "0.4"
