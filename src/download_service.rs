@@ -4566,7 +4566,7 @@ fn extract_from_zip(bytes: &[u8]) -> Result<Vec<u8>> {
         if file.is_dir() {
             continue;
         }
-        let name = file.name().to_ascii_lowercase();
+        let name = file.name()?.to_ascii_lowercase();
         if name.ends_with("/aria2c")
             || name.ends_with("/aria2c.exe")
             || name == "aria2c"
@@ -4687,6 +4687,7 @@ fn verify_aria2_binary(path: &Path) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::{Cursor, Write};
     use std::{
         path::Path,
         sync::{Arc, Mutex},
@@ -4710,6 +4711,31 @@ mod tests {
         is_download_content_type, is_subpath, normalize_ffmpeg_failure, rule_matches,
         select_speed_limit, should_auto_retry,
     };
+
+    #[test]
+    fn zip_extracts_nested_aria2_binary_case_insensitively() -> Result<()> {
+        let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let options = zip::write::SimpleFileOptions::default();
+        writer.add_directory("bin/", options)?;
+        writer.start_file("README.txt", options)?;
+        writer.write_all(b"release notes")?;
+        writer.start_file("bin/ARIA2C.EXE", options)?;
+        writer.write_all(b"aria2 binary")?;
+        let archive = writer.finish()?.into_inner();
+        assert_eq!(super::extract_from_zip(&archive)?, b"aria2 binary");
+        Ok(())
+    }
+
+    #[test]
+    fn zip_without_aria2_binary_returns_error() -> Result<()> {
+        let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        writer.start_file("README.txt", zip::write::SimpleFileOptions::default())?;
+        writer.write_all(b"release notes")?;
+        let archive = writer.finish()?.into_inner();
+        let error = super::extract_from_zip(&archive).unwrap_err();
+        assert!(error.to_string().contains("aria2c binary not found"));
+        Ok(())
+    }
 
     #[test]
     fn absolute_path_resolves_relative_to_base() {
